@@ -1,0 +1,78 @@
+name: CI Checks
+
+on:
+  pull_request:
+    branches: [ 'main', 'develop' ]
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set Up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    - name: Run Linting
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv/*,.venv/*,htmlcov/*
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude=venv/*,.venv/*,htmlcov/*
+    - name: Run Type Checking
+      run: |
+        mypy . --ignore-missing-imports
+    - name: Run Tests
+      timeout-minutes: 10
+      env:
+        OTEL_NO_AUTO_INIT: 1
+      run: |
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term --tb=short --timeout=300
+    - name: Check Coverage Report
+      run: |
+        echo "📊 Coverage Report Summary:"
+        echo "=========================="
+        coverage report --show-missing --skip-covered
+        COVERAGE_PERCENT=$(coverage report --format=total)
+        echo ""
+        echo "📈 Total Coverage: ${COVERAGE_PERCENT}%"
+        COVERAGE_THRESHOLD=80
+        if (( $(echo "$COVERAGE_PERCENT >= $COVERAGE_THRESHOLD" | bc -l) )); then
+          echo "✅ Coverage meets threshold of ${COVERAGE_THRESHOLD}%"
+        else
+          echo "⚠️  Coverage below threshold of ${COVERAGE_THRESHOLD}%"
+          echo "❌ Current: ${COVERAGE_PERCENT}%, Required: ${COVERAGE_THRESHOLD}%"
+          # Uncomment the next line to fail the build on low coverage
+          # exit 1
+        fi
+    - name: Upload Coverage Reports to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        slug: PetroSa2/petrosa-realtime-strategies
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Run Trivy Vulnerability Scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        exit-code: '1'
