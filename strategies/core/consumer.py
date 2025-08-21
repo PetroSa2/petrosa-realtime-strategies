@@ -80,9 +80,12 @@ class NATSConsumer:
             # Subscribe to topic
             await self._subscribe_to_topic()
 
-            # Start processing loop
+            # Start processing loop as background task
             self.is_running = True
-            await self._processing_loop()
+            asyncio.create_task(self._processing_loop())
+            
+            # Return immediately after starting the background task
+            self.logger.info("NATS consumer started successfully")
 
         except Exception as e:
             self.logger.error("Failed to start NATS consumer", error=str(e))
