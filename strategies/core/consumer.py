@@ -131,11 +131,11 @@ class NATSConsumer:
     async def _subscribe_to_topic(self) -> None:
         """Subscribe to the specified topic."""
         try:
-            # Create durable consumer subscription
-            self.subscription = await self.nats_client.pull_subscribe(
+            # Create subscription with callback
+            self.subscription = await self.nats_client.subscribe(
                 subject=self.topic,
-                durable=self.consumer_name,
                 queue=self.consumer_group,
+                cb=self._message_handler,
             )
             self.logger.info(
                 "Subscribed to topic",
@@ -148,29 +148,24 @@ class NATSConsumer:
             self.logger.error("Failed to subscribe to topic", error=str(e))
             raise
 
+    async def _message_handler(self, msg) -> None:
+        """Handle incoming NATS messages."""
+        try:
+            await self._process_message(msg)
+        except Exception as e:
+            self.logger.error("Error in message handler", error=str(e))
+            self.error_count += 1
+
     async def _processing_loop(self) -> None:
         """Main processing loop for consuming messages."""
         self.logger.info("Starting message processing loop")
 
+        # For subscription-based approach, the processing is handled by callbacks
+        # This loop just keeps the consumer alive
         while self.is_running and not self.shutdown_event.is_set():
             try:
-                # Fetch messages with timeout
-                messages = await self.subscription.fetch(
-                    batch=constants.BATCH_SIZE,
-                    timeout=constants.BATCH_TIMEOUT,
-                )
-
-                if messages:
-                    # Process messages in parallel
-                    tasks = [self._process_message(msg) for msg in messages]
-                    await asyncio.gather(*tasks, return_exceptions=True)
-
                 # Small delay to prevent busy waiting
-                await asyncio.sleep(0.001)
-
-            except asyncio.TimeoutError:
-                # No messages available, continue
-                continue
+                await asyncio.sleep(1)
             except Exception as e:
                 self.logger.error("Error in processing loop", error=str(e))
                 self.error_count += 1
@@ -184,9 +179,6 @@ class NATSConsumer:
         processing_time = 0.0
 
         try:
-            # Acknowledge message early to prevent redelivery
-            await msg.ack()
-
             # Parse message data
             message_data = json.loads(msg.data.decode())
             self.logger.debug("Received message", data=message_data)
@@ -221,12 +213,6 @@ class NATSConsumer:
                 message_data=message_data if 'message_data' in locals() else None,
             )
             self.error_count += 1
-
-            # Negative acknowledgment for failed messages
-            try:
-                await msg.nak()
-            except Exception as nak_error:
-                self.logger.error("Failed to NAK message", error=str(nak_error))
 
     def _parse_market_data(self, message_data: Dict[str, Any]) -> Optional[MarketDataMessage]:
         """Parse and validate market data message."""
