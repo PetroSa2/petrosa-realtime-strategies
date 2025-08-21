@@ -267,6 +267,16 @@ graph TD
 
 ## Configuration Management
 
+### DockerHub Configuration
+
+The service uses DockerHub for container image storage and distribution. For detailed setup instructions, see [DockerHub Setup and CI/CD Configuration](./DOCKERHUB_SETUP.md).
+
+**Key Configuration:**
+- **Registry**: DockerHub (docker.io)
+- **Username**: yurisa2
+- **Repository**: petrosa-realtime-strategies
+- **Authentication**: GitHub Secrets (DOCKERHUB_USERNAME, DOCKERHUB_TOKEN)
+
 ### Environment Variables
 
 The service uses a hierarchical configuration system:
@@ -445,6 +455,7 @@ export DEBUG=1
 
 ## References
 
+- [DockerHub Setup and CI/CD Configuration](./DOCKERHUB_SETUP.md)
 - [Petrosa Development Standards](../DEVELOPMENT.md)
 - [Kubernetes Deployment Guide](../DEPLOYMENT.md)
 - [Security Guidelines](../SECURITY.md)

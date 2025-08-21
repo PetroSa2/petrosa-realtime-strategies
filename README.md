@@ -144,6 +144,16 @@ TICKER_VELOCITY_BUY_THRESHOLD=0.5
 
 ## Deployment
 
+### DockerHub Configuration
+
+The service uses DockerHub for container image storage. For detailed setup instructions, see [DockerHub Setup and CI/CD Configuration](docs/DOCKERHUB_SETUP.md).
+
+**Key Information:**
+- **Registry**: DockerHub (docker.io)
+- **Username**: yurisa2
+- **Repository**: petrosa-realtime-strategies
+- **CI/CD**: Automated deployment to private MicroK8s cluster
+
 ### Kubernetes
 
 ```bash
@@ -304,6 +314,15 @@ export LOG_LEVEL=DEBUG
 ## License
 
 MIT License - see LICENSE file for details.
+
+## Documentation
+
+For complete setup and configuration details:
+
+- [Complete Setup Summary](docs/COMPLETE_SETUP_SUMMARY.md) - Full setup guide with DockerHub and CI/CD
+- [DockerHub Setup](docs/DOCKERHUB_SETUP.md) - DockerHub configuration and credentials
+- [CI/CD Pipeline](docs/CI_CD_PIPELINE_IMPLEMENTATION.md) - Pipeline implementation details
+- [Deployment Guide](docs/DEPLOYMENT.md) - Kubernetes deployment guide
 
 ## Support
 
