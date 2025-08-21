@@ -15,6 +15,9 @@ opentelemetry-instrumentation>=0.41b0
 opentelemetry-instrumentation-logging>=0.41b0
 opentelemetry-instrumentation-requests>=0.41b0
 opentelemetry-instrumentation-urllib3>=0.41b0
+opentelemetry-instrumentation-asyncio>=0.41b0
+opentelemetry-instrumentation-aiohttp-client>=0.41b0
+opentelemetry-instrumentation-nats>=0.1.0
 opentelemetry-sdk>=1.20.0
 opentelemetry-semantic-conventions>=0.41b0
 
