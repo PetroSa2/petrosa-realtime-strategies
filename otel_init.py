@@ -81,13 +81,6 @@ def setup_telemetry(service_name: Optional[str] = None) -> None:
             AsyncioInstrumentor().instrument()
         except ImportError:
             print("⚠️  OpenTelemetry asyncio instrumentation not available")
-        
-        # NATS instrumentation (if available)
-        try:
-            from opentelemetry.instrumentation.nats import NatsInstrumentor
-            NatsInstrumentor().instrument()
-        except ImportError:
-            print("⚠️  OpenTelemetry NATS instrumentation not available")
 
         print(f"✅ OpenTelemetry initialized for {service_name or constants.OTEL_SERVICE_NAME}")
 
