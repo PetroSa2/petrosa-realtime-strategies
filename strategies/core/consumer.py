@@ -8,7 +8,7 @@ to the appropriate strategy processors.
 import asyncio
 import json
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 import structlog
 
 import nats
@@ -17,7 +17,7 @@ from nats.aio.subscription import Subscription
 
 import constants
 from strategies.core.publisher import TradeOrderPublisher
-from strategies.models.market_data import MarketDataMessage
+from strategies.models.market_data import MarketDataMessage, DepthUpdate, TradeData, TickerData, DepthLevel
 from strategies.utils.circuit_breaker import CircuitBreaker
 
 
@@ -106,8 +106,11 @@ class NATSConsumer:
 
         # Close NATS connection
         if self.nats_client:
-            await self.nats_client.close()
-            self.logger.info("NATS connection closed")
+            try:
+                await self.nats_client.close()
+                self.logger.info("NATS connection closed")
+            except Exception as e:
+                self.logger.warning("Error closing NATS connection", error=str(e))
 
         self.logger.info("NATS consumer stopped")
 
@@ -224,16 +227,132 @@ class NATSConsumer:
             if not stream or not data:
                 return None
 
+            # Transform raw data based on stream type
+            transformed_data = self._transform_binance_data(stream, data)
+            if not transformed_data:
+                return None
+
             # Create market data message
             market_data = MarketDataMessage(
                 stream=stream,
-                data=data,
+                data=transformed_data,
             )
 
             return market_data
 
         except Exception as e:
             self.logger.error("Failed to parse market data", error=str(e))
+            return None
+
+    def _transform_binance_data(self, stream: str, data: Dict[str, Any]) -> Optional[Union[DepthUpdate, TradeData, TickerData]]:
+        """Transform raw Binance WebSocket data to expected format."""
+        try:
+            stream_type = stream.split('@')[1] if '@' in stream else None
+            self.logger.debug("Transforming data", stream_type=stream_type, data_keys=list(data.keys()))
+            
+            if 'depth' in stream_type:
+                return self._transform_depth_data(data)
+            elif 'trade' in stream_type:
+                return self._transform_trade_data(data)
+            elif 'ticker' in stream_type:
+                return self._transform_ticker_data(data)
+            else:
+                self.logger.warning("Unknown stream type", stream_type=stream_type)
+                return None
+
+        except Exception as e:
+            self.logger.error("Failed to transform Binance data", error=str(e), stream=stream, data=data)
+            return None
+
+    def _transform_depth_data(self, data: Dict[str, Any]) -> Optional[DepthUpdate]:
+        """Transform depth data to DepthUpdate model."""
+        try:
+            # Extract symbol from the data if available, otherwise use a default
+            symbol = data.get('s', 'BTCUSDT')  # Default fallback
+            
+            # Transform bids and asks from arrays to DepthLevel objects
+            bids = []
+            if 'bids' in data:
+                for bid in data['bids']:
+                    if len(bid) >= 2:
+                        bids.append(DepthLevel(
+                            price=bid[0],
+                            quantity=bid[1]
+                        ))
+
+            asks = []
+            if 'asks' in data:
+                for ask in data['asks']:
+                    if len(ask) >= 2:
+                        asks.append(DepthLevel(
+                            price=ask[0],
+                            quantity=ask[1]
+                        ))
+
+            return DepthUpdate(
+                symbol=symbol,
+                event_time=data.get('E', int(time.time() * 1000)),
+                first_update_id=data.get('U', 0),
+                final_update_id=data.get('u', 0),
+                bids=bids,
+                asks=asks
+            )
+
+        except Exception as e:
+            self.logger.error("Failed to transform depth data", error=str(e), data=data)
+            return None
+
+    def _transform_trade_data(self, data: Dict[str, Any]) -> Optional[TradeData]:
+        """Transform trade data to TradeData model."""
+        try:
+            # Map Binance trade fields to our model
+            # Binance fields: s=symbol, t=trade_id, p=price, q=quantity, T=trade_time, m=is_buyer_maker, E=event_time
+            return TradeData(
+                symbol=data.get('s', ''),
+                trade_id=data.get('t', 0),
+                price=data.get('p', '0'),
+                quantity=data.get('q', '0'),
+                buyer_order_id=data.get('b', 0),  # Not present in trade data, use 0
+                seller_order_id=data.get('a', 0),  # Not present in trade data, use 0
+                trade_time=data.get('T', 0),
+                is_buyer_maker=data.get('m', False),
+                event_time=data.get('E', 0)
+            )
+
+        except Exception as e:
+            self.logger.error("Failed to transform trade data", error=str(e), data=data)
+            return None
+
+    def _transform_ticker_data(self, data: Dict[str, Any]) -> Optional[TickerData]:
+        """Transform ticker data to TickerData model."""
+        try:
+            return TickerData(
+                symbol=data.get('s', ''),
+                price_change=data.get('P', '0'),
+                price_change_percent=data.get('P', '0'),
+                weighted_avg_price=data.get('w', '0'),
+                prev_close_price=data.get('x', '0'),
+                last_price=data.get('c', '0'),
+                last_qty=data.get('Q', '0'),
+                bid_price=data.get('b', '0'),
+                bid_qty=data.get('B', '0'),
+                ask_price=data.get('a', '0'),
+                ask_qty=data.get('A', '0'),
+                open_price=data.get('o', '0'),
+                high_price=data.get('h', '0'),
+                low_price=data.get('l', '0'),
+                volume=data.get('v', '0'),
+                quote_volume=data.get('q', '0'),
+                open_time=data.get('O', 0),
+                close_time=data.get('C', 0),
+                first_id=data.get('F', 0),
+                last_id=data.get('L', 0),
+                count=data.get('n', 0),
+                event_time=data.get('E', 0)
+            )
+
+        except Exception as e:
+            self.logger.error("Failed to transform ticker data", error=str(e))
             return None
 
     async def _process_market_data(self, market_data: MarketDataMessage) -> None:

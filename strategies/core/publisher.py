@@ -92,8 +92,11 @@ class TradeOrderPublisher:
 
         # Close NATS connection
         if self.nats_client:
-            await self.nats_client.close()
-            self.logger.info("NATS connection closed")
+            try:
+                await self.nats_client.close()
+                self.logger.info("NATS connection closed")
+            except Exception as e:
+                self.logger.warning("Error closing NATS connection", error=str(e))
 
         self.logger.info("Trade order publisher stopped")
 
