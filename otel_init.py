@@ -9,12 +9,25 @@ including metrics, traces, and logs collection.
 import os
 import sys
 from typing import Optional
+import socket
 
 # Add project root to path
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 import constants  # noqa: E402
+
+
+def find_available_port(start_port: int, max_attempts: int = 10) -> int:
+    """Find an available port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                return port
+        except OSError:
+            continue
+    return start_port  # Fallback to original port
 
 
 def setup_telemetry(service_name: Optional[str] = None) -> None:
@@ -36,9 +49,7 @@ def setup_telemetry(service_name: Optional[str] = None) -> None:
         from opentelemetry.instrumentation.logging import LoggingInstrumentor
         from opentelemetry.instrumentation.requests import RequestsInstrumentor
         from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
-        from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
         from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
-        from opentelemetry.instrumentation.nats import NatsInstrumentor
 
         # Set up resource
         resource = Resource.create({
@@ -62,14 +73,14 @@ def setup_telemetry(service_name: Optional[str] = None) -> None:
         LoggingInstrumentor().instrument()
         RequestsInstrumentor().instrument()
         URLLib3Instrumentor().instrument()
-        AsyncioInstrumentor().instrument()
         AioHttpClientInstrumentor().instrument()
         
-        # NATS instrumentation (if available)
+        # Try to instrument asyncio (optional)
         try:
-            NatsInstrumentor().instrument()
+            from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
+            AsyncioInstrumentor().instrument()
         except ImportError:
-            pass  # NATS instrumentation not available
+            print("⚠️  OpenTelemetry asyncio instrumentation not available")
 
         print(f"✅ OpenTelemetry initialized for {service_name or constants.OTEL_SERVICE_NAME}")
 
@@ -88,14 +99,19 @@ def setup_metrics() -> None:
         from prometheus_client import start_http_server, Counter, Histogram, Gauge
         import threading
 
+        # Find available port for Prometheus
+        prometheus_port = find_available_port(constants.PROMETHEUS_PORT)
+        
         # Start Prometheus HTTP server
         def start_prometheus_server():
-            start_http_server(constants.PROMETHEUS_PORT)
+            try:
+                start_http_server(prometheus_port)
+                print(f"✅ Prometheus metrics server started on port {prometheus_port}")
+            except Exception as e:
+                print(f"❌ Failed to start Prometheus server on port {prometheus_port}: {e}")
 
         thread = threading.Thread(target=start_prometheus_server, daemon=True)
         thread.start()
-
-        print(f"✅ Prometheus metrics server started on port {constants.PROMETHEUS_PORT}")
 
     except ImportError:
         print("⚠️  Prometheus client not available")

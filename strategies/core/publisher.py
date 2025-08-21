@@ -71,9 +71,12 @@ class TradeOrderPublisher:
             # Connect to NATS
             await self._connect_to_nats()
 
-            # Start publishing loop
+            # Start publishing loop as background task
             self.is_running = True
-            await self._publishing_loop()
+            asyncio.create_task(self._publishing_loop())
+            
+            # Return immediately after starting the background task
+            self.logger.info("Trade order publisher started successfully")
 
         except Exception as e:
             self.logger.error("Failed to start trade order publisher", error=str(e))
@@ -89,8 +92,11 @@ class TradeOrderPublisher:
 
         # Close NATS connection
         if self.nats_client:
-            await self.nats_client.close()
-            self.logger.info("NATS connection closed")
+            try:
+                await self.nats_client.close()
+                self.logger.info("NATS connection closed")
+            except Exception as e:
+                self.logger.warning("Error closing NATS connection", error=str(e))
 
         self.logger.info("Trade order publisher stopped")
 

@@ -73,7 +73,6 @@ class StrategiesService:
                 logger=self.logger,
             )
             await self.publisher.start()
-            self.logger.info("Trade order publisher started successfully")
 
             # Start NATS consumer
             self.consumer = NATSConsumer(

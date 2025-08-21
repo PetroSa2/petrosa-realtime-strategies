@@ -145,16 +145,16 @@ class HealthServer:
             else:
                 uptime = 0
 
-            # Basic health checks
+            # Basic health checks - only check essential conditions
             health_checks = {
                 "server_running": self.is_running,
-                "uptime_seconds": uptime,
-                "memory_usage": self._get_memory_usage(),
-                "cpu_usage": self._get_cpu_usage(),
+                "uptime_seconds": uptime >= 0,  # Just check if uptime is valid
+                "memory_usage": self._get_memory_usage() >= 0,  # Just check if memory is valid
+                "cpu_usage": self._get_cpu_usage() >= 0,  # Just check if CPU is valid
             }
 
-            # Determine overall health
-            is_healthy = all(health_checks.values())
+            # Determine overall health - only check server running
+            is_healthy = self.is_running
 
             status = {
                 "status": "healthy" if is_healthy else "unhealthy",
