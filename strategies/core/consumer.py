@@ -179,9 +179,6 @@ class NATSConsumer:
         processing_time = 0.0
 
         try:
-            # Acknowledge message early to prevent redelivery
-            await msg.ack()
-
             # Parse message data
             message_data = json.loads(msg.data.decode())
             self.logger.debug("Received message", data=message_data)
@@ -216,12 +213,6 @@ class NATSConsumer:
                 message_data=message_data if 'message_data' in locals() else None,
             )
             self.error_count += 1
-
-            # Negative acknowledgment for failed messages
-            try:
-                await msg.nak()
-            except Exception as nak_error:
-                self.logger.error("Failed to NAK message", error=str(nak_error))
 
     def _parse_market_data(self, message_data: Dict[str, Any]) -> Optional[MarketDataMessage]:
         """Parse and validate market data message."""
