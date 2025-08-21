@@ -7,7 +7,7 @@ metadata:
   labels:
     app: realtime-strategies
     component: trading-signals
-    version: VERSION_PLACEHOLDER
+    version: v1.0.7
 spec:
   replicas: 3
   selector:
@@ -19,14 +19,14 @@ spec:
       labels:
         app: realtime-strategies
         component: trading-signals
-        version: VERSION_PLACEHOLDER
+        version: v1.0.7
       annotations:
         instrumentation.newrelic.com/inject-python: "true"
     spec:
       restartPolicy: Always
       containers:
       - name: realtime-strategies
-        image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
+        image: yurisa2/petrosa-realtime-strategies:v1.0.7
         imagePullPolicy: Always
         command:
         - python
@@ -86,7 +86,7 @@ spec:
               name: petrosa-common-config
               key: OTEL_EXPORTER_OTLP_ENDPOINT
         - name: OTEL_RESOURCE_ATTRIBUTES
-          value: "service.name=realtime-strategies,service.version=VERSION_PLACEHOLDER"
+          value: "service.name=realtime-strategies,service.version=v1.0.7"
         - name: OTEL_METRICS_EXPORTER
           valueFrom:
             configMapKeyRef:
