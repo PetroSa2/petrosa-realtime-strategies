@@ -30,6 +30,11 @@ STRATEGY_ENABLED_ORDERBOOK_SKEW = os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "
 STRATEGY_ENABLED_TRADE_MOMENTUM = os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "true").lower() == "true"
 STRATEGY_ENABLED_TICKER_VELOCITY = os.getenv("STRATEGY_ENABLED_TICKER_VELOCITY", "true").lower() == "true"
 
+# Market Logic Strategies (from QTZD adaptation)
+STRATEGY_ENABLED_BTC_DOMINANCE = os.getenv("STRATEGY_ENABLED_BTC_DOMINANCE", "true").lower() == "true"
+STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD = os.getenv("STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD", "true").lower() == "true"
+STRATEGY_ENABLED_ONCHAIN_METRICS = os.getenv("STRATEGY_ENABLED_ONCHAIN_METRICS", "false").lower() == "true"
+
 # Order Book Skew Strategy Parameters
 ORDERBOOK_SKEW_TOP_LEVELS = int(os.getenv("ORDERBOOK_SKEW_TOP_LEVELS", "5"))
 ORDERBOOK_SKEW_BUY_THRESHOLD = float(os.getenv("ORDERBOOK_SKEW_BUY_THRESHOLD", "1.2"))
@@ -49,6 +54,24 @@ TICKER_VELOCITY_TIME_WINDOW = int(os.getenv("TICKER_VELOCITY_TIME_WINDOW", "60")
 TICKER_VELOCITY_BUY_THRESHOLD = float(os.getenv("TICKER_VELOCITY_BUY_THRESHOLD", "0.5"))
 TICKER_VELOCITY_SELL_THRESHOLD = float(os.getenv("TICKER_VELOCITY_SELL_THRESHOLD", "-0.5"))
 TICKER_VELOCITY_MIN_PRICE_CHANGE = float(os.getenv("TICKER_VELOCITY_MIN_PRICE_CHANGE", "0.1"))
+
+# Bitcoin Dominance Strategy Parameters (from QTZD adaptation)
+BTC_DOMINANCE_HIGH_THRESHOLD = float(os.getenv("BTC_DOMINANCE_HIGH_THRESHOLD", "70.0"))  # Above 70% = rotate to BTC
+BTC_DOMINANCE_LOW_THRESHOLD = float(os.getenv("BTC_DOMINANCE_LOW_THRESHOLD", "40.0"))   # Below 40% = alt season
+BTC_DOMINANCE_CHANGE_THRESHOLD = float(os.getenv("BTC_DOMINANCE_CHANGE_THRESHOLD", "5.0"))  # 5% change triggers signal
+BTC_DOMINANCE_WINDOW_HOURS = int(os.getenv("BTC_DOMINANCE_WINDOW_HOURS", "24"))  # 24-hour analysis window
+BTC_DOMINANCE_MIN_SIGNAL_INTERVAL = int(os.getenv("BTC_DOMINANCE_MIN_SIGNAL_INTERVAL", "14400"))  # 4 hours between signals
+
+# Cross-Exchange Spread Strategy Parameters (from QTZD adaptation)
+SPREAD_THRESHOLD_PERCENT = float(os.getenv("SPREAD_THRESHOLD_PERCENT", "0.5"))  # 0.5% minimum spread
+SPREAD_MIN_SIGNAL_INTERVAL = int(os.getenv("SPREAD_MIN_SIGNAL_INTERVAL", "300"))  # 5 minutes between signals
+SPREAD_MAX_POSITION_SIZE = float(os.getenv("SPREAD_MAX_POSITION_SIZE", "500"))  # USDT per arbitrage
+SPREAD_EXCHANGES = os.getenv("SPREAD_EXCHANGES", "binance,coinbase").split(",")
+
+# On-Chain Metrics Strategy Parameters (from QTZD adaptation)
+ONCHAIN_NETWORK_GROWTH_THRESHOLD = float(os.getenv("ONCHAIN_NETWORK_GROWTH_THRESHOLD", "10.0"))  # 10% growth
+ONCHAIN_VOLUME_THRESHOLD = float(os.getenv("ONCHAIN_VOLUME_THRESHOLD", "15.0"))  # 15% volume increase
+ONCHAIN_MIN_SIGNAL_INTERVAL = int(os.getenv("ONCHAIN_MIN_SIGNAL_INTERVAL", "86400"))  # 24 hours between signals
 
 # Trading Configuration
 TRADING_SYMBOLS = os.getenv("TRADING_SYMBOLS", "BTCUSDT,ETHUSDT,BNBUSDT").split(",")
@@ -74,6 +97,11 @@ TRADEENGINE_API_RETRY_DELAY = float(os.getenv("TRADEENGINE_API_RETRY_DELAY", "1.
 # Health Check Configuration
 HEALTH_CHECK_PORT = int(os.getenv("HEALTH_CHECK_PORT", "8080"))
 HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
+
+# Heartbeat Configuration
+HEARTBEAT_ENABLED = os.getenv("HEARTBEAT_ENABLED", "true").lower() == "true"
+HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))  # 60 seconds default
+HEARTBEAT_INCLUDE_DETAILED_STATS = os.getenv("HEARTBEAT_INCLUDE_DETAILED_STATS", "true").lower() == "true"
 
 # Circuit Breaker Configuration
 CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(os.getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5"))
@@ -199,6 +227,23 @@ def get_risk_config() -> dict:
         "take_profit_percent": RISK_TAKE_PROFIT_PERCENT,
         "max_drawdown_percent": RISK_MAX_DRAWDOWN_PERCENT,
     }
+
+def get_enabled_strategies() -> List[str]:
+    """Get list of enabled strategies."""
+    enabled = []
+    if STRATEGY_ENABLED_ORDERBOOK_SKEW:
+        enabled.append("orderbook_skew")
+    if STRATEGY_ENABLED_TRADE_MOMENTUM:
+        enabled.append("trade_momentum")
+    if STRATEGY_ENABLED_TICKER_VELOCITY:
+        enabled.append("ticker_velocity")
+    if STRATEGY_ENABLED_BTC_DOMINANCE:
+        enabled.append("btc_dominance")
+    if STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
+        enabled.append("cross_exchange_spread")
+    if STRATEGY_ENABLED_ONCHAIN_METRICS:
+        enabled.append("onchain_metrics")
+    return enabled
 
 def get_strategy_config() -> dict:
     """Get strategy configuration as a dictionary."""
