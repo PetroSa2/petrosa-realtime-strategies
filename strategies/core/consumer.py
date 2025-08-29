@@ -19,6 +19,9 @@ import constants
 from strategies.core.publisher import TradeOrderPublisher
 from strategies.models.market_data import MarketDataMessage
 from strategies.utils.circuit_breaker import CircuitBreaker
+from strategies.market_logic.btc_dominance import BitcoinDominanceStrategy
+from strategies.market_logic.cross_exchange_spread import CrossExchangeSpreadStrategy
+from strategies.market_logic.onchain_metrics import OnChainMetricsStrategy
 
 
 class NATSConsumer:
@@ -63,6 +66,20 @@ class NATSConsumer:
         self.processing_times = []
         self.max_processing_time = 0.0
         self.avg_processing_time = 0.0
+        
+        # Initialize market logic strategies (from QTZD adaptation)
+        self.market_logic_strategies = {}
+        if constants.STRATEGY_ENABLED_BTC_DOMINANCE:
+            self.market_logic_strategies['btc_dominance'] = BitcoinDominanceStrategy(logger=self.logger)
+            self.logger.info("Bitcoin Dominance Strategy enabled")
+            
+        if constants.STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
+            self.market_logic_strategies['cross_exchange_spread'] = CrossExchangeSpreadStrategy(logger=self.logger)
+            self.logger.info("Cross-Exchange Spread Strategy enabled")
+            
+        if constants.STRATEGY_ENABLED_ONCHAIN_METRICS:
+            self.market_logic_strategies['onchain_metrics'] = OnChainMetricsStrategy(logger=self.logger)
+            self.logger.info("On-Chain Metrics Strategy enabled")
 
     async def start(self) -> None:
         """Start the NATS consumer."""
@@ -239,7 +256,7 @@ class NATSConsumer:
     async def _process_market_data(self, market_data: MarketDataMessage) -> None:
         """Process market data through strategies."""
         try:
-            # Route to appropriate strategy based on stream type
+            # Process through existing stream-based strategies
             if market_data.is_depth:
                 await self._process_depth_data(market_data)
             elif market_data.is_trade:
@@ -248,6 +265,9 @@ class NATSConsumer:
                 await self._process_ticker_data(market_data)
             else:
                 self.logger.warning("Unknown stream type", stream_type=market_data.stream_type)
+            
+            # Process through market logic strategies (QTZD-style processing)
+            await self._process_market_logic_strategies(market_data)
 
         except Exception as e:
             self.logger.error("Error processing market data", error=str(e))
@@ -266,6 +286,106 @@ class NATSConsumer:
         """Process ticker data."""
         # This will be implemented by the strategy processor
         self.logger.debug("Processing ticker data", symbol=market_data.symbol)
+    
+    async def _process_market_logic_strategies(self, market_data: MarketDataMessage) -> None:
+        """
+        Process market data through market logic strategies.
+        
+        Adapted from QTZD MS Cash NoSQL service processing logic.
+        """
+        try:
+            signals_to_publish = []
+            
+            # Process through each enabled market logic strategy
+            for strategy_name, strategy in self.market_logic_strategies.items():
+                try:
+                    if strategy_name == 'btc_dominance':
+                        # Bitcoin Dominance Strategy
+                        signal = await strategy.process_market_data(market_data)
+                        if signal:
+                            signals_to_publish.append(signal)
+                            
+                    elif strategy_name == 'cross_exchange_spread':
+                        # Cross-Exchange Spread Strategy (can return multiple signals)
+                        signals = await strategy.process_market_data(market_data)
+                        if signals:
+                            if isinstance(signals, list):
+                                signals_to_publish.extend(signals)
+                            else:
+                                signals_to_publish.append(signals)
+                                
+                    elif strategy_name == 'onchain_metrics':
+                        # On-Chain Metrics Strategy
+                        signal = await strategy.process_market_data(market_data)
+                        if signal:
+                            signals_to_publish.append(signal)
+                            
+                except Exception as e:
+                    self.logger.error(f"Error in {strategy_name} strategy", error=str(e))
+                    
+            # Publish generated signals (QTZD-style batch publishing)
+            if signals_to_publish:
+                await self._publish_market_logic_signals(signals_to_publish)
+                
+        except Exception as e:
+            self.logger.error("Error processing market logic strategies", error=str(e))
+    
+    async def _publish_market_logic_signals(self, signals) -> None:
+        """
+        Publish market logic signals to the trade engine.
+        
+        Converts signals to order format and publishes via NATS.
+        """
+        try:
+            for signal in signals:
+                # Convert signal to order format
+                order_data = self._signal_to_order(signal)
+                
+                # Publish to trade engine
+                await self.publisher.publish_order(order_data)
+                
+                self.logger.info("Market logic signal published",
+                               strategy=signal.strategy_name,
+                               symbol=signal.symbol,
+                               signal_type=signal.signal_type,
+                               confidence=signal.confidence_score)
+                               
+        except Exception as e:
+            self.logger.error("Error publishing market logic signals", error=str(e))
+    
+    def _signal_to_order(self, signal) -> Dict[str, Any]:
+        """
+        Convert a market logic signal to a trade order format.
+        
+        Compatible with existing Petrosa trade engine format.
+        """
+        # Map signal to order action
+        if signal.signal_action == "OPEN_LONG":
+            action = "buy"
+        elif signal.signal_action == "OPEN_SHORT":
+            action = "sell"
+        else:
+            action = signal.signal_type.lower()  # BUY -> buy, SELL -> sell
+            
+        # Create order in trade engine format
+        order = {
+            "strategy_id": f"market_logic_{signal.strategy_name}",
+            "strategy_mode": "deterministic",  # Market logic uses deterministic rules
+            "symbol": signal.symbol,
+            "action": action,
+            "confidence": signal.confidence_score,
+            "current_price": signal.price,
+            "order_type": "market",  # Market orders for quick execution
+            "position_size_pct": 0.05,  # 5% position size for market logic signals
+            "metadata": {
+                **signal.metadata,
+                "signal_source": "market_logic",
+                "original_signal_type": signal.signal_type,
+                "original_signal_action": signal.signal_action
+            }
+        }
+        
+        return order
 
     def _update_processing_metrics(self, processing_time: float) -> None:
         """Update processing time metrics."""

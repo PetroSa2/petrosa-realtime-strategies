@@ -24,6 +24,7 @@ from strategies.core.consumer import NATSConsumer  # noqa: E402
 from strategies.core.publisher import TradeOrderPublisher  # noqa: E402
 from strategies.health.server import HealthServer  # noqa: E402
 from strategies.utils.logger import setup_logging  # noqa: E402
+from strategies.utils.heartbeat import HeartbeatManager  # noqa: E402
 
 # Initialize OpenTelemetry as early as possible
 try:
@@ -50,6 +51,7 @@ class StrategiesService:
         self.consumer: Optional[NATSConsumer] = None
         self.publisher: Optional[TradeOrderPublisher] = None
         self.health_server: Optional[HealthServer] = None
+        self.heartbeat_manager: Optional[HeartbeatManager] = None
         self.shutdown_event = asyncio.Event()
 
     async def start(self):
@@ -57,15 +59,6 @@ class StrategiesService:
         self.logger.info("Starting Petrosa Realtime Strategies service")
 
         try:
-            # Start health server
-            self.health_server = HealthServer(
-                port=constants.HEALTH_CHECK_PORT, logger=self.logger
-            )
-            await self.health_server.start()
-            self.logger.info(
-                f"Health server started on port {constants.HEALTH_CHECK_PORT}"
-            )
-
             # Start trade order publisher
             self.publisher = TradeOrderPublisher(
                 nats_url=constants.NATS_URL,
@@ -86,6 +79,28 @@ class StrategiesService:
             await self.consumer.start()
             self.logger.info("NATS consumer started successfully")
 
+            # Start heartbeat manager
+            self.heartbeat_manager = HeartbeatManager(
+                consumer=self.consumer,
+                publisher=self.publisher,
+                logger=self.logger,
+            )
+            await self.heartbeat_manager.start()
+            self.logger.info("Heartbeat manager started successfully")
+
+            # Start health server (after all components are initialized)
+            self.health_server = HealthServer(
+                port=constants.HEALTH_CHECK_PORT,
+                logger=self.logger,
+                consumer=self.consumer,
+                publisher=self.publisher,
+                heartbeat_manager=self.heartbeat_manager,
+            )
+            await self.health_server.start()
+            self.logger.info(
+                f"Health server started on port {constants.HEALTH_CHECK_PORT}"
+            )
+
             # Wait for shutdown signal
             await self.shutdown_event.wait()
 
@@ -98,6 +113,11 @@ class StrategiesService:
     async def stop(self):
         """Stop the service gracefully."""
         self.logger.info("Stopping Petrosa Realtime Strategies service")
+
+        # Stop heartbeat manager first
+        if self.heartbeat_manager:
+            await self.heartbeat_manager.stop()
+            self.logger.info("Heartbeat manager stopped")
 
         # Stop NATS consumer
         if self.consumer:
@@ -207,9 +227,48 @@ def config():
     print(f"  Consumer Topic: {constants.NATS_CONSUMER_TOPIC}")
     print(f"  Publisher Topic: {constants.NATS_PUBLISHER_TOPIC}")
     print(f"  Health Check Port: {constants.HEALTH_CHECK_PORT}")
+    print(f"  Heartbeat Enabled: {constants.HEARTBEAT_ENABLED}")
+    print(f"  Heartbeat Interval: {constants.HEARTBEAT_INTERVAL_SECONDS}s")
     print(f"  Enabled Strategies: {constants.get_enabled_strategies()}")
     print(f"  Trading Symbols: {constants.TRADING_SYMBOLS}")
     print(f"  Enable Shorts: {constants.TRADING_ENABLE_SHORTS}")
+
+
+@app.command()
+def heartbeat():
+    """Trigger a manual heartbeat (for testing)."""
+    import requests
+    
+    try:
+        # Try to trigger heartbeat via health endpoint
+        response = requests.get(
+            f"http://localhost:{constants.HEALTH_CHECK_PORT}/metrics", timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            heartbeat_info = data.get("components", {}).get("heartbeat", {})
+            print("💓 Heartbeat Status:")
+            print(f"  Enabled: {heartbeat_info.get('enabled', 'unknown')}")
+            print(f"  Running: {heartbeat_info.get('is_running', 'unknown')}")
+            print(f"  Count: {heartbeat_info.get('heartbeat_count', 'unknown')}")
+            print(f"  Uptime: {heartbeat_info.get('uptime_seconds', 'unknown')}s")
+            print(f"  Interval: {heartbeat_info.get('interval_seconds', 'unknown')}s")
+            
+            # Show recent stats if available
+            consumer_info = data.get("components", {}).get("consumer", {})
+            publisher_info = data.get("components", {}).get("publisher", {})
+            print("\n📊 Current Stats:")
+            print(f"  Messages Processed: {consumer_info.get('message_count', 'unknown')}")
+            print(f"  Consumer Errors: {consumer_info.get('error_count', 'unknown')}")
+            print(f"  Orders Published: {publisher_info.get('order_count', 'unknown')}")
+            print(f"  Publisher Errors: {publisher_info.get('error_count', 'unknown')}")
+        else:
+            print(f"❌ Failed to get heartbeat status: {response.status_code}")
+            sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Heartbeat check failed: {e}")
+        print("💡 Make sure the service is running")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
