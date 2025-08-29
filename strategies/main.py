@@ -59,6 +59,19 @@ class StrategiesService:
         self.logger.info("Starting Petrosa Realtime Strategies service")
 
         try:
+            # Start health server first to handle Kubernetes probes
+            self.health_server = HealthServer(
+                port=constants.HEALTH_CHECK_PORT,
+                logger=self.logger,
+                consumer=None,  # Will be set later
+                publisher=None,  # Will be set later
+                heartbeat_manager=None,  # Will be set later
+            )
+            await self.health_server.start()
+            self.logger.info(
+                f"Health server started on port {constants.HEALTH_CHECK_PORT}"
+            )
+
             # Start trade order publisher
             self.publisher = TradeOrderPublisher(
                 nats_url=constants.NATS_URL,
@@ -66,6 +79,9 @@ class StrategiesService:
                 logger=self.logger,
             )
             await self.publisher.start()
+
+            # Update health server with publisher reference
+            self.health_server.publisher = self.publisher
 
             # Start NATS consumer
             self.consumer = NATSConsumer(
@@ -79,6 +95,9 @@ class StrategiesService:
             await self.consumer.start()
             self.logger.info("NATS consumer started successfully")
 
+            # Update health server with consumer reference
+            self.health_server.consumer = self.consumer
+
             # Start heartbeat manager
             self.heartbeat_manager = HeartbeatManager(
                 consumer=self.consumer,
@@ -88,18 +107,8 @@ class StrategiesService:
             await self.heartbeat_manager.start()
             self.logger.info("Heartbeat manager started successfully")
 
-            # Start health server (after all components are initialized)
-            self.health_server = HealthServer(
-                port=constants.HEALTH_CHECK_PORT,
-                logger=self.logger,
-                consumer=self.consumer,
-                publisher=self.publisher,
-                heartbeat_manager=self.heartbeat_manager,
-            )
-            await self.health_server.start()
-            self.logger.info(
-                f"Health server started on port {constants.HEALTH_CHECK_PORT}"
-            )
+            # Update health server with heartbeat manager reference
+            self.health_server.heartbeat_manager = self.heartbeat_manager
 
             # Wait for shutdown signal
             await self.shutdown_event.wait()

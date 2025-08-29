@@ -19,7 +19,7 @@ spec:
   - to:
     - namespaceSelector:
         matchLabels:
-          name: nats
+          kubernetes.io/metadata.name: nats
     ports:
     - protocol: TCP
       port: 4222
