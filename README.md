@@ -15,6 +15,7 @@ This service is designed to be completely stateless, horizontally scalable, and 
   - Ticker Velocity Strategy
 - **Real-time Processing**: High-performance async processing of market data
 - **Futures Trading Support**: Full support for Binance Futures including short positions
+- **Periodic Heartbeat**: Comprehensive statistics logging with message processing metrics
 - **Enterprise Ready**: Comprehensive monitoring, health checks, and observability
 - **Kubernetes Native**: Designed for Kubernetes deployment with auto-scaling
 
@@ -26,7 +27,8 @@ This service is designed to be completely stateless, horizontally scalable, and 
 2. **Strategy Processors** - Stateless strategy implementations
 3. **Trade Order Publisher** - Sends orders to `tradeengine.orders` topic
 4. **Health Server** - FastAPI-based health checks and metrics
-5. **Circuit Breaker** - Fault tolerance and failure handling
+5. **Heartbeat Manager** - Periodic statistics logging and monitoring
+6. **Circuit Breaker** - Fault tolerance and failure handling
 
 ### Data Flow
 
@@ -274,6 +276,65 @@ The service is designed to scale horizontally:
 - Network segmentation
 - Secret management for sensitive configuration
 
+## CLI Commands
+
+The service provides several CLI commands for management and monitoring:
+
+### Service Management
+
+```bash
+# Run the service
+python -m strategies.main run
+
+# Check service health
+python -m strategies.main health
+
+# Show version information
+python -m strategies.main version
+
+# Display configuration
+python -m strategies.main config
+```
+
+### Heartbeat Monitoring
+
+```bash
+# Check heartbeat status and current statistics
+python -m strategies.main heartbeat
+```
+
+Example output:
+```
+💓 Heartbeat Status:
+  Enabled: True
+  Running: True
+  Count: 15
+  Uptime: 900.5s
+  Interval: 60s
+
+📊 Current Stats:
+  Messages Processed: 2,450
+  Consumer Errors: 3
+  Orders Published: 127
+  Publisher Errors: 0
+```
+
+### Health Endpoints
+
+```bash
+# Check liveness
+curl http://localhost:8080/healthz
+
+# Check readiness
+curl http://localhost:8080/ready
+
+# Get detailed metrics (includes heartbeat status)
+curl http://localhost:8080/metrics
+
+# Get service information
+curl http://localhost:8080/info
+```
+
 ## Troubleshooting
 
 ### Common Issues
@@ -323,6 +384,7 @@ For complete setup and configuration details:
 - [DockerHub Setup](docs/DOCKERHUB_SETUP.md) - DockerHub configuration and credentials
 - [CI/CD Pipeline](docs/CI_CD_PIPELINE_IMPLEMENTATION.md) - Pipeline implementation details
 - [Deployment Guide](docs/DEPLOYMENT.md) - Kubernetes deployment guide
+- [Heartbeat Feature](docs/HEARTBEAT_FEATURE.md) - Periodic statistics logging and monitoring
 
 ## Support
 

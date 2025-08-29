@@ -24,10 +24,16 @@ class HealthServer:
         self,
         port: int = 8080,
         logger: Optional[structlog.BoundLogger] = None,
+        consumer=None,
+        publisher=None,
+        heartbeat_manager=None,
     ):
         """Initialize the health server."""
         self.port = port
         self.logger = logger or structlog.get_logger()
+        self.consumer = consumer
+        self.publisher = publisher
+        self.heartbeat_manager = heartbeat_manager
 
         # FastAPI app
         self.app = FastAPI(
@@ -231,7 +237,10 @@ class HealthServer:
                     "enabled_strategies": constants.get_enabled_strategies(),
                     "trading_symbols": constants.TRADING_SYMBOLS,
                     "enable_shorts": constants.TRADING_ENABLE_SHORTS,
+                    "heartbeat_enabled": constants.HEARTBEAT_ENABLED,
+                    "heartbeat_interval": constants.HEARTBEAT_INTERVAL_SECONDS,
                 },
+                "components": self._get_component_metrics(),
             }
 
             return metrics
@@ -315,3 +324,32 @@ class HealthServer:
     def is_healthy(self) -> bool:
         """Check if the service is healthy."""
         return self.health_status.get("status") == "healthy"
+
+    def _get_component_metrics(self) -> Dict[str, Any]:
+        """Get metrics from all service components."""
+        components = {}
+        
+        # Consumer metrics
+        if self.consumer:
+            try:
+                components["consumer"] = self.consumer.get_metrics()
+                components["consumer"]["health"] = self.consumer.get_health_status()
+            except Exception as e:
+                components["consumer"] = {"error": str(e)}
+        
+        # Publisher metrics
+        if self.publisher:
+            try:
+                components["publisher"] = self.publisher.get_metrics()
+                components["publisher"]["health"] = self.publisher.get_health_status()
+            except Exception as e:
+                components["publisher"] = {"error": str(e)}
+        
+        # Heartbeat manager metrics
+        if self.heartbeat_manager:
+            try:
+                components["heartbeat"] = self.heartbeat_manager.get_heartbeat_status()
+            except Exception as e:
+                components["heartbeat"] = {"error": str(e)}
+        
+        return components
