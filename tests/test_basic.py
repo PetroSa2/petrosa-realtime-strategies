@@ -8,6 +8,7 @@ from strategies.models.signals import Signal, SignalType, SignalAction, SignalCo
 from strategies.models.orders import TradeOrder, OrderType, OrderSide, PositionType
 
 
+@pytest.mark.unit
 class TestMarketDataModels:
     """Test market data models."""
 
@@ -87,6 +88,7 @@ class TestMarketDataModels:
         assert ticker.last_price_float == 50000.0
 
 
+@pytest.mark.unit
 class TestSignalModels:
     """Test signal models."""
 
@@ -123,6 +125,7 @@ class TestSignalModels:
             )
 
 
+@pytest.mark.unit
 class TestOrderModels:
     """Test order models."""
 
@@ -164,6 +167,7 @@ class TestOrderModels:
             )
 
 
+@pytest.mark.unit
 class TestMarketDataMessage:
     """Test market data message wrapper."""
 

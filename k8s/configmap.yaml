@@ -9,7 +9,7 @@ metadata:
     component: trading-signals
 data:
   # NATS Configuration
-  NATS_CONSUMER_TOPIC: "binance.websocket.data"
+  NATS_CONSUMER_TOPIC: "binance.futures.websocket.data"
   NATS_PUBLISHER_TOPIC: "tradeengine.orders"
   NATS_CONSUMER_NAME: "realtime-strategies-consumer"
   NATS_CONSUMER_GROUP: "realtime-strategies-group"

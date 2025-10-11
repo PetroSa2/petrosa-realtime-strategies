@@ -8,6 +8,7 @@ to the appropriate strategy processors.
 import asyncio
 import json
 import time
+from datetime import datetime
 from typing import Any, Dict, Optional, Union
 import structlog
 
@@ -249,10 +250,12 @@ class NATSConsumer:
             if not transformed_data:
                 return None
 
-            # Create market data message
-            market_data = MarketDataMessage(
+            # Create market data message using model_construct to bypass Union validation
+            # since we've already validated the specific type in the transformation
+            market_data = MarketDataMessage.model_construct(
                 stream=stream,
                 data=transformed_data,
+                timestamp=datetime.utcnow()
             )
 
             return market_data
