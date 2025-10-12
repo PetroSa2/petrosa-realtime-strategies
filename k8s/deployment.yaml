@@ -20,6 +20,10 @@ spec:
         app: realtime-strategies
         component: trading-signals
         version: VERSION_PLACEHOLDER
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       restartPolicy: Always
       containers:
@@ -27,12 +31,15 @@ spec:
         image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
         imagePullPolicy: Always
         command:
+        - opentelemetry-instrument
         - python
         - -m
         - strategies.main
         args:
         - run
         env:
+        - name: OTEL_NO_AUTO_INIT
+          value: "1"
         - name: NATS_URL
           valueFrom:
             configMapKeyRef:
