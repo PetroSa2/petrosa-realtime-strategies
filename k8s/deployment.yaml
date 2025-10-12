@@ -20,8 +20,6 @@ spec:
         app: realtime-strategies
         component: trading-signals
         version: VERSION_PLACEHOLDER
-      annotations:
-        instrumentation.newrelic.com/inject-python: "true"
     spec:
       restartPolicy: Always
       containers:
@@ -29,12 +27,15 @@ spec:
         image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
         imagePullPolicy: Always
         command:
+        - opentelemetry-instrument
         - python
         - -m
         - strategies.main
         args:
         - run
         env:
+        - name: OTEL_NO_AUTO_INIT
+          value: "1"
         - name: NATS_URL
           valueFrom:
             configMapKeyRef:
@@ -122,6 +123,21 @@ spec:
             configMapKeyRef:
               name: petrosa-realtime-strategies-config
               key: STRATEGY_ENABLED_TICKER_VELOCITY
+        - name: STRATEGY_ENABLED_BTC_DOMINANCE
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_BTC_DOMINANCE
+        - name: STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD
+        - name: STRATEGY_ENABLED_ONCHAIN_METRICS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_ONCHAIN_METRICS
         - name: TRADING_SYMBOLS
           valueFrom:
             configMapKeyRef:
