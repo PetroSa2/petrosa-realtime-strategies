@@ -27,12 +27,15 @@ spec:
         image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
         imagePullPolicy: Always
         command:
+        - opentelemetry-instrument
         - python
         - -m
         - strategies.main
         args:
         - run
         env:
+        - name: OTEL_NO_AUTO_INIT
+          value: "1"
         - name: NATS_URL
           valueFrom:
             configMapKeyRef:
