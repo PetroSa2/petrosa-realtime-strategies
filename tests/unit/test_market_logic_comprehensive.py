@@ -20,12 +20,12 @@ from strategies.core.processor import MarketDataProcessor
 
 
 @pytest.mark.unit
-class TestBTCDominanceAnalyzer:
+class TestBitcoinDominanceStrategy:
     """Test cases for BTC dominance analysis."""
 
     def test_btc_dominance_analyzer_initialization(self):
-        """Test BTCDominanceAnalyzer initialization."""
-        analyzer = BTCDominanceAnalyzer()
+        """Test BitcoinDominanceStrategy initialization."""
+        analyzer = BitcoinDominanceStrategy()
         
         assert analyzer is not None
         assert hasattr(analyzer, 'dominance_threshold')
@@ -33,7 +33,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_calculate_btc_dominance(self):
         """Test BTC dominance calculation."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         market_caps = {
             'BTC': 800000000000,  # $800B
@@ -50,7 +50,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_btc_dominance_trend_analysis(self):
         """Test BTC dominance trend analysis."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         # Historical dominance data (decreasing trend)
         dominance_history = [0.68, 0.67, 0.66, 0.65, 0.64, 0.63, 0.62]
@@ -63,7 +63,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_btc_dominance_signal_generation_bullish(self):
         """Test bullish signal generation based on BTC dominance."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         # Mock increasing dominance trend
         with patch.object(analyzer, 'get_current_dominance') as mock_dominance, \
@@ -85,7 +85,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_btc_dominance_signal_generation_bearish(self):
         """Test bearish signal generation based on BTC dominance."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         # Mock decreasing dominance trend
         with patch.object(analyzer, 'get_current_dominance') as mock_dominance, \
@@ -107,7 +107,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_btc_dominance_no_signal_flat_trend(self):
         """Test no signal generation when dominance is flat."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         with patch.object(analyzer, 'get_current_dominance') as mock_dominance, \
              patch.object(analyzer, 'analyze_trend') as mock_trend:
@@ -125,7 +125,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_btc_dominance_extreme_values(self):
         """Test handling of extreme dominance values."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         # Test extreme high dominance
         market_caps_high = {'BTC': 1000000000000, 'ETH': 10000000000}
@@ -139,7 +139,7 @@ class TestBTCDominanceAnalyzer:
 
     def test_btc_dominance_historical_data_validation(self):
         """Test validation of historical data."""
-        analyzer = BTCDominanceAnalyzer()
+        analyzer = BitcoinDominanceStrategy()
         
         # Test with insufficient data
         short_history = [0.65, 0.64]
@@ -153,7 +153,7 @@ class TestBTCDominanceAnalyzer:
 
 
 @pytest.mark.unit
-class TestCrossExchangeSpreadAnalyzer:
+class TestCrossExchangeSpreadStrategy:
     """Test cases for cross-exchange spread analysis."""
 
     def create_sample_orderbook(self, symbol, exchange, base_price=50000):
@@ -175,8 +175,8 @@ class TestCrossExchangeSpreadAnalyzer:
         )
 
     def test_cross_exchange_spread_analyzer_initialization(self):
-        """Test CrossExchangeSpreadAnalyzer initialization."""
-        analyzer = CrossExchangeSpreadAnalyzer()
+        """Test CrossExchangeSpreadStrategy initialization."""
+        analyzer = CrossExchangeSpreadStrategy()
         
         assert analyzer is not None
         assert hasattr(analyzer, 'spread_threshold')
@@ -184,7 +184,7 @@ class TestCrossExchangeSpreadAnalyzer:
 
     def test_calculate_spread_between_exchanges(self):
         """Test spread calculation between exchanges."""
-        analyzer = CrossExchangeSpreadAnalyzer()
+        analyzer = CrossExchangeSpreadStrategy()
         
         # Create order books with price difference
         binance_book = self.create_sample_orderbook("BTCUSDT", "binance", 50000)
@@ -198,7 +198,7 @@ class TestCrossExchangeSpreadAnalyzer:
 
     def test_identify_arbitrage_opportunities(self):
         """Test identification of arbitrage opportunities."""
-        analyzer = CrossExchangeSpreadAnalyzer()
+        analyzer = CrossExchangeSpreadStrategy()
         
         # Create significant price difference
         orderbooks = {
@@ -215,7 +215,7 @@ class TestCrossExchangeSpreadAnalyzer:
 
     def test_spread_signal_generation(self):
         """Test signal generation based on spread analysis."""
-        analyzer = CrossExchangeSpreadAnalyzer()
+        analyzer = CrossExchangeSpreadStrategy()
         
         # Mock significant spread
         with patch.object(analyzer, 'get_current_spreads') as mock_spreads:
@@ -236,7 +236,7 @@ class TestCrossExchangeSpreadAnalyzer:
 
     def test_volume_weighted_spread_calculation(self):
         """Test volume-weighted spread calculation."""
-        analyzer = CrossExchangeSpreadAnalyzer()
+        analyzer = CrossExchangeSpreadStrategy()
         
         # Create order books with different volumes
         high_volume_book = OrderBookData(
@@ -264,7 +264,7 @@ class TestCrossExchangeSpreadAnalyzer:
 
     def test_spread_historical_analysis(self):
         """Test historical spread analysis."""
-        analyzer = CrossExchangeSpreadAnalyzer()
+        analyzer = CrossExchangeSpreadStrategy()
         
         # Mock historical spread data
         historical_spreads = [
@@ -280,7 +280,7 @@ class TestCrossExchangeSpreadAnalyzer:
 
     def test_minimum_profit_threshold(self):
         """Test minimum profit threshold for arbitrage signals."""
-        analyzer = CrossExchangeSpreadAnalyzer(min_profit_threshold=0.003)  # 0.3%
+        analyzer = CrossExchangeSpreadStrategy(min_profit_threshold=0.003)  # 0.3%
         
         # Small spread below threshold
         small_spread_books = {
@@ -295,12 +295,12 @@ class TestCrossExchangeSpreadAnalyzer:
 
 
 @pytest.mark.unit
-class TestOnChainMetricsAnalyzer:
+class TestOnChainMetricsStrategy:
     """Test cases for on-chain metrics analysis."""
 
     def test_onchain_metrics_analyzer_initialization(self):
-        """Test OnChainMetricsAnalyzer initialization."""
-        analyzer = OnChainMetricsAnalyzer()
+        """Test OnChainMetricsStrategy initialization."""
+        analyzer = OnChainMetricsStrategy()
         
         assert analyzer is not None
         assert hasattr(analyzer, 'metrics_sources')
@@ -308,7 +308,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_analyze_network_activity(self):
         """Test network activity analysis."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         network_data = {
             'active_addresses': 1000000,
@@ -325,7 +325,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_whale_movement_detection(self):
         """Test whale movement detection."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         large_transactions = [
             {'amount': 1000, 'from_exchange': False, 'to_exchange': True},   # Whale to exchange
@@ -341,7 +341,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_exchange_flow_analysis(self):
         """Test exchange flow analysis."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         flow_data = {
             'inflow_24h': 50000,    # BTC flowing into exchanges
@@ -358,7 +358,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_miner_behavior_analysis(self):
         """Test miner behavior analysis."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         miner_data = {
             'hash_rate': 200000000000000000000,
@@ -376,7 +376,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_onchain_signal_generation(self):
         """Test on-chain signal generation."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         # Mock bullish on-chain conditions
         with patch.object(analyzer, 'get_current_metrics') as mock_metrics:
@@ -396,7 +396,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_correlation_with_price_movements(self):
         """Test correlation analysis with price movements."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         # Historical on-chain data and price data
         onchain_history = [0.6, 0.65, 0.7, 0.75, 0.8]  # Increasing activity
@@ -409,7 +409,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_onchain_metrics_validation(self):
         """Test validation of on-chain metrics data."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         # Test with invalid data
         invalid_data = {
@@ -426,7 +426,7 @@ class TestOnChainMetricsAnalyzer:
 
     def test_real_time_metrics_processing(self):
         """Test real-time metrics processing."""
-        analyzer = OnChainMetricsAnalyzer()
+        analyzer = OnChainMetricsStrategy()
         
         # Simulate streaming metrics data
         metrics_stream = [
