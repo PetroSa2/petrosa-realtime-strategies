@@ -120,6 +120,21 @@ spec:
             configMapKeyRef:
               name: petrosa-realtime-strategies-config
               key: STRATEGY_ENABLED_TICKER_VELOCITY
+        - name: STRATEGY_ENABLED_BTC_DOMINANCE
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_BTC_DOMINANCE
+        - name: STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD
+        - name: STRATEGY_ENABLED_ONCHAIN_METRICS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_ONCHAIN_METRICS
         - name: TRADING_SYMBOLS
           valueFrom:
             configMapKeyRef:

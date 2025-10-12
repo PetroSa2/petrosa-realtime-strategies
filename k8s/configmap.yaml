@@ -29,7 +29,7 @@ data:
   
   # Market Logic Strategies (from QTZD adaptation)
   STRATEGY_ENABLED_BTC_DOMINANCE: "true"
-  STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD: "true"
+  STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD: "false"
   STRATEGY_ENABLED_ONCHAIN_METRICS: "false"
   
   # Order Book Skew Strategy Parameters
