@@ -20,8 +20,6 @@ spec:
         app: realtime-strategies
         component: trading-signals
         version: VERSION_PLACEHOLDER
-      annotations:
-        instrumentation.newrelic.com/inject-python: "true"
     spec:
       restartPolicy: Always
       containers:
