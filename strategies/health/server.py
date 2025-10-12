@@ -11,10 +11,45 @@ from typing import Any, Dict, Optional
 import structlog
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import (
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+)
 import uvicorn
 
 import constants
+
+# Prometheus metrics
+STRATEGY_SIGNALS_GENERATED = Counter(
+    "strategy_signals_generated_total",
+    "Total signals generated",
+    ["strategy", "signal_type"],
+)
+NATS_MESSAGES_CONSUMED = Counter(
+    "nats_messages_consumed_total", "Total NATS messages consumed"
+)
+NATS_MESSAGES_PUBLISHED = Counter(
+    "nats_messages_published_total", "Total orders published to NATS"
+)
+STRATEGY_PROCESSING_TIME = Histogram(
+    "strategy_processing_time_seconds", "Time to process a message", ["strategy"]
+)
+STRATEGY_ERRORS = Counter(
+    "strategy_errors_total", "Total strategy errors", ["strategy", "error_type"]
+)
+CIRCUIT_BREAKER_STATE = Gauge(
+    "circuit_breaker_state", "Circuit breaker state (0=closed, 1=open)", ["component"]
+)
+MEMORY_USAGE_BYTES = Gauge("memory_usage_bytes", "Memory usage in bytes")
+CPU_USAGE_PERCENT = Gauge("cpu_usage_percent", "CPU usage percentage")
+SERVICE_UPTIME = Gauge("service_uptime_seconds", "Service uptime in seconds")
+ENABLED_STRATEGIES_COUNT = Gauge(
+    "enabled_strategies_count", "Number of enabled strategies"
+)
 
 
 class HealthServer:
@@ -61,7 +96,7 @@ class HealthServer:
 
     def _register_routes(self) -> None:
         """Register FastAPI routes."""
-        
+
         @self.app.get("/healthz")
         async def health_check():
             """Liveness probe endpoint."""
@@ -74,8 +109,8 @@ class HealthServer:
 
         @self.app.get("/metrics")
         async def metrics():
-            """Metrics endpoint."""
-            return await self._get_metrics()
+            """Prometheus metrics endpoint."""
+            return await self._get_prometheus_metrics()
 
         @self.app.get("/info")
         async def info():
@@ -94,7 +129,7 @@ class HealthServer:
                     "readiness": "/ready",
                     "metrics": "/metrics",
                     "info": "/info",
-                }
+                },
             }
 
     async def start(self) -> None:
@@ -111,11 +146,11 @@ class HealthServer:
                 access_log=False,
             )
             self.server = uvicorn.Server(config)
-            
+
             # Start server in background
             self.is_running = True
             self.start_time = time.time()
-            
+
             # Run server in background task
             asyncio.create_task(self._run_server())
 
@@ -155,7 +190,8 @@ class HealthServer:
             health_checks = {
                 "server_running": self.is_running,
                 "uptime_seconds": uptime >= 0,  # Just check if uptime is valid
-                "memory_usage": self._get_memory_usage() >= 0,  # Just check if memory is valid
+                "memory_usage": self._get_memory_usage()
+                >= 0,  # Just check if memory is valid
                 "cpu_usage": self._get_cpu_usage() >= 0,  # Just check if CPU is valid
             }
 
@@ -215,6 +251,47 @@ class HealthServer:
             self.logger.error(f"Readiness check failed: {e}")
             raise HTTPException(status_code=503, detail=f"Readiness check failed: {e}")
 
+    async def _get_prometheus_metrics(self) -> Response:
+        """Get Prometheus-format metrics."""
+        try:
+            # Update gauge metrics with current values
+            if self.start_time:
+                uptime = time.time() - self.start_time
+                SERVICE_UPTIME.set(uptime)
+
+            memory_mb = self._get_memory_usage()
+            MEMORY_USAGE_BYTES.set(memory_mb * 1024 * 1024)  # Convert MB to bytes
+
+            cpu = self._get_cpu_usage()
+            CPU_USAGE_PERCENT.set(cpu)
+
+            # Update enabled strategies count
+            enabled_strategies = constants.get_enabled_strategies()
+            ENABLED_STRATEGIES_COUNT.set(len(enabled_strategies))
+
+            # Update component metrics (circuit breakers)
+            components = self._get_component_metrics()
+            for component_name, component_data in components.items():
+                if isinstance(component_data, dict):
+                    # Update circuit breaker state
+                    cb_state = component_data.get("circuit_breaker_state", "CLOSED")
+                    CIRCUIT_BREAKER_STATE.labels(component=component_name).set(
+                        1 if cb_state == "OPEN" else 0
+                    )
+
+            # Generate Prometheus-format metrics
+            metrics_output = generate_latest()
+
+            return Response(
+                content=metrics_output, media_type=CONTENT_TYPE_LATEST, status_code=200
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate Prometheus metrics: {e}")
+            return Response(
+                content=f"# Error generating metrics: {e}\n", status_code=500
+            )
+
     async def _get_metrics(self) -> Dict[str, Any]:
         """Get service metrics."""
         try:
@@ -223,7 +300,9 @@ class HealthServer:
                     "name": constants.SERVICE_NAME,
                     "version": constants.SERVICE_VERSION,
                     "environment": constants.ENVIRONMENT,
-                    "uptime_seconds": time.time() - self.start_time if self.start_time else 0,
+                    "uptime_seconds": time.time() - self.start_time
+                    if self.start_time
+                    else 0,
                 },
                 "system": {
                     "memory_usage_mb": self._get_memory_usage(),
@@ -288,12 +367,15 @@ class HealthServer:
 
         except Exception as e:
             self.logger.error(f"Failed to get service info: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to get service info: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to get service info: {e}"
+            )
 
     def _get_memory_usage(self) -> float:
         """Get memory usage in MB."""
         try:
             import psutil
+
             process = psutil.Process()
             memory_info = process.memory_info()
             return memory_info.rss / 1024 / 1024  # Convert to MB
@@ -306,6 +388,7 @@ class HealthServer:
         """Get CPU usage percentage."""
         try:
             import psutil
+
             process = psutil.Process()
             return process.cpu_percent()
         except ImportError:
@@ -328,7 +411,7 @@ class HealthServer:
     def _get_component_metrics(self) -> Dict[str, Any]:
         """Get metrics from all service components."""
         components = {}
-        
+
         # Consumer metrics
         if self.consumer:
             try:
@@ -336,7 +419,7 @@ class HealthServer:
                 components["consumer"]["health"] = self.consumer.get_health_status()
             except Exception as e:
                 components["consumer"] = {"error": str(e)}
-        
+
         # Publisher metrics
         if self.publisher:
             try:
@@ -344,12 +427,12 @@ class HealthServer:
                 components["publisher"]["health"] = self.publisher.get_health_status()
             except Exception as e:
                 components["publisher"] = {"error": str(e)}
-        
+
         # Heartbeat manager metrics
         if self.heartbeat_manager:
             try:
                 components["heartbeat"] = self.heartbeat_manager.get_heartbeat_status()
             except Exception as e:
                 components["heartbeat"] = {"error": str(e)}
-        
+
         return components

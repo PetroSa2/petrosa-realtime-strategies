@@ -20,6 +20,10 @@ spec:
         app: realtime-strategies
         component: trading-signals
         version: VERSION_PLACEHOLDER
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       restartPolicy: Always
       containers:
