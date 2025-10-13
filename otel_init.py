@@ -66,7 +66,19 @@ def setup_telemetry(service_name: Optional[str] = None) -> None:
         # Set up OTLP exporter
         otlp_endpoint = constants.OTEL_EXPORTER_OTLP_ENDPOINT
         if otlp_endpoint:
-            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            # Parse OTLP headers if provided
+            headers_env = os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
+            span_headers = None
+            if headers_env:
+                # Parse headers as "key1=value1,key2=value2" format
+                headers_list = [
+                    tuple(h.split("=", 1)) for h in headers_env.split(",") if "=" in h
+                ]
+                span_headers = dict(headers_list)
+            otlp_exporter = OTLPSpanExporter(
+                endpoint=otlp_endpoint,
+                headers=span_headers
+            )
             trace_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
 
         # Set up instrumentations
