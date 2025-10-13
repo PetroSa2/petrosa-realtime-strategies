@@ -23,6 +23,9 @@ import uvicorn
 
 import constants
 
+# Initialize logger
+logger = structlog.get_logger()
+
 # Prometheus metrics
 STRATEGY_SIGNALS_GENERATED = Counter(
     "strategy_signals_generated_total",
@@ -76,6 +79,17 @@ class HealthServer:
             description="Health check endpoints for the trading signal service",
             version=constants.SERVICE_VERSION,
         )
+        
+        # Instrument FastAPI for OpenTelemetry traces
+        try:
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from otel_init import instrument_app
+            instrument_app(self.app)
+            self.logger.info("FastAPI instrumented for OpenTelemetry traces")
+        except Exception as e:
+            self.logger.warning(f"Could not instrument FastAPI for traces: {e}")
 
         # Server state
         self.server = None

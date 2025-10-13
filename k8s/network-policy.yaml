@@ -23,14 +23,16 @@ spec:
     ports:
     - protocol: TCP
       port: 4222
-  # Allow connection to OpenTelemetry collector
+  # Allow connection to OpenTelemetry collector (Grafana Alloy)
   - to:
     - namespaceSelector:
         matchLabels:
-          name: monitoring
+          kubernetes.io/metadata.name: observability
     ports:
     - protocol: TCP
       port: 4317
+    - protocol: TCP
+      port: 4318
   # Allow DNS resolution
   - to: []
     ports:
