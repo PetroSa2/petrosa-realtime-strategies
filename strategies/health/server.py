@@ -7,19 +7,21 @@ for Kubernetes liveness and readiness probes.
 
 import asyncio
 import time
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
-import structlog
 
+import structlog
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import (
+    CONTENT_TYPE_LATEST,
     Counter,
     Gauge,
     Histogram,
     generate_latest,
-    CONTENT_TYPE_LATEST,
 )
-import uvicorn
 
 import constants
 
@@ -70,11 +72,27 @@ class HealthServer:
         self.publisher = publisher
         self.heartbeat_manager = heartbeat_manager
 
-        # FastAPI app
+        # Create lifespan for OTLP handler attachment
+        @asynccontextmanager
+        async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+            """Application lifespan manager - attach OTLP logging handler"""
+            # Startup: Attach OTLP handler after uvicorn configures logging
+            try:
+                import otel_init
+                otel_init.attach_logging_handler()
+            except Exception as e:
+                self.logger.warning(f"Failed to attach OTLP logging handler: {e}")
+            
+            yield
+            
+            # Shutdown: Nothing to clean up
+
+        # FastAPI app with lifespan
         self.app = FastAPI(
             title="Petrosa Realtime Strategies Health",
             description="Health check endpoints for the trading signal service",
             version=constants.SERVICE_VERSION,
+            lifespan=lifespan,
         )
 
         # Server state
