@@ -28,11 +28,14 @@ from strategies.utils.heartbeat import HeartbeatManager  # noqa: E402
 
 # Initialize OpenTelemetry as early as possible
 try:
-    from otel_init import setup_telemetry, setup_metrics  # noqa: E402
+    import otel_init  # noqa: E402
 
     if not os.getenv("OTEL_NO_AUTO_INIT"):
-        setup_telemetry(service_name=constants.OTEL_SERVICE_NAME)
-        setup_metrics()
+        otel_init.setup_telemetry(service_name=constants.OTEL_SERVICE_NAME)
+        otel_init.setup_metrics()
+        # Attach OTLP logging handler for main async service logs
+        # Health server will attach its own handler via lifespan
+        otel_init.attach_logging_handler_simple()
 except ImportError:
     pass
 
