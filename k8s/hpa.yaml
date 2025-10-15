@@ -13,7 +13,7 @@ spec:
     kind: Deployment
     name: petrosa-realtime-strategies
   minReplicas: 2
-  maxReplicas: 10
+  maxReplicas: 5
   metrics:
   - type: Resource
     resource:

@@ -18,6 +18,28 @@ sys.path.insert(0, project_root)
 
 import constants  # noqa: E402
 
+# Import OpenTelemetry components at module level
+try:
+    from opentelemetry import metrics, trace
+    from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
+    from opentelemetry.instrumentation.logging import LoggingInstrumentor
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    OTEL_AVAILABLE = True
+except ImportError as e:
+    OTEL_AVAILABLE = False
+    print(f"⚠️  OpenTelemetry not available: {e}")
+
 # Global logger provider for attaching handlers
 _global_logger_provider = None
 _otlp_logging_handler = None
@@ -42,25 +64,10 @@ def setup_telemetry(service_name: Optional[str] = None) -> None:
     Args:
         service_name: Name of the service for telemetry
     """
-    if not constants.ENABLE_OTEL:
+    if not constants.ENABLE_OTEL or not OTEL_AVAILABLE:
         return
 
     try:
-        from opentelemetry import metrics, trace
-        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
-        from opentelemetry.instrumentation.logging import LoggingInstrumentor
-        from opentelemetry.instrumentation.requests import RequestsInstrumentor
-        from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
-        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         # Set up resource
         resource = Resource.create({
