@@ -95,6 +95,14 @@ class HealthServer:
             lifespan=lifespan,
         )
 
+        # Instrument FastAPI for OpenTelemetry tracing
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            FastAPIInstrumentor.instrument_app(self.app)
+            self.logger.info("✅ FastAPI instrumented for OpenTelemetry tracing")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Failed to instrument FastAPI: {e}")
+
         # Server state
         self.server = None
         self.is_running = False
