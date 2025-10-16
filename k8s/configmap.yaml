@@ -10,7 +10,9 @@ metadata:
 data:
   # NATS Configuration
   NATS_CONSUMER_TOPIC: "binance.futures.websocket.data"
-  NATS_PUBLISHER_TOPIC: "tradeengine.orders"
+  # Changed from "tradeengine.orders" to "signals.trading" to match TradeEngine's subscription
+  # This ensures realtime-strategies signals actually reach TradeEngine for processing
+  NATS_PUBLISHER_TOPIC: "signals.trading"
   NATS_CONSUMER_NAME: "realtime-strategies-consumer"
   NATS_CONSUMER_GROUP: "realtime-strategies-group"
   

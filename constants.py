@@ -21,7 +21,9 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # NATS Configuration
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_CONSUMER_TOPIC = os.getenv("NATS_CONSUMER_TOPIC", "binance.websocket.data")
-NATS_PUBLISHER_TOPIC = os.getenv("NATS_PUBLISHER_TOPIC", "tradeengine.orders")
+# Changed from "tradeengine.orders" to "signals.trading" to match TradeEngine's subscription topic
+# This ensures signals from realtime-strategies actually reach the TradeEngine
+NATS_PUBLISHER_TOPIC = os.getenv("NATS_PUBLISHER_TOPIC", "signals.trading")
 NATS_CONSUMER_NAME = os.getenv("NATS_CONSUMER_NAME", "realtime-strategies-consumer")
 NATS_CONSUMER_GROUP = os.getenv("NATS_CONSUMER_GROUP", "realtime-strategies-group")
 
