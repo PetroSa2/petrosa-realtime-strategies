@@ -142,6 +142,14 @@ def setup_telemetry(service_name: Optional[str] = None) -> None:
         URLLib3Instrumentor().instrument()
         AioHttpClientInstrumentor().instrument()
         
+        # Try to instrument FastAPI (optional)
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            # Note: FastAPI instrumentation will be applied when FastAPI app is created
+            print("✅ FastAPI instrumentation available")
+        except ImportError:
+            print("⚠️  OpenTelemetry FastAPI instrumentation not available")
+        
         # Try to instrument asyncio (optional)
         try:
             from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor

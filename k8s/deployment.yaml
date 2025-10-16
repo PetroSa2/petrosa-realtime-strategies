@@ -120,6 +120,11 @@ spec:
             configMapKeyRef:
               name: petrosa-common-config
               key: OTEL_LOGS_EXPORTER
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: petrosa-sensitive-credentials
+              key: OTEL_EXPORTER_OTLP_HEADERS
         - name: HEALTH_CHECK_PORT
           valueFrom:
             configMapKeyRef:
