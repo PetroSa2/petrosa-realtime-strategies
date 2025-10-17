@@ -565,6 +565,164 @@ class TickerVelocityStrategy:
         )
 ```
 
+---
+
+## 🎛️ RUNTIME CONFIGURATION MANAGEMENT
+
+### Overview
+
+The Realtime Strategies service includes a **comprehensive runtime configuration system** that allows dynamic modification of strategy parameters without code changes or restarts. This enables LLM agents and operators to tune strategies for real-time market conditions.
+
+**Note**: The configuration system architecture and API are identical to the TA Bot service. See [TA Bot README](../petrosa-bot-ta-analysis/README.md#runtime-configuration-management) for complete documentation.
+
+### FastAPI Endpoints
+
+All endpoints are identical to TA Bot, accessible at `http://localhost:8080/api/v1/`:
+
+```bash
+# Discovery
+GET /api/v1/strategies
+GET /api/v1/strategies/{strategy_id}/schema
+GET /api/v1/strategies/{strategy_id}/defaults
+
+# Configuration Management
+GET /api/v1/strategies/{strategy_id}/config
+POST /api/v1/strategies/{strategy_id}/config
+DELETE /api/v1/strategies/{strategy_id}/config
+
+# Monitoring
+GET /api/v1/strategies/{strategy_id}/audit
+POST /api/v1/strategies/cache/refresh
+```
+
+### Configurable Market Logic Strategies
+
+All **3 market logic strategies** support runtime configuration:
+
+#### BTC Dominance Strategy
+```json
+{
+  "high_threshold": 70.0,
+  "low_threshold": 40.0,
+  "change_threshold": 5.0,
+  "window_hours": 24,
+  "min_signal_interval": 14400,
+  "base_confidence_high": 0.80,
+  "base_confidence_low": 0.75,
+  "momentum_confidence": 0.70
+}
+```
+
+#### Cross-Exchange Spread Strategy
+```json
+{
+  "spread_threshold_percent": 0.5,
+  "min_signal_interval": 300,
+  "max_position_size": 500,
+  "exchanges": ["binance", "coinbase"],
+  "persistent_spread_periods": 3,
+  "base_confidence": 0.75,
+  "high_spread_threshold": 1.0,
+  "high_spread_confidence": 0.85
+}
+```
+
+#### On-Chain Metrics Strategy
+```json
+{
+  "whale_threshold_btc": 100,
+  "whale_threshold_eth": 1000,
+  "exchange_flow_threshold_percent": 10.0,
+  "min_signal_interval": 3600,
+  "accumulation_periods": 24,
+  "distribution_periods": 12,
+  "base_confidence": 0.77,
+  "strong_signal_confidence": 0.85
+}
+```
+
+### Quick Example: Updating BTC Dominance Threshold
+
+```bash
+# Check current configuration
+curl http://localhost:8080/api/v1/strategies/btc_dominance/config
+
+# Update high dominance threshold
+curl -X POST http://localhost:8080/api/v1/strategies/btc_dominance/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parameters": {
+      "high_threshold": 75.0,
+      "change_threshold": 7.0
+    },
+    "changed_by": "llm_agent_v1",
+    "reason": "BTC showing stronger dominance - adjusting thresholds higher"
+  }'
+
+# Force immediate effect
+curl -X POST http://localhost:8080/api/v1/strategies/cache/refresh
+```
+
+### Configuration Inheritance
+
+Like TA Bot, supports **global defaults with per-symbol overrides**:
+
+```
+Global Config: high_threshold = 70.0 (all symbols)
+BTCUSDT Override: high_threshold = 75.0 (only for BTC)
+ETHUSDT: uses global 70.0
+```
+
+### Signal Metadata
+
+All signals include configuration metadata for tracking:
+
+```json
+{
+  "strategy_id": "btc_dominance",
+  "symbol": "BTCUSDT",
+  "action": "buy",
+  "confidence": 0.80,
+  "metadata": {
+    "strategy_config": {
+      "version": 2,
+      "parameters": {
+        "high_threshold": 75.0,
+        "change_threshold": 7.0
+      },
+      "source": "mongodb",
+      "is_override": false
+    },
+    "dominance": 72.5,
+    "trend": "rising"
+  }
+}
+```
+
+### Configuration Features
+
+- ✅ **5-Level Priority**: Cache → MongoDB Symbol → MySQL Symbol → MongoDB Global → MySQL Global → Defaults
+- ✅ **Dual Persistence**: MongoDB primary, MySQL fallback
+- ✅ **60-Second Cache**: Minimal database load
+- ✅ **Full Audit Trail**: Track all changes with who/what/when/why
+- ✅ **Parameter Validation**: Type checking and range validation
+- ✅ **100% Backward Compatible**: Works with or without config system
+- ✅ **MCP-Compatible API**: Structured for LLM agent integration
+
+### Configuration Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
+| `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
+| `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string |
+| `CONFIG_CACHE_TTL_SECONDS` | `60` | Configuration cache TTL |
+| `FASTAPI_PORT` | `8080` | Configuration API port |
+
+For complete documentation, examples, and troubleshooting, see the [TA Bot Configuration Guide](../petrosa-bot-ta-analysis/README.md#runtime-configuration-management).
+
+---
+
 ### Configuration
 
 **Environment Variables:**
@@ -572,6 +730,9 @@ class TickerVelocityStrategy:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL |
+| `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
+| `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
+| `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string (fallback) |
 | `NATS_CONSUMER_TOPIC` | `binance.websocket.data` | Input topic |
 | `NATS_PUBLISHER_TOPIC` | `signals.trading` | Output topic |
 | `NATS_CONSUMER_GROUP` | `realtime-strategies-group` | Consumer group for load balancing |
@@ -582,6 +743,8 @@ class TickerVelocityStrategy:
 | `ORDERBOOK_SKEW_BUY_THRESHOLD` | `1.2` | Bid/ask ratio for buy signal |
 | `TRADE_MOMENTUM_BUY_THRESHOLD` | `0.7` | Momentum score for buy signal |
 | `TICKER_VELOCITY_BUY_THRESHOLD` | `0.5` | Velocity (% per min) for buy |
+| `CONFIG_CACHE_TTL_SECONDS` | `60` | Config cache TTL |
+| `FASTAPI_PORT` | `8080` | Configuration API port |
 | `HEARTBEAT_INTERVAL_SECONDS` | `60` | Heartbeat logging interval |
 
 ### Deployment
