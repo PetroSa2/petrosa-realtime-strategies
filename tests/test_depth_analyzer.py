@@ -119,11 +119,12 @@ class TestDepthAnalyzer:
             asks = [(100.5, 1.0)]
             analyzer.analyze_depth("BTCUSDT", bids, asks)
         
-        history = analyzer.get_pressure_history("BTCUSDT", "1m")
+        # Use 5m timeframe to get more than 60 points (up to 300)
+        history = analyzer.get_pressure_history("BTCUSDT", "5m")
         
         assert history is not None
         assert history.symbol == "BTCUSDT"
-        assert len(history.pressure_history) == 100
+        assert len(history.pressure_history) == 100  # All 100 points should be included in 5m window
         assert history.trend in ["bullish", "bearish", "neutral"]
         assert 0 <= history.trend_strength <= 1
     
