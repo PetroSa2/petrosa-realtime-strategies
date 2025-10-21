@@ -195,7 +195,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: petrosa-sensitive-credentials
-              key: mongodb-uri
+              key: mongodb-url
         - name: MONGODB_DATABASE
           value: "petrosa"
         - name: MONGODB_TIMEOUT_MS
