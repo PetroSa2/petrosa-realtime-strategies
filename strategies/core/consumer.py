@@ -36,6 +36,7 @@ class NATSConsumer:
         consumer_group: str,
         publisher: TradeOrderPublisher,
         logger: Optional[structlog.BoundLogger] = None,
+        depth_analyzer=None,
     ):
         """Initialize the NATS consumer."""
         self.nats_url = nats_url
@@ -44,6 +45,7 @@ class NATSConsumer:
         self.consumer_group = consumer_group
         self.publisher = publisher
         self.logger = logger or structlog.get_logger()
+        self.depth_analyzer = depth_analyzer
 
         # NATS client and subscription
         self.nats_client: Optional[NATSClient] = None
@@ -396,8 +398,29 @@ class NATSConsumer:
 
     async def _process_depth_data(self, market_data: MarketDataMessage) -> None:
         """Process depth (order book) data."""
-        # This will be implemented by the strategy processor
-        self.logger.debug("Processing depth data", symbol=market_data.symbol)
+        try:
+            # Analyze depth data if depth analyzer is available
+            if self.depth_analyzer and hasattr(market_data.data, 'bids') and hasattr(market_data.data, 'asks'):
+                depth_data = market_data.data
+                symbol = market_data.symbol or market_data.stream.split('@')[0].upper()
+                
+                # Convert DepthLevel objects to tuples for analyzer
+                bids = [(float(b.price), float(b.quantity)) for b in depth_data.bids]
+                asks = [(float(a.price), float(a.quantity)) for a in depth_data.asks]
+                
+                # Analyze and store metrics
+                metrics = self.depth_analyzer.analyze_depth(symbol, bids, asks)
+                
+                self.logger.debug(
+                    "Depth data analyzed",
+                    symbol=symbol,
+                    net_pressure=round(metrics.net_pressure, 2),
+                    imbalance_percent=round(metrics.imbalance_percent, 2),
+                )
+            else:
+                self.logger.debug("Processing depth data (no analyzer)", symbol=market_data.symbol)
+        except Exception as e:
+            self.logger.error(f"Error analyzing depth data: {e}", error=str(e))
 
     async def _process_trade_data(self, market_data: MarketDataMessage) -> None:
         """Process trade data."""

@@ -567,105 +567,260 @@ class TickerVelocityStrategy:
 
 ---
 
-## 🎛️ RUNTIME CONFIGURATION MANAGEMENT
+## 🎛️ RUNTIME CONFIGURATION & MARKET METRICS API
 
 ### Overview
 
-The Realtime Strategies service includes a **comprehensive runtime configuration system** that allows dynamic modification of strategy parameters without code changes or restarts. This enables LLM agents and operators to tune strategies for real-time market conditions.
+The Realtime Strategies service provides **two comprehensive REST APIs**:
 
-**Note**: The configuration system architecture and API are identical to the TA Bot service. See [TA Bot README](../petrosa-bot-ta-analysis/README.md#runtime-configuration-management) for complete documentation.
+1. **Configuration API** - Real-time strategy parameter management
+2. **Market Metrics API** - Order book depth analytics and market pressure indicators
 
-### FastAPI Endpoints
+Both APIs are production-ready, fully documented, and LLM-agent friendly.
 
-All endpoints are identical to TA Bot, accessible at `http://localhost:8080/api/v1/`:
+**Base URL**: `http://realtime-strategies:8080`  
+**Swagger UI**: `http://realtime-strategies:8080/docs`
 
+---
+
+### Part 1: Configuration API
+
+#### FastAPI Endpoints
+
+**Discovery**:
 ```bash
-# Discovery
-GET /api/v1/strategies
-GET /api/v1/strategies/{strategy_id}/schema
-GET /api/v1/strategies/{strategy_id}/defaults
-
-# Configuration Management
-GET /api/v1/strategies/{strategy_id}/config
-POST /api/v1/strategies/{strategy_id}/config
-DELETE /api/v1/strategies/{strategy_id}/config
-
-# Monitoring
-GET /api/v1/strategies/{strategy_id}/audit
-POST /api/v1/strategies/cache/refresh
+GET /api/v1/strategies                      # List all strategies
+GET /api/v1/strategies/{id}/schema          # Get parameter schema
+GET /api/v1/strategies/{id}/defaults        # Get default values
 ```
 
-### Configurable Market Logic Strategies
+**Configuration Management**:
+```bash
+GET /api/v1/strategies/{id}/config          # Get global config
+POST /api/v1/strategies/{id}/config         # Update global config
+GET /api/v1/strategies/{id}/config/{symbol} # Get symbol config
+POST /api/v1/strategies/{id}/config/{symbol}# Update symbol config
+DELETE /api/v1/strategies/{id}/config       # Delete global config
+DELETE /api/v1/strategies/{id}/config/{symbol} # Delete symbol config
+```
 
-All **3 market logic strategies** support runtime configuration:
+**Monitoring**:
+```bash
+GET /api/v1/strategies/{id}/audit           # Get change history
+POST /api/v1/strategies/cache/refresh       # Force cache refresh
+```
 
-#### BTC Dominance Strategy
+#### Configurable Strategies (All 6)
+
+**Realtime Data Strategies** (WebSocket-based):
+
+1. **Orderbook Skew** (8 parameters):
+```json
+{
+  "top_levels": 5,
+  "buy_threshold": 1.2,
+  "sell_threshold": 0.8,
+  "min_spread_percent": 0.1,
+  "base_confidence": 0.70,
+  "imbalance_weight": 0.6,
+  "spread_weight": 0.4,
+  "min_total_volume": 0.001
+}
+```
+
+2. **Trade Momentum** (9 parameters):
+```json
+{
+  "price_weight": 0.4,
+  "quantity_weight": 0.3,
+  "maker_weight": 0.3,
+  "buy_threshold": 0.7,
+  "sell_threshold": -0.7,
+  "min_quantity": 0.001,
+  "base_confidence": 0.68,
+  "time_decay_seconds": 300,
+  "momentum_window": 10
+}
+```
+
+3. **Ticker Velocity** (8 parameters):
+```json
+{
+  "time_window": 60,
+  "buy_threshold": 0.5,
+  "sell_threshold": -0.5,
+  "min_price_change": 0.1,
+  "base_confidence": 0.65,
+  "acceleration_weight": 0.5,
+  "volume_confirmation": true,
+  "min_volume_change": 0.2
+}
+```
+
+**Market Logic Strategies** (Analysis-based):
+
+4. **BTC Dominance** (5 parameters) - Already documented below
+5. **Cross-Exchange Spread** (3 parameters) - Already documented below
+6. **On-Chain Metrics** (4 parameters) - Already documented below
+
+---
+
+### Part 2: Market Metrics API ✨ NEW
+
+Real-time order book depth analytics providing market pressure indicators:
+
+#### Endpoints
+
+```bash
+GET /api/v1/metrics/depth/{symbol}                    # Current depth metrics
+GET /api/v1/metrics/pressure/{symbol}?timeframe=5m    # Pressure history
+GET /api/v1/metrics/summary                           # Market-wide summary
+GET /api/v1/metrics/all                               # All symbols metrics
+```
+
+#### What You Get
+
+**Order Book Imbalance**:
+- Bid vs ask volume ratio
+- Imbalance percentage
+- Buy/sell pressure (0-100 scale)
+- Net pressure indicator
+
+**Liquidity Analysis**:
+- Total liquidity
+- Depth at top 5/10 levels
+- Volume-weighted prices (VWAP)
+
+**Spread Metrics**:
+- Bid-ask spread (absolute & basis points)
+- Mid price
+- Best bid/ask
+
+**Market Insights**:
+- Strongest support/resistance levels
+- Pressure trends (bullish/bearish/neutral)
+- Market-wide sentiment aggregation
+
+#### Quick Examples
+
+**Check market pressure for BTC**:
+```bash
+curl http://realtime-strategies:8080/api/v1/metrics/depth/BTCUSDT | jq '.pressure'
+
+# Response:
+{
+  "buy_pressure": 65.5,
+  "sell_pressure": 34.5,
+  "net_pressure": 31.0,
+  "interpretation": "bullish"
+}
+```
+
+**Get pressure trend**:
+```bash
+curl "http://realtime-strategies:8080/api/v1/metrics/pressure/BTCUSDT?timeframe=5m" | jq '.summary'
+
+# Response:
+{
+  "avg_pressure": 25.5,
+  "trend": "bullish",
+  "trend_strength": 0.75
+}
+```
+
+**Overall market sentiment**:
+```bash
+curl http://realtime-strategies:8080/api/v1/metrics/summary | jq '.market_sentiment'
+
+# Response:
+{
+  "bullish_symbols": 28,
+  "bearish_symbols": 12,
+  "neutral_symbols": 5,
+  "avg_net_pressure": 15.5
+}
+```
+
+---
+
+### Configuration Architecture
+
+- **MongoDB Persistence**: Primary storage for configurations
+- **60-Second Caching**: Fast performance, automatic refresh
+- **Environment Fallback**: Backward compatible with ConfigMap
+- **Audit Trail**: Full change history tracking
+- **Schema Validation**: Prevents invalid configurations
+- **Symbol Overrides**: Global + per-symbol customization
+
+### Remaining Market Logic Strategies
+
+#### BTC Dominance Strategy (5 parameters)
 ```json
 {
   "high_threshold": 70.0,
   "low_threshold": 40.0,
   "change_threshold": 5.0,
   "window_hours": 24,
-  "min_signal_interval": 14400,
-  "base_confidence_high": 0.80,
-  "base_confidence_low": 0.75,
-  "momentum_confidence": 0.70
+  "min_signal_interval": 14400
 }
 ```
 
-#### Cross-Exchange Spread Strategy
+#### Cross-Exchange Spread Strategy (3 parameters)
 ```json
 {
   "spread_threshold_percent": 0.5,
   "min_signal_interval": 300,
-  "max_position_size": 500,
-  "exchanges": ["binance", "coinbase"],
-  "persistent_spread_periods": 3,
-  "base_confidence": 0.75,
-  "high_spread_threshold": 1.0,
-  "high_spread_confidence": 0.85
+  "max_position_size": 500
 }
 ```
 
-#### On-Chain Metrics Strategy
+#### On-Chain Metrics Strategy (4 parameters)
 ```json
 {
   "whale_threshold_btc": 100,
   "whale_threshold_eth": 1000,
   "exchange_flow_threshold_percent": 10.0,
-  "min_signal_interval": 3600,
-  "accumulation_periods": 24,
-  "distribution_periods": 12,
-  "base_confidence": 0.77,
-  "strong_signal_confidence": 0.85
+  "min_signal_interval": 3600
 }
 ```
 
-### Quick Example: Updating BTC Dominance Threshold
+### Configuration Examples
 
+**Update Orderbook Skew globally**:
 ```bash
-# Check current configuration
-curl http://localhost:8080/api/v1/strategies/btc_dominance/config
-
-# Update high dominance threshold
-curl -X POST http://localhost:8080/api/v1/strategies/btc_dominance/config \
+curl -X POST http://realtime-strategies:8080/api/v1/strategies/orderbook_skew/config \
   -H "Content-Type: application/json" \
   -d '{
     "parameters": {
-      "high_threshold": 75.0,
-      "change_threshold": 7.0
+      "buy_threshold": 1.3,
+      "sell_threshold": 0.75
     },
-    "changed_by": "llm_agent_v1",
-    "reason": "BTC showing stronger dominance - adjusting thresholds higher"
+    "changed_by": "admin",
+    "reason": "Adjusting sensitivity for current market conditions"
   }'
+```
 
-# Force immediate effect
-curl -X POST http://localhost:8080/api/v1/strategies/cache/refresh
+**Update for specific symbol (BTCUSDT)**:
+```bash
+curl -X POST http://realtime-strategies:8080/api/v1/strategies/orderbook_skew/config/BTCUSDT \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parameters": {
+      "buy_threshold": 1.5
+    },
+    "changed_by": "admin",
+    "reason": "BTC requires higher threshold due to liquidity"
+  }'
+```
+
+**Force cache refresh**:
+```bash
+curl -X POST http://realtime-strategies:8080/api/v1/strategies/cache/refresh
 ```
 
 ### Configuration Inheritance
 
-Like TA Bot, supports **global defaults with per-symbol overrides**:
+Supports **global defaults with per-symbol overrides**:
 
 ```
 Global Config: high_threshold = 70.0 (all symbols)

@@ -27,6 +27,11 @@ NATS_PUBLISHER_TOPIC = os.getenv("NATS_PUBLISHER_TOPIC", "signals.trading")
 NATS_CONSUMER_NAME = os.getenv("NATS_CONSUMER_NAME", "realtime-strategies-consumer")
 NATS_CONSUMER_GROUP = os.getenv("NATS_CONSUMER_GROUP", "realtime-strategies-group")
 
+# MongoDB Configuration
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "petrosa")
+MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
+
 # Strategy Configuration
 STRATEGY_ENABLED_ORDERBOOK_SKEW = os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "true").lower() == "true"
 STRATEGY_ENABLED_TRADE_MOMENTUM = os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "true").lower() == "true"
