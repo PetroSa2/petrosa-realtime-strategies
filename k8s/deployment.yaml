@@ -190,6 +190,16 @@ spec:
             configMapKeyRef:
               name: petrosa-realtime-strategies-config
               key: MAX_MEMORY_MB
+        # MongoDB Configuration for API persistence
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: petrosa-sensitive-credentials
+              key: mongodb-uri
+        - name: MONGODB_DATABASE
+          value: "petrosa"
+        - name: MONGODB_TIMEOUT_MS
+          value: "5000"
         ports:
         - name: http
           containerPort: 8080

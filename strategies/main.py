@@ -63,6 +63,8 @@ class StrategiesService:
         self.publisher: Optional[TradeOrderPublisher] = None
         self.health_server: Optional[HealthServer] = None
         self.heartbeat_manager: Optional[HeartbeatManager] = None
+        self.config_manager = None
+        self.depth_analyzer = None
         self.shutdown_event = asyncio.Event()
 
     async def start(self):
@@ -70,6 +72,32 @@ class StrategiesService:
         self.logger.info("Starting Petrosa Realtime Strategies service")
 
         try:
+            # Initialize MongoDB and Configuration Manager FIRST
+            from strategies.db.mongodb_client import MongoDBClient
+            from strategies.services.config_manager import StrategyConfigManager
+            from strategies.services.depth_analyzer import DepthAnalyzer
+            
+            mongodb_client = MongoDBClient(
+                uri=constants.MONGODB_URI,
+                database=constants.MONGODB_DATABASE,
+                timeout_ms=constants.MONGODB_TIMEOUT_MS,
+            )
+            
+            self.config_manager = StrategyConfigManager(
+                mongodb_client=mongodb_client,
+                cache_ttl_seconds=60,
+            )
+            await self.config_manager.start()
+            self.logger.info("✅ Configuration manager initialized")
+            
+            # Initialize depth analyzer for market metrics
+            self.depth_analyzer = DepthAnalyzer(
+                history_window_seconds=900,  # 15 minutes
+                max_symbols=100,
+                metrics_ttl_seconds=300,  # 5 minutes
+            )
+            self.logger.info("✅ Depth analyzer initialized")
+            
             # Start health server first to handle Kubernetes probes
             self.health_server = HealthServer(
                 port=constants.HEALTH_CHECK_PORT,
@@ -77,6 +105,8 @@ class StrategiesService:
                 consumer=None,  # Will be set later
                 publisher=None,  # Will be set later
                 heartbeat_manager=None,  # Will be set later
+                config_manager=self.config_manager,  # NEW
+                depth_analyzer=self.depth_analyzer,  # NEW
             )
             await self.health_server.start()
             self.logger.info(
@@ -102,6 +132,7 @@ class StrategiesService:
                 consumer_group=constants.NATS_CONSUMER_GROUP,
                 publisher=self.publisher,
                 logger=self.logger,
+                depth_analyzer=self.depth_analyzer,  # NEW
             )
             await self.consumer.start()
             self.logger.info("NATS consumer started successfully")
@@ -153,6 +184,11 @@ class StrategiesService:
         if self.health_server:
             await self.health_server.stop()
             self.logger.info("Health server stopped")
+        
+        # Stop configuration manager
+        if self.config_manager:
+            await self.config_manager.stop()
+            self.logger.info("Configuration manager stopped")
 
         self.logger.info("Service stopped gracefully")
 

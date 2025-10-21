@@ -2,10 +2,11 @@
 Health check server for the Petrosa Realtime Strategies service.
 
 This module provides health check endpoints and monitoring capabilities
-for Kubernetes liveness and readiness probes.
+for Kubernetes liveness and readiness probes, plus configuration API.
 """
 
 import asyncio
+import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -24,6 +25,10 @@ from prometheus_client import (
 )
 
 import constants
+from strategies.api.config_routes import router as config_router
+from strategies.api.config_routes import set_config_manager
+from strategies.api.metrics_routes import router as metrics_router
+from strategies.api.metrics_routes import set_depth_analyzer
 
 # Prometheus metrics
 STRATEGY_SIGNALS_GENERATED = Counter(
@@ -64,6 +69,8 @@ class HealthServer:
         consumer=None,
         publisher=None,
         heartbeat_manager=None,
+        config_manager=None,
+        depth_analyzer=None,
     ):
         """Initialize the health server."""
         self.port = port
@@ -71,11 +78,13 @@ class HealthServer:
         self.consumer = consumer
         self.publisher = publisher
         self.heartbeat_manager = heartbeat_manager
+        self.config_manager = config_manager
+        self.depth_analyzer = depth_analyzer
 
         # Create lifespan for OTLP handler attachment
         @asynccontextmanager
         async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-            """Application lifespan manager - attach OTLP logging handler"""
+            """Application lifespan manager - attach OTLP logging handler and set config manager"""
             # Startup: Attach OTLP handler after uvicorn configures logging
             try:
                 import otel_init
@@ -83,14 +92,28 @@ class HealthServer:
             except Exception as e:
                 self.logger.warning(f"Failed to attach OTLP logging handler: {e}")
             
+            # Set config manager for API routes if available
+            if self.config_manager:
+                set_config_manager(self.config_manager)
+                self.logger.info("✅ Configuration manager set for API routes")
+            else:
+                self.logger.warning("⚠️  No configuration manager provided - Config API routes will be unavailable")
+            
+            # Set depth analyzer for metrics routes if available
+            if self.depth_analyzer:
+                set_depth_analyzer(self.depth_analyzer)
+                self.logger.info("✅ Depth analyzer set for metrics API routes")
+            else:
+                self.logger.warning("⚠️  No depth analyzer provided - Metrics API routes will be unavailable")
+            
             yield
             
             # Shutdown: Nothing to clean up
 
         # FastAPI app with lifespan
         self.app = FastAPI(
-            title="Petrosa Realtime Strategies Health",
-            description="Health check endpoints for the trading signal service",
+            title="Petrosa Realtime Strategies",
+            description="Health check and configuration API for the trading signal service",
             version=constants.SERVICE_VERSION,
             lifespan=lifespan,
         )
@@ -102,6 +125,14 @@ class HealthServer:
             self.logger.info("✅ FastAPI instrumented for OpenTelemetry tracing")
         except Exception as e:
             self.logger.warning(f"⚠️  Failed to instrument FastAPI: {e}")
+
+        # Include configuration API router
+        self.app.include_router(config_router)
+        self.logger.info("✅ Configuration API routes registered")
+        
+        # Include market metrics API router
+        self.app.include_router(metrics_router)
+        self.logger.info("✅ Market metrics API routes registered")
 
         # Server state
         self.server = None
@@ -155,6 +186,9 @@ class HealthServer:
                     "readiness": "/ready",
                     "metrics": "/metrics",
                     "info": "/info",
+                    "configuration_api": "/api/v1/strategies",
+                    "api_docs": "/docs",
+                    "openapi_spec": "/openapi.json",
                 },
             }
 
