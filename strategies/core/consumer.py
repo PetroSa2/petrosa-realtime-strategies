@@ -511,6 +511,23 @@ class NATSConsumer:
             action = "sell"
         else:
             action = signal.signal_type.lower()  # BUY -> buy, SELL -> sell
+        
+        # CRITICAL FIX: Calculate stop_loss and take_profit based on risk management parameters
+        current_price = signal.price
+        
+        # Get risk management parameters from constants
+        stop_loss_pct = constants.RISK_STOP_LOSS_PERCENT / 100.0  # Convert from percentage to decimal
+        take_profit_pct = constants.RISK_TAKE_PROFIT_PERCENT / 100.0
+        
+        # Calculate stop_loss and take_profit based on action
+        if action == "buy":
+            # For LONG positions
+            stop_loss = current_price * (1 - stop_loss_pct)
+            take_profit = current_price * (1 + take_profit_pct)
+        else:  # action == "sell"
+            # For SHORT positions
+            stop_loss = current_price * (1 + stop_loss_pct)
+            take_profit = current_price * (1 - take_profit_pct)
             
         # Create order in trade engine format
         order = {
@@ -519,16 +536,31 @@ class NATSConsumer:
             "symbol": signal.symbol,
             "action": action,
             "confidence": signal.confidence_score,
-            "current_price": signal.price,
+            "current_price": current_price,
             "order_type": "market",  # Market orders for quick execution
             "position_size_pct": 0.05,  # 5% position size for market logic signals
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
             "metadata": {
                 **signal.metadata,
                 "signal_source": "market_logic",
                 "original_signal_type": signal.signal_type,
-                "original_signal_action": signal.signal_action
+                "original_signal_action": signal.signal_action,
+                "stop_loss_pct": stop_loss_pct * 100,
+                "take_profit_pct": take_profit_pct * 100
             }
         }
+        
+        self.logger.info(
+            "Signal converted to order with risk management",
+            symbol=signal.symbol,
+            action=action,
+            price=current_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            sl_pct=f"{stop_loss_pct*100:.2f}%",
+            tp_pct=f"{take_profit_pct*100:.2f}%"
+        )
         
         return order
 
