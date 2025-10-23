@@ -1,7 +1,4 @@
 # Production dependencies for Petrosa Realtime Strategies
-# Data Manager Client
-petrosa-data-manager-client>=1.0.0
-
 # Core dependencies
 nats-py>=2.0.0
 requests>=2.31.0
