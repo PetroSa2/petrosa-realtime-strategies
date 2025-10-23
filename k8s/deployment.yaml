@@ -190,7 +190,7 @@ spec:
             configMapKeyRef:
               name: petrosa-realtime-strategies-config
               key: MAX_MEMORY_MB
-        # MongoDB Configuration for API persistence
+        # MongoDB Configuration for API persistence (fallback only, Data Manager preferred)
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
@@ -198,6 +198,12 @@ spec:
               key: mongodb-url
         - name: MONGODB_DATABASE
           value: "petrosa"
+        # Data Manager API configuration
+        - name: DATA_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: DATA_MANAGER_URL
         - name: MONGODB_TIMEOUT_MS
           value: "5000"
         ports:
