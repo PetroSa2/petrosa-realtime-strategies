@@ -1,6 +1,9 @@
 """
 MongoDB client for strategy configuration management.
 
+This client now supports both direct MongoDB connections and Data Manager API
+for configuration management. Data Manager is the recommended approach for new deployments.
+
 Provides async MongoDB operations using Motor driver for:
 - Strategy configuration storage (global and per-symbol)
 - Configuration audit trail
@@ -15,12 +18,23 @@ from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo.errors import ConnectionFailure, OperationFailure
 
+# Import Data Manager client
+try:
+    from ..services.data_manager_client import DataManagerClient
+    DATA_MANAGER_AVAILABLE = True
+except ImportError:
+    DATA_MANAGER_AVAILABLE = False
+    DataManagerClient = None
+
 logger = logging.getLogger(__name__)
 
 
 class MongoDBClient:
     """
     Async MongoDB client for strategy configuration persistence.
+    
+    Supports both direct MongoDB connections and Data Manager API.
+    Data Manager is the recommended approach for new deployments.
     
     Features:
     - Connection pooling with configurable limits
@@ -36,6 +50,7 @@ class MongoDBClient:
         max_pool_size: int = 10,
         min_pool_size: int = 1,
         timeout_ms: int = 5000,
+        use_data_manager: bool = True,
     ):
         """
         Initialize MongoDB client.
@@ -46,7 +61,21 @@ class MongoDBClient:
             max_pool_size: Maximum connection pool size
             min_pool_size: Minimum connection pool size
             timeout_ms: Connection and operation timeout in milliseconds
+            use_data_manager: If True, use Data Manager API instead of direct MongoDB
         """
+        self.use_data_manager = use_data_manager and DATA_MANAGER_AVAILABLE
+        
+        if self.use_data_manager:
+            # Initialize Data Manager client
+            self.data_manager_client = DataManagerClient()
+            self.client = None  # No direct MongoDB connection needed
+            self.database = None
+            self._connected = False
+            logger.info("Using Data Manager for configuration management")
+            return
+        
+        # Fallback to direct MongoDB connection
+        logger.info("Using direct MongoDB connection")
         self.uri = uri or os.getenv("MONGODB_URI", "mongodb://localhost:27017")
         self.database_name = database or os.getenv("MONGODB_DATABASE", "petrosa")
         self.max_pool_size = max_pool_size
@@ -59,11 +88,16 @@ class MongoDBClient:
 
     async def connect(self) -> bool:
         """
-        Establish connection to MongoDB.
+        Establish connection to MongoDB or Data Manager.
 
         Returns:
             True if connected successfully, False otherwise
         """
+        if self.use_data_manager:
+            await self.data_manager_client.connect()
+            self._connected = True
+            return True
+        
         try:
             self.client = AsyncIOMotorClient(
                 self.uri,
@@ -102,11 +136,15 @@ class MongoDBClient:
             return False
 
     async def disconnect(self) -> None:
-        """Close MongoDB connection gracefully."""
-        if self.client:
-            self.client.close()
+        """Close MongoDB or Data Manager connection gracefully."""
+        if self.use_data_manager:
+            await self.data_manager_client.disconnect()
             self._connected = False
-            logger.info("Disconnected from MongoDB")
+        else:
+            if self.client:
+                self.client.close()
+                self._connected = False
+                logger.info("Disconnected from MongoDB")
 
     async def _create_indexes(self) -> None:
         """Create indexes for configuration collections."""
@@ -166,6 +204,9 @@ class MongoDBClient:
         Returns:
             Configuration document or None if not found
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.get_global_config(strategy_id)
+        
         if not self._connected:
             return None
         
@@ -191,6 +232,9 @@ class MongoDBClient:
         Returns:
             Configuration document or None if not found
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.get_symbol_config(strategy_id, symbol)
+        
         if not self._connected:
             return None
         
