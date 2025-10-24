@@ -71,7 +71,7 @@ class StrategiesService:
         """Start the service."""
         self.logger.info(
             "Starting Petrosa Realtime Strategies service",
-            event="service_starting",
+            event_type="service_starting",
             service_name=constants.SERVICE_NAME,
             service_version=constants.SERVICE_VERSION,
             environment=constants.ENVIRONMENT
@@ -96,7 +96,7 @@ class StrategiesService:
             await self.config_manager.start()
             self.logger.info(
                 "Configuration manager initialized",
-                event="config_manager_initialized",
+                event_type="config_manager_initialized",
                 cache_ttl_seconds=60
             )
             
@@ -108,7 +108,7 @@ class StrategiesService:
             )
             self.logger.info(
                 "Depth analyzer initialized",
-                event="depth_analyzer_initialized",
+                event_type="depth_analyzer_initialized",
                 history_window_seconds=900,
                 max_symbols=100,
                 metrics_ttl_seconds=300
@@ -127,7 +127,7 @@ class StrategiesService:
             await self.health_server.start()
             self.logger.info(
                 "Health server started",
-                event="health_server_started",
+                event_type="health_server_started",
                 port=constants.HEALTH_CHECK_PORT
             )
 
@@ -155,7 +155,7 @@ class StrategiesService:
             await self.consumer.start()
             self.logger.info(
                 "NATS consumer started",
-                event="nats_consumer_started",
+                event_type="nats_consumer_started",
                 topic=constants.NATS_CONSUMER_TOPIC
             )
 
@@ -171,7 +171,7 @@ class StrategiesService:
             await self.heartbeat_manager.start()
             self.logger.info(
                 "Heartbeat manager started",
-                event="heartbeat_manager_started",
+                event_type="heartbeat_manager_started",
                 interval_seconds=constants.HEARTBEAT_INTERVAL_SECONDS
             )
 
