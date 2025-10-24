@@ -42,6 +42,10 @@ STRATEGY_ENABLED_BTC_DOMINANCE = os.getenv("STRATEGY_ENABLED_BTC_DOMINANCE", "tr
 STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD = os.getenv("STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD", "true").lower() == "true"
 STRATEGY_ENABLED_ONCHAIN_METRICS = os.getenv("STRATEGY_ENABLED_ONCHAIN_METRICS", "false").lower() == "true"
 
+# Microstructure Strategies
+STRATEGY_ENABLED_SPREAD_LIQUIDITY = os.getenv("STRATEGY_ENABLED_SPREAD_LIQUIDITY", "true").lower() == "true"
+STRATEGY_ENABLED_ICEBERG_DETECTOR = os.getenv("STRATEGY_ENABLED_ICEBERG_DETECTOR", "true").lower() == "true"
+
 # Order Book Skew Strategy Parameters
 ORDERBOOK_SKEW_TOP_LEVELS = int(os.getenv("ORDERBOOK_SKEW_TOP_LEVELS", "5"))
 ORDERBOOK_SKEW_BUY_THRESHOLD = float(os.getenv("ORDERBOOK_SKEW_BUY_THRESHOLD", "1.2"))
@@ -250,6 +254,10 @@ def get_enabled_strategies() -> List[str]:
         enabled.append("cross_exchange_spread")
     if STRATEGY_ENABLED_ONCHAIN_METRICS:
         enabled.append("onchain_metrics")
+    if STRATEGY_ENABLED_SPREAD_LIQUIDITY:
+        enabled.append("spread_liquidity")
+    if STRATEGY_ENABLED_ICEBERG_DETECTOR:
+        enabled.append("iceberg_detector")
     return enabled
 
 def get_strategy_config() -> dict:

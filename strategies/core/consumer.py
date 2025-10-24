@@ -22,7 +22,9 @@ from strategies.models.market_data import MarketDataMessage, DepthUpdate, TradeD
 from strategies.utils.circuit_breaker import CircuitBreaker
 from strategies.market_logic.btc_dominance import BitcoinDominanceStrategy
 from strategies.market_logic.cross_exchange_spread import CrossExchangeSpreadStrategy
+from strategies.market_logic.iceberg_detector import IcebergDetectorStrategy
 from strategies.market_logic.onchain_metrics import OnChainMetricsStrategy
+from strategies.market_logic.spread_liquidity import SpreadLiquidityStrategy
 
 
 class NATSConsumer:
@@ -74,15 +76,25 @@ class NATSConsumer:
         self.market_logic_strategies = {}
         if constants.STRATEGY_ENABLED_BTC_DOMINANCE:
             self.market_logic_strategies['btc_dominance'] = BitcoinDominanceStrategy(logger=self.logger)
-            self.logger.info("Bitcoin Dominance Strategy enabled")
+            self.logger.info("Strategy initialized", event="strategy_initialized", strategy="btc_dominance", strategy_type="market_logic")
             
         if constants.STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
             self.market_logic_strategies['cross_exchange_spread'] = CrossExchangeSpreadStrategy(logger=self.logger)
-            self.logger.info("Cross-Exchange Spread Strategy enabled")
+            self.logger.info("Strategy initialized", event="strategy_initialized", strategy="cross_exchange_spread", strategy_type="market_logic")
             
         if constants.STRATEGY_ENABLED_ONCHAIN_METRICS:
             self.market_logic_strategies['onchain_metrics'] = OnChainMetricsStrategy(logger=self.logger)
-            self.logger.info("On-Chain Metrics Strategy enabled")
+            self.logger.info("Strategy initialized", event="strategy_initialized", strategy="onchain_metrics", strategy_type="market_logic")
+        
+        # Initialize microstructure strategies
+        self.microstructure_strategies = {}
+        if constants.STRATEGY_ENABLED_SPREAD_LIQUIDITY:
+            self.microstructure_strategies['spread_liquidity'] = SpreadLiquidityStrategy()
+            self.logger.info("Strategy initialized", event="strategy_initialized", strategy="spread_liquidity", strategy_type="microstructure")
+            
+        if constants.STRATEGY_ENABLED_ICEBERG_DETECTOR:
+            self.microstructure_strategies['iceberg_detector'] = IcebergDetectorStrategy()
+            self.logger.info("Strategy initialized", event="strategy_initialized", strategy="iceberg_detector", strategy_type="microstructure")
 
     async def start(self) -> None:
         """Start the NATS consumer."""
@@ -105,7 +117,7 @@ class NATSConsumer:
             asyncio.create_task(self._processing_loop())
             
             # Return immediately after starting the background task
-            self.logger.info("NATS consumer started successfully")
+            self.logger.info("NATS consumer started", event="consumer_started", nats_url=self.nats_url, topic=self.topic)
 
         except Exception as e:
             self.logger.error("Failed to start NATS consumer", error=str(e))
@@ -113,7 +125,7 @@ class NATSConsumer:
 
     async def stop(self) -> None:
         """Stop the NATS consumer gracefully."""
-        self.logger.info("Stopping NATS consumer")
+        self.logger.info("Stopping NATS consumer", event="consumer_stopping", message_count=self.message_count, error_count=self.error_count)
 
         # Signal shutdown
         self.shutdown_event.set()
@@ -122,17 +134,17 @@ class NATSConsumer:
         # Close subscription
         if self.subscription:
             await self.subscription.drain()
-            self.logger.info("NATS subscription drained")
+            self.logger.info("NATS subscription drained", event="subscription_drained", topic=self.topic)
 
         # Close NATS connection
         if self.nats_client:
             try:
                 await self.nats_client.close()
-                self.logger.info("NATS connection closed")
+                self.logger.info("NATS connection closed", event="nats_disconnected", nats_url=self.nats_url)
             except Exception as e:
-                self.logger.warning("Error closing NATS connection", error=str(e))
+                self.logger.warning("Error closing NATS connection", event="nats_disconnect_error", error=str(e))
 
-        self.logger.info("NATS consumer stopped")
+        self.logger.info("NATS consumer stopped", event="consumer_stopped", total_messages=self.message_count, total_errors=self.error_count)
 
     async def _connect_to_nats(self) -> None:
         """Connect to NATS server."""
@@ -145,7 +157,7 @@ class NATSConsumer:
                 max_reconnect_attempts=10,
                 connect_timeout=10,
             )
-            self.logger.info("Connected to NATS server", url=self.nats_url)
+            self.logger.info("Connected to NATS server", event="nats_connected", nats_url=self.nats_url, consumer_name=self.consumer_name)
 
         except Exception as e:
             self.logger.error("Failed to connect to NATS", error=str(e))
@@ -162,6 +174,7 @@ class NATSConsumer:
             )
             self.logger.info(
                 "Subscribed to topic",
+                event="topic_subscribed",
                 topic=self.topic,
                 consumer_name=self.consumer_name,
                 consumer_group=self.consumer_group,
@@ -181,7 +194,7 @@ class NATSConsumer:
 
     async def _processing_loop(self) -> None:
         """Main processing loop for consuming messages."""
-        self.logger.info("Starting message processing loop")
+        self.logger.info("Starting message processing loop", event="processing_loop_started")
 
         # For subscription-based approach, the processing is handled by callbacks
         # This loop just keeps the consumer alive
@@ -190,11 +203,11 @@ class NATSConsumer:
                 # Small delay to prevent busy waiting
                 await asyncio.sleep(1)
             except Exception as e:
-                self.logger.error("Error in processing loop", error=str(e))
+                self.logger.error("Error in processing loop", event="processing_loop_error", error=str(e))
                 self.error_count += 1
                 await asyncio.sleep(1)  # Back off on error
 
-        self.logger.info("Message processing loop stopped")
+        self.logger.info("Message processing loop stopped", event="processing_loop_stopped")
 
     async def _process_message(self, msg) -> None:
         """Process a single NATS message."""
@@ -417,10 +430,40 @@ class NATSConsumer:
                     net_pressure=round(metrics.net_pressure, 2),
                     imbalance_percent=round(metrics.imbalance_percent, 2),
                 )
+                
+                # Process microstructure strategies
+                await self._process_microstructure_strategies(symbol, bids, asks)
             else:
                 self.logger.debug("Processing depth data (no analyzer)", symbol=market_data.symbol)
         except Exception as e:
             self.logger.error(f"Error analyzing depth data: {e}", error=str(e))
+    
+    async def _process_microstructure_strategies(self, symbol: str, bids: list, asks: list) -> None:
+        """Process microstructure strategies (spread liquidity, iceberg detector)."""
+        try:
+            for strategy_name, strategy in self.microstructure_strategies.items():
+                try:
+                    # Analyze order book
+                    signal = strategy.analyze(symbol=symbol, bids=bids, asks=asks)
+                    
+                    if signal:
+                        # Publish signal
+                        await self.publisher.publish_signal(signal)
+                        
+                        self.logger.info(
+                            f"Microstructure signal: {strategy_name}",
+                            symbol=symbol,
+                            action=signal.action,
+                            confidence=round(signal.confidence, 2)
+                        )
+                except Exception as e:
+                    self.logger.error(
+                        f"Error in {strategy_name} strategy",
+                        error=str(e),
+                        symbol=symbol
+                    )
+        except Exception as e:
+            self.logger.error(f"Error processing microstructure strategies: {e}")
 
     async def _process_trade_data(self, market_data: MarketDataMessage) -> None:
         """Process trade data."""
