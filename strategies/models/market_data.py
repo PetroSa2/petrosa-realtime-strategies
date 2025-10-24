@@ -6,16 +6,18 @@ from Binance WebSocket streams including depth updates, trades, and tickers.
 """
 
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import Union
+
 from pydantic import BaseModel, Field, validator
 
 
 class DepthLevel(BaseModel):
     """Represents a single level in the order book."""
+
     price: str = Field(..., description="Price level")
     quantity: str = Field(..., description="Quantity at this price level")
 
-    @validator('price', 'quantity')
+    @validator("price", "quantity")
     def validate_numeric_string(cls, v):
         """Validate that the string can be converted to a float."""
         try:
@@ -27,14 +29,15 @@ class DepthLevel(BaseModel):
 
 class DepthUpdate(BaseModel):
     """Order book depth update from Binance WebSocket."""
+
     symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT)")
     event_time: int = Field(..., description="Event time in milliseconds")
     first_update_id: int = Field(..., description="First update ID")
     final_update_id: int = Field(..., description="Final update ID")
-    bids: List[DepthLevel] = Field(..., description="Bid orders")
-    asks: List[DepthLevel] = Field(..., description="Ask orders")
+    bids: list[DepthLevel] = Field(..., description="Bid orders")
+    asks: list[DepthLevel] = Field(..., description="Ask orders")
 
-    @validator('symbol')
+    @validator("symbol")
     def validate_symbol(cls, v):
         """Validate trading symbol format."""
         if not v or len(v) < 6:
@@ -51,7 +54,7 @@ class DepthUpdate(BaseModel):
         """Calculate the bid-ask spread as a percentage."""
         if not self.bids or not self.asks:
             return 0.0
-        
+
         best_bid = float(self.bids[0].price)
         best_ask = float(self.asks[0].price)
         return ((best_ask - best_bid) / best_bid) * 100
@@ -61,7 +64,7 @@ class DepthUpdate(BaseModel):
         """Calculate the mid price."""
         if not self.bids or not self.asks:
             return 0.0
-        
+
         best_bid = float(self.bids[0].price)
         best_ask = float(self.asks[0].price)
         return (best_bid + best_ask) / 2
@@ -69,6 +72,7 @@ class DepthUpdate(BaseModel):
 
 class TradeData(BaseModel):
     """Individual trade data from Binance WebSocket."""
+
     symbol: str = Field(..., description="Trading symbol")
     trade_id: int = Field(..., description="Trade ID")
     price: str = Field(..., description="Trade price")
@@ -79,14 +83,14 @@ class TradeData(BaseModel):
     is_buyer_maker: bool = Field(..., description="Whether buyer is maker")
     event_time: int = Field(..., description="Event time in milliseconds")
 
-    @validator('symbol')
+    @validator("symbol")
     def validate_symbol(cls, v):
         """Validate trading symbol format."""
         if not v or len(v) < 6:
             raise ValueError("Invalid symbol format")
         return v.upper()
 
-    @validator('price', 'quantity')
+    @validator("price", "quantity")
     def validate_numeric_string(cls, v):
         """Validate that the string can be converted to a float."""
         try:
@@ -118,6 +122,7 @@ class TradeData(BaseModel):
 
 class TickerData(BaseModel):
     """24hr ticker data from Binance WebSocket."""
+
     symbol: str = Field(..., description="Trading symbol")
     price_change: str = Field(..., description="Price change")
     price_change_percent: str = Field(..., description="Price change percent")
@@ -141,17 +146,30 @@ class TickerData(BaseModel):
     count: int = Field(..., description="Trade count")
     event_time: int = Field(..., description="Event time in milliseconds")
 
-    @validator('symbol')
+    @validator("symbol")
     def validate_symbol(cls, v):
         """Validate trading symbol format."""
         if not v or len(v) < 6:
             raise ValueError("Invalid symbol format")
         return v.upper()
 
-    @validator('price_change', 'price_change_percent', 'weighted_avg_price', 
-               'prev_close_price', 'last_price', 'last_qty', 'bid_price', 
-               'bid_qty', 'ask_price', 'ask_qty', 'open_price', 'high_price', 
-               'low_price', 'volume', 'quote_volume')
+    @validator(
+        "price_change",
+        "price_change_percent",
+        "weighted_avg_price",
+        "prev_close_price",
+        "last_price",
+        "last_qty",
+        "bid_price",
+        "bid_qty",
+        "ask_price",
+        "ask_qty",
+        "open_price",
+        "high_price",
+        "low_price",
+        "volume",
+        "quote_volume",
+    )
     def validate_numeric_string(cls, v):
         """Validate that the string can be converted to a float."""
         try:
@@ -193,26 +211,31 @@ class TickerData(BaseModel):
 
 class MarketDataMessage(BaseModel):
     """Generic market data message wrapper."""
-    stream: str = Field(..., description="Stream name")
-    data: Union[DepthUpdate, TradeData, TickerData] = Field(..., description="Market data")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Message timestamp")
 
-    @validator('stream')
+    stream: str = Field(..., description="Stream name")
+    data: Union[DepthUpdate, TradeData, TickerData] = Field(
+        ..., description="Market data"
+    )
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow, description="Message timestamp"
+    )
+
+    @validator("stream")
     def validate_stream(cls, v):
         """Validate stream name format."""
-        if not v or '@' not in v:
+        if not v or "@" not in v:
             raise ValueError("Invalid stream format")
         return v
 
     @property
     def symbol(self) -> str:
         """Extract symbol from stream name."""
-        return self.stream.split('@')[0].upper()
+        return self.stream.split("@")[0].upper()
 
     @property
     def stream_type(self) -> str:
         """Extract stream type from stream name."""
-        return self.stream.split('@')[1]
+        return self.stream.split("@")[1]
 
     @property
     def is_depth(self) -> bool:

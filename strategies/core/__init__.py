@@ -6,11 +6,11 @@ NATS consumer, publisher, and strategy processing.
 """
 
 from .consumer import NATSConsumer
-from .publisher import TradeOrderPublisher
 from .processor import MessageProcessor
+from .publisher import TradeOrderPublisher
 
 __all__ = [
     "NATSConsumer",
-    "TradeOrderPublisher", 
+    "TradeOrderPublisher",
     "MessageProcessor",
 ]

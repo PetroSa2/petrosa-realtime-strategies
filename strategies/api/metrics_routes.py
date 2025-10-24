@@ -34,7 +34,7 @@ def get_depth_analyzer() -> DepthAnalyzer:
     if _depth_analyzer is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Depth analyzer not initialized"
+            detail="Depth analyzer not initialized",
         )
     return _depth_analyzer
 
@@ -44,7 +44,7 @@ def get_depth_analyzer() -> DepthAnalyzer:
     summary="Get current depth metrics for symbol",
     description="""
     **For LLM Agents**: Get real-time order book depth metrics for a specific symbol.
-    
+
     Returns comprehensive metrics including:
     - Order book imbalance (bid vs ask volume)
     - Market pressure (buy pressure vs sell pressure)
@@ -52,9 +52,9 @@ def get_depth_analyzer() -> DepthAnalyzer:
     - Bid-ask spread metrics
     - Volume-weighted prices
     - Strongest support/resistance levels
-    
+
     **Example Request**: `GET /api/v1/metrics/depth/BTCUSDT`
-    
+
     **Use Cases**:
     - Monitor market sentiment for a symbol
     - Detect order book imbalances
@@ -63,20 +63,20 @@ def get_depth_analyzer() -> DepthAnalyzer:
     """,
 )
 async def get_depth_metrics(
-    symbol: str = Path(..., description="Trading symbol (e.g., BTCUSDT)")
+    symbol: str = Path(..., description="Trading symbol (e.g., BTCUSDT)"),
 ):
     """Get current depth metrics for a symbol."""
     try:
         analyzer = get_depth_analyzer()
         metrics = analyzer.get_current_metrics(symbol.upper())
-        
+
         if metrics is None:
             return {
                 "error": f"No metrics available for {symbol}",
                 "message": "Symbol may not be actively tracked or data is stale",
-                "suggestion": "Check GET /api/v1/metrics/all to see tracked symbols"
+                "suggestion": "Check GET /api/v1/metrics/all to see tracked symbols",
             }
-        
+
         return {
             "symbol": metrics.symbol,
             "timestamp": metrics.timestamp.isoformat(),
@@ -91,8 +91,10 @@ async def get_depth_metrics(
                 "sell_pressure": round(metrics.sell_pressure, 2),
                 "net_pressure": round(metrics.net_pressure, 2),
                 "interpretation": (
-                    "bullish" if metrics.net_pressure > 20
-                    else "bearish" if metrics.net_pressure < -20
+                    "bullish"
+                    if metrics.net_pressure > 20
+                    else "bearish"
+                    if metrics.net_pressure < -20
                     else "neutral"
                 ),
             },
@@ -124,14 +126,18 @@ async def get_depth_metrics(
                 "bid": {
                     "price": metrics.strongest_bid_level[0],
                     "volume": round(metrics.strongest_bid_level[1], 4),
-                } if metrics.strongest_bid_level else None,
+                }
+                if metrics.strongest_bid_level
+                else None,
                 "ask": {
                     "price": metrics.strongest_ask_level[0],
                     "volume": round(metrics.strongest_ask_level[1], 4),
-                } if metrics.strongest_ask_level else None,
+                }
+                if metrics.strongest_ask_level
+                else None,
             },
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -144,21 +150,21 @@ async def get_depth_metrics(
     summary="Get market pressure history",
     description="""
     **For LLM Agents**: Get historical market pressure data for trend analysis.
-    
+
     Returns pressure history over different timeframes:
     - 1m (1 minute): Last 60 data points
     - 5m (5 minutes): Last 300 data points
     - 15m (15 minutes): Last 900 data points
-    
+
     Includes:
     - Pressure history (time series)
     - Imbalance history (time series)
     - Statistical summary (avg, max, min)
     - Trend analysis (bullish/bearish/neutral)
     - Trend strength indicator
-    
+
     **Example Request**: `GET /api/v1/metrics/pressure/BTCUSDT?timeframe=5m`
-    
+
     **Use Cases**:
     - Identify pressure trends
     - Detect sustained buying/selling
@@ -175,22 +181,22 @@ async def get_pressure_history(
         if timeframe not in ["1m", "5m", "15m"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid timeframe. Must be '1m', '5m', or '15m'"
+                detail="Invalid timeframe. Must be '1m', '5m', or '15m'",
             )
-        
+
         analyzer = get_depth_analyzer()
         history = analyzer.get_pressure_history(symbol.upper(), timeframe)
-        
+
         if history is None:
             return {
                 "error": f"No pressure history available for {symbol}",
-                "message": "Symbol may not be actively tracked"
+                "message": "Symbol may not be actively tracked",
             }
-        
+
         # Limit history data points in response to last 100
         pressure_limited = history.pressure_history[-100:]
         imbalance_limited = history.imbalance_history[-100:]
-        
+
         return {
             "symbol": history.symbol,
             "timeframe": history.timeframe,
@@ -212,7 +218,7 @@ async def get_pressure_history(
                 for ts, i in imbalance_limited
             ],
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -225,7 +231,7 @@ async def get_pressure_history(
     summary="Get overall market summary",
     description="""
     **For LLM Agents**: Get aggregated market metrics across all tracked symbols.
-    
+
     Returns:
     - Number of symbols tracked
     - Market sentiment distribution (bullish/bearish/neutral)
@@ -234,9 +240,9 @@ async def get_pressure_history(
     - Average spread
     - Total liquidity
     - Top symbols by buy/sell pressure
-    
+
     **Example Request**: `GET /api/v1/metrics/summary`
-    
+
     **Use Cases**:
     - Get overall market sentiment
     - Identify market-wide trends
@@ -250,7 +256,7 @@ async def get_market_summary():
         analyzer = get_depth_analyzer()
         summary = analyzer.get_market_summary()
         return summary
-    
+
     except Exception as e:
         logger.error(f"Error getting market summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -261,11 +267,11 @@ async def get_market_summary():
     summary="Get metrics for all symbols",
     description="""
     **For LLM Agents**: Get current metrics for all tracked symbols with filtering and pagination.
-    
+
     Returns metrics for symbols with comprehensive filtering capabilities.
-    
+
     **Example Request**: `GET /api/v1/metrics/all?symbols=BTCUSDT,ETHUSDT&limit=50`
-    
+
     **Use Cases**:
     - Bulk monitoring of specific symbols
     - Identify outliers with pressure filters
@@ -274,58 +280,82 @@ async def get_market_summary():
     """,
 )
 async def get_all_metrics(
-    symbols: str | None = Query(None, description="Comma-separated list of symbols to filter"),
+    symbols: str | None = Query(
+        None, description="Comma-separated list of symbols to filter"
+    ),
     min_pressure: float | None = Query(None, description="Minimum net pressure filter"),
     max_pressure: float | None = Query(None, description="Maximum net pressure filter"),
-    trend: str | None = Query(None, description="Filter by trend (bullish, bearish, neutral)"),
-    limit: int = Query(50, ge=1, le=200, description="Maximum number of symbols (default: 50, max: 200)"),
+    trend: str | None = Query(
+        None, description="Filter by trend (bullish, bearish, neutral)"
+    ),
+    limit: int = Query(
+        50,
+        ge=1,
+        le=200,
+        description="Maximum number of symbols (default: 50, max: 200)",
+    ),
     offset: int = Query(0, ge=0, description="Pagination offset (default: 0)"),
-    sort_by: str = Query("symbol", description="Sort by field (symbol, pressure, imbalance, liquidity)"),
+    sort_by: str = Query(
+        "symbol", description="Sort by field (symbol, pressure, imbalance, liquidity)"
+    ),
     sort_order: str = Query("asc", description="Sort order (asc, desc)"),
 ):
     """Get current metrics for all symbols with filtering and pagination."""
     try:
         analyzer = get_depth_analyzer()
         all_metrics = analyzer.get_all_metrics()
-        
+
         # Convert to list of tuples for easier filtering and sorting
         metrics_list = []
         for symbol, metrics in all_metrics.items():
             trend_classification = (
-                "bullish" if metrics.net_pressure > 20
-                else "bearish" if metrics.net_pressure < -20
+                "bullish"
+                if metrics.net_pressure > 20
+                else "bearish"
+                if metrics.net_pressure < -20
                 else "neutral"
             )
-            
-            metrics_list.append((symbol, {
-                "timestamp": metrics.timestamp.isoformat(),
-                "net_pressure": round(metrics.net_pressure, 2),
-                "imbalance_percent": round(metrics.imbalance_percent, 2),
-                "spread_bps": round(metrics.spread_bps, 2),
-                "total_liquidity": round(metrics.total_liquidity, 4),
-                "mid_price": metrics.mid_price,
-                "trend": trend_classification,
-            }))
-        
+
+            metrics_list.append(
+                (
+                    symbol,
+                    {
+                        "timestamp": metrics.timestamp.isoformat(),
+                        "net_pressure": round(metrics.net_pressure, 2),
+                        "imbalance_percent": round(metrics.imbalance_percent, 2),
+                        "spread_bps": round(metrics.spread_bps, 2),
+                        "total_liquidity": round(metrics.total_liquidity, 4),
+                        "mid_price": metrics.mid_price,
+                        "trend": trend_classification,
+                    },
+                )
+            )
+
         # Apply symbol filter
         if symbols:
             symbol_list = [s.strip().upper() for s in symbols.split(",")]
             metrics_list = [(s, m) for s, m in metrics_list if s in symbol_list]
-        
+
         # Apply pressure filters
         if min_pressure is not None:
-            metrics_list = [(s, m) for s, m in metrics_list if m["net_pressure"] >= min_pressure]
-        
+            metrics_list = [
+                (s, m) for s, m in metrics_list if m["net_pressure"] >= min_pressure
+            ]
+
         if max_pressure is not None:
-            metrics_list = [(s, m) for s, m in metrics_list if m["net_pressure"] <= max_pressure]
-        
+            metrics_list = [
+                (s, m) for s, m in metrics_list if m["net_pressure"] <= max_pressure
+            ]
+
         # Apply trend filter
         if trend:
             trend_lower = trend.lower()
-            metrics_list = [(s, m) for s, m in metrics_list if m["trend"] == trend_lower]
-        
+            metrics_list = [
+                (s, m) for s, m in metrics_list if m["trend"] == trend_lower
+            ]
+
         total_count = len(metrics_list)
-        
+
         # Apply sorting
         reverse = sort_order.lower() == "desc"
         if sort_by == "symbol":
@@ -336,13 +366,13 @@ async def get_all_metrics(
             metrics_list.sort(key=lambda x: x[1]["imbalance_percent"], reverse=reverse)
         elif sort_by == "liquidity":
             metrics_list.sort(key=lambda x: x[1]["total_liquidity"], reverse=reverse)
-        
+
         # Apply pagination
-        paginated_metrics = metrics_list[offset:offset + limit]
-        
+        paginated_metrics = metrics_list[offset : offset + limit]
+
         # Convert back to dict for response
         result = {symbol: metrics for symbol, metrics in paginated_metrics}
-        
+
         return {
             "data": result,
             "pagination": {
@@ -366,8 +396,7 @@ async def get_all_metrics(
             },
             "symbols_count": len(result),
         }
-    
+
     except Exception as e:
         logger.error(f"Error getting all metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-

@@ -7,14 +7,14 @@ This module handles publishing trade orders to NATS for consumption by the Trade
 import asyncio
 import json
 import time
-from typing import Any, Dict, Optional
-import structlog
+from typing import Any, Optional
 
 import nats
+import structlog
 from nats.aio.client import Client as NATSClient
 
 import constants
-from strategies.models.orders import TradeOrder, OrderResponse
+from strategies.models.orders import OrderResponse, TradeOrder
 from strategies.utils.circuit_breaker import CircuitBreaker
 
 
@@ -74,9 +74,13 @@ class TradeOrderPublisher:
             # Start publishing loop as background task
             self.is_running = True
             asyncio.create_task(self._publishing_loop())
-            
+
             # Return immediately after starting the background task
-            self.logger.info("Trade order publisher started", event_type="publisher_started", topic=self.topic)
+            self.logger.info(
+                "Trade order publisher started",
+                event_type="publisher_started",
+                topic=self.topic,
+            )
 
         except Exception as e:
             self.logger.error("Failed to start trade order publisher", error=str(e))
@@ -84,7 +88,12 @@ class TradeOrderPublisher:
 
     async def stop(self) -> None:
         """Stop the trade order publisher gracefully."""
-        self.logger.info("Stopping trade order publisher", event_type="publisher_stopping", order_count=self.order_count, error_count=self.error_count)
+        self.logger.info(
+            "Stopping trade order publisher",
+            event_type="publisher_stopping",
+            order_count=self.order_count,
+            error_count=self.error_count,
+        )
 
         # Signal shutdown
         self.shutdown_event.set()
@@ -94,11 +103,24 @@ class TradeOrderPublisher:
         if self.nats_client:
             try:
                 await self.nats_client.close()
-                self.logger.info("NATS connection closed", event_type="nats_disconnected", nats_url=self.nats_url)
+                self.logger.info(
+                    "NATS connection closed",
+                    event_type="nats_disconnected",
+                    nats_url=self.nats_url,
+                )
             except Exception as e:
-                self.logger.warning("Error closing NATS connection", event_type="nats_disconnect_error", error=str(e))
+                self.logger.warning(
+                    "Error closing NATS connection",
+                    event_type="nats_disconnect_error",
+                    error=str(e),
+                )
 
-        self.logger.info("Trade order publisher stopped", event_type="publisher_stopped", total_orders=self.order_count, total_errors=self.error_count)
+        self.logger.info(
+            "Trade order publisher stopped",
+            event_type="publisher_stopped",
+            total_orders=self.order_count,
+            total_errors=self.error_count,
+        )
 
     async def _connect_to_nats(self) -> None:
         """Connect to NATS server."""
@@ -111,7 +133,12 @@ class TradeOrderPublisher:
                 max_reconnect_attempts=10,
                 connect_timeout=10,
             )
-            self.logger.info("Connected to NATS server", event_type="nats_connected", nats_url=self.nats_url, client_name="trade-order-publisher")
+            self.logger.info(
+                "Connected to NATS server",
+                event_type="nats_connected",
+                nats_url=self.nats_url,
+                client_name="trade-order-publisher",
+            )
 
         except Exception as e:
             self.logger.error("Failed to connect to NATS", error=str(e))
@@ -119,7 +146,12 @@ class TradeOrderPublisher:
 
     async def _publishing_loop(self) -> None:
         """Main publishing loop for sending orders."""
-        self.logger.info("Starting order publishing loop", event_type="publishing_loop_started", batch_size=self.batch_size, batch_timeout=self.batch_timeout)
+        self.logger.info(
+            "Starting order publishing loop",
+            event_type="publishing_loop_started",
+            batch_size=self.batch_size,
+            batch_timeout=self.batch_timeout,
+        )
 
         while self.is_running and not self.shutdown_event.is_set():
             try:
@@ -128,12 +160,14 @@ class TradeOrderPublisher:
                 start_time = time.time()
 
                 # Collect orders until batch is full or timeout
-                while len(orders) < self.batch_size and (time.time() - start_time) < self.batch_timeout:
+                while (
+                    len(orders) < self.batch_size
+                    and (time.time() - start_time) < self.batch_timeout
+                ):
                     try:
                         # Try to get order from queue with timeout
                         order = await asyncio.wait_for(
-                            self.order_queue.get(),
-                            timeout=0.1
+                            self.order_queue.get(), timeout=0.1
                         )
                         orders.append(order)
                     except asyncio.TimeoutError:
@@ -176,7 +210,9 @@ class TradeOrderPublisher:
             # Update metrics
             self.order_count += len(orders)
             self.last_order_time = time.time()
-            publishing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            publishing_time = (
+                time.time() - start_time
+            ) * 1000  # Convert to milliseconds
 
             # Update publishing time metrics
             self._update_publishing_metrics(publishing_time)
@@ -216,7 +252,7 @@ class TradeOrderPublisher:
                 metadata={
                     "publishing_time_ms": publishing_time,
                     "queue_size": self.order_queue.qsize(),
-                }
+                },
             )
 
             self.logger.info(
@@ -246,7 +282,7 @@ class TradeOrderPublisher:
                 metadata={
                     "publishing_time_ms": publishing_time,
                     "error": str(e),
-                }
+                },
             )
 
     async def publish_order_sync(self, order: TradeOrder) -> OrderResponse:
@@ -281,7 +317,7 @@ class TradeOrderPublisher:
                 metadata={
                     "publishing_time_ms": publishing_time,
                     "published_at": self.last_order_time,
-                }
+                },
             )
 
             self.logger.info(
@@ -311,13 +347,13 @@ class TradeOrderPublisher:
                 metadata={
                     "publishing_time_ms": publishing_time,
                     "error": str(e),
-                }
+                },
             )
 
     def _update_publishing_metrics(self, publishing_time: float) -> None:
         """Update publishing time metrics."""
         self.publishing_times.append(publishing_time)
-        
+
         # Keep only last 1000 publishing times
         if len(self.publishing_times) > 1000:
             self.publishing_times = self.publishing_times[-1000:]
@@ -327,9 +363,11 @@ class TradeOrderPublisher:
             self.max_publishing_time = publishing_time
 
         # Update average publishing time
-        self.avg_publishing_time = sum(self.publishing_times) / len(self.publishing_times)
+        self.avg_publishing_time = sum(self.publishing_times) / len(
+            self.publishing_times
+        )
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get publisher metrics."""
         return {
             "order_count": self.order_count,
@@ -343,26 +381,28 @@ class TradeOrderPublisher:
             "circuit_breaker_state": self.circuit_breaker.state.value,
         }
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """Get health status for the publisher."""
         is_healthy = (
-            self.is_running and
-            self.nats_client and
-            self.nats_client.is_connected and
-            self.error_count < 100  # Allow some errors
+            self.is_running
+            and self.nats_client
+            and self.nats_client.is_connected
+            and self.error_count < 100  # Allow some errors
         )
 
         return {
             "healthy": is_healthy,
             "is_running": self.is_running,
-            "nats_connected": self.nats_client.is_connected if self.nats_client else False,
+            "nats_connected": self.nats_client.is_connected
+            if self.nats_client
+            else False,
             "order_count": self.order_count,
             "error_count": self.error_count,
             "last_order_time": self.last_order_time,
             "queue_size": self.order_queue.qsize(),
         }
 
-    async def get_queue_status(self) -> Dict[str, Any]:
+    async def get_queue_status(self) -> dict[str, Any]:
         """Get queue status information."""
         return {
             "queue_size": self.order_queue.qsize(),
