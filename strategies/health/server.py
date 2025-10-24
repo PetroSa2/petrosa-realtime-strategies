@@ -90,9 +90,9 @@ class HealthServer:
             """Application lifespan manager - attach OTLP logging handler and set config manager"""
             # Startup: Attach OTLP handler after uvicorn configures logging
             try:
-                import otel_init
+                from petrosa_otel import attach_logging_handler
 
-                otel_init.attach_logging_handler()
+                attach_logging_handler()
             except Exception as e:
                 self.logger.warning(f"Failed to attach OTLP logging handler: {e}")
 
@@ -128,9 +128,9 @@ class HealthServer:
 
         # Instrument FastAPI for OpenTelemetry tracing
         try:
-            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            from petrosa_otel.instrumentors import instrument_fastapi
 
-            FastAPIInstrumentor.instrument_app(self.app)
+            instrument_fastapi(self.app)
             self.logger.info("✅ FastAPI instrumented for OpenTelemetry tracing")
         except Exception as e:
             self.logger.warning(f"⚠️  Failed to instrument FastAPI: {e}")
