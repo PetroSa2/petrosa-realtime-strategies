@@ -6,20 +6,9 @@ python-dotenv>=1.0.0
 pydantic>=2.0.0,<3.0.0
 structlog>=23.0.0
 
-# OpenTelemetry for observability
-opentelemetry-api>=1.20.0
-opentelemetry-distro>=0.41b0
-opentelemetry-exporter-otlp-proto-grpc>=1.20.0
-opentelemetry-exporter-otlp-proto-http>=1.20.0
-opentelemetry-instrumentation>=0.41b0
-opentelemetry-instrumentation-logging>=0.41b0
-opentelemetry-instrumentation-requests>=0.41b0
-opentelemetry-instrumentation-urllib3>=0.41b0
-opentelemetry-instrumentation-asyncio>=0.41b0
-opentelemetry-instrumentation-aiohttp-client>=0.41b0
-opentelemetry-instrumentation-fastapi>=0.41b0
-opentelemetry-sdk>=1.20.0
-opentelemetry-semantic-conventions>=0.41b0
+# OpenTelemetry (unified via petrosa-otel package)
+# For local development: pip install -e ../petrosa_k8s/petrosa-otel[fastapi,mongodb]
+petrosa-otel[fastapi,mongodb]>=1.0.0
 
 # CLI and utilities
 typer>=0.9.0

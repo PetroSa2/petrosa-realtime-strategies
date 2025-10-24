@@ -28,13 +28,18 @@ from strategies.utils.logger import setup_logging  # noqa: E402
 
 # Initialize OpenTelemetry as early as possible
 try:
-    import otel_init  # noqa: E402
+    from petrosa_otel import setup_telemetry  # noqa: E402
 
     if not os.getenv("OTEL_NO_AUTO_INIT"):
-        otel_init.setup_telemetry(service_name=constants.OTEL_SERVICE_NAME)
-        otel_init.setup_metrics()
-        # Note: Handler attachment moved to __init__ after setup_logging()
-        # Health server will attach its own handler via lifespan
+        setup_telemetry(
+            service_name=constants.OTEL_SERVICE_NAME,
+            service_type="fastapi",
+            enable_fastapi=True,
+            enable_mongodb=True,
+            auto_attach_logging=False,  # Will attach manually after setup_logging()
+        )
+        # Note: setup_metrics() for Prometheus is called separately in __init__
+        # Health server will attach logging handler via lifespan
 except ImportError:
     pass
 
@@ -54,9 +59,9 @@ class StrategiesService:
         # Attach OTLP logging handler AFTER setup_logging() configures logging
         # This ensures the handler survives any logging reconfiguration
         try:
-            import otel_init
+            from petrosa_otel import attach_logging_handler
 
-            otel_init.attach_logging_handler_simple()
+            attach_logging_handler()
         except Exception as e:
             print(f"⚠️  Failed to attach OTLP handler: {e}")
 
