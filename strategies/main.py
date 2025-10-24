@@ -69,7 +69,13 @@ class StrategiesService:
 
     async def start(self):
         """Start the service."""
-        self.logger.info("Starting Petrosa Realtime Strategies service")
+        self.logger.info(
+            "Starting Petrosa Realtime Strategies service",
+            event="service_starting",
+            service_name=constants.SERVICE_NAME,
+            service_version=constants.SERVICE_VERSION,
+            environment=constants.ENVIRONMENT
+        )
 
         try:
             # Initialize MongoDB and Configuration Manager FIRST
@@ -88,7 +94,11 @@ class StrategiesService:
                 cache_ttl_seconds=60,
             )
             await self.config_manager.start()
-            self.logger.info("✅ Configuration manager initialized")
+            self.logger.info(
+                "Configuration manager initialized",
+                event="config_manager_initialized",
+                cache_ttl_seconds=60
+            )
             
             # Initialize depth analyzer for market metrics
             self.depth_analyzer = DepthAnalyzer(
@@ -96,7 +106,13 @@ class StrategiesService:
                 max_symbols=100,
                 metrics_ttl_seconds=300,  # 5 minutes
             )
-            self.logger.info("✅ Depth analyzer initialized")
+            self.logger.info(
+                "Depth analyzer initialized",
+                event="depth_analyzer_initialized",
+                history_window_seconds=900,
+                max_symbols=100,
+                metrics_ttl_seconds=300
+            )
             
             # Start health server first to handle Kubernetes probes
             self.health_server = HealthServer(
@@ -110,7 +126,9 @@ class StrategiesService:
             )
             await self.health_server.start()
             self.logger.info(
-                f"Health server started on port {constants.HEALTH_CHECK_PORT}"
+                "Health server started",
+                event="health_server_started",
+                port=constants.HEALTH_CHECK_PORT
             )
 
             # Start trade order publisher
@@ -135,7 +153,11 @@ class StrategiesService:
                 depth_analyzer=self.depth_analyzer,  # NEW
             )
             await self.consumer.start()
-            self.logger.info("NATS consumer started successfully")
+            self.logger.info(
+                "NATS consumer started",
+                event="nats_consumer_started",
+                topic=constants.NATS_CONSUMER_TOPIC
+            )
 
             # Update health server with consumer reference
             self.health_server.consumer = self.consumer
@@ -147,7 +169,11 @@ class StrategiesService:
                 logger=self.logger,
             )
             await self.heartbeat_manager.start()
-            self.logger.info("Heartbeat manager started successfully")
+            self.logger.info(
+                "Heartbeat manager started",
+                event="heartbeat_manager_started",
+                interval_seconds=constants.HEARTBEAT_INTERVAL_SECONDS
+            )
 
             # Update health server with heartbeat manager reference
             self.health_server.heartbeat_manager = self.heartbeat_manager
@@ -156,41 +182,41 @@ class StrategiesService:
             await self.shutdown_event.wait()
 
         except Exception as e:
-            self.logger.error(f"Error starting service: {e}")
+            self.logger.error("Error starting service", event="service_start_error", error=str(e))
             raise
         finally:
             await self.stop()
 
     async def stop(self):
         """Stop the service gracefully."""
-        self.logger.info("Stopping Petrosa Realtime Strategies service")
+        self.logger.info("Stopping Petrosa Realtime Strategies service", event="service_stopping")
 
         # Stop heartbeat manager first
         if self.heartbeat_manager:
             await self.heartbeat_manager.stop()
-            self.logger.info("Heartbeat manager stopped")
+            self.logger.info("Heartbeat manager stopped", event="heartbeat_manager_stopped")
 
         # Stop NATS consumer
         if self.consumer:
             await self.consumer.stop()
-            self.logger.info("NATS consumer stopped")
+            self.logger.info("NATS consumer stopped", event="nats_consumer_stopped")
 
         # Stop trade order publisher
         if self.publisher:
             await self.publisher.stop()
-            self.logger.info("Trade order publisher stopped")
+            self.logger.info("Trade order publisher stopped", event="publisher_stopped")
 
         # Stop health server
         if self.health_server:
             await self.health_server.stop()
-            self.logger.info("Health server stopped")
+            self.logger.info("Health server stopped", event="health_server_stopped")
         
         # Stop configuration manager
         if self.config_manager:
             await self.config_manager.stop()
-            self.logger.info("Configuration manager stopped")
+            self.logger.info("Configuration manager stopped", event="config_manager_stopped")
 
-        self.logger.info("Service stopped gracefully")
+        self.logger.info("Service stopped gracefully", event="service_stopped")
 
 
 def signal_handler(signum, frame):

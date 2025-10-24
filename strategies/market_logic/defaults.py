@@ -87,6 +87,33 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "base_confidence": 0.77,
         "strong_signal_confidence": 0.85,
     },
+    
+    # ==========================================================================
+    # Microstructure Strategies (Order Book Analysis)
+    # ==========================================================================
+    
+    "spread_liquidity": {
+        "spread_threshold_bps": 10.0,
+        "spread_ratio_threshold": 2.5,
+        "velocity_threshold": 0.5,
+        "persistence_threshold_seconds": 30.0,
+        "min_depth_reduction_pct": 0.5,
+        "base_confidence": 0.70,
+        "lookback_ticks": 20,
+        "min_signal_interval_seconds": 60.0,
+    },
+    
+    "iceberg_detector": {
+        "min_refill_count": 3,
+        "refill_speed_threshold_seconds": 5.0,
+        "consistency_threshold": 0.1,
+        "persistence_threshold_seconds": 120.0,
+        "level_proximity_pct": 1.0,
+        "base_confidence": 0.70,
+        "history_window_seconds": 300,
+        "max_symbols": 100,
+        "min_signal_interval_seconds": 120.0,
+    },
 }
 
 
@@ -387,6 +414,137 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 3600,
         },
     },
+    
+    # ==========================================================================
+    # Spread Liquidity Strategy
+    # ==========================================================================
+    "spread_liquidity": {
+        "spread_threshold_bps": {
+            "type": "float",
+            "min": 1.0,
+            "max": 100.0,
+            "description": "Minimum spread in basis points to consider for signals",
+            "example": 10.0,
+        },
+        "spread_ratio_threshold": {
+            "type": "float",
+            "min": 1.5,
+            "max": 10.0,
+            "description": "Spread ratio threshold (current / average)",
+            "example": 2.5,
+        },
+        "velocity_threshold": {
+            "type": "float",
+            "min": 0.1,
+            "max": 2.0,
+            "description": "Minimum spread velocity (% change per second)",
+            "example": 0.5,
+        },
+        "persistence_threshold_seconds": {
+            "type": "float",
+            "min": 10.0,
+            "max": 300.0,
+            "description": "Minimum time spread must persist above threshold",
+            "example": 30.0,
+        },
+        "min_depth_reduction_pct": {
+            "type": "float",
+            "min": 0.1,
+            "max": 0.9,
+            "description": "Minimum depth reduction to trigger signal",
+            "example": 0.5,
+        },
+        "base_confidence": {
+            "type": "float",
+            "min": 0.5,
+            "max": 1.0,
+            "description": "Base confidence level for signals",
+            "example": 0.70,
+        },
+        "lookback_ticks": {
+            "type": "int",
+            "min": 5,
+            "max": 100,
+            "description": "Number of ticks for rolling average calculation",
+            "example": 20,
+        },
+        "min_signal_interval_seconds": {
+            "type": "float",
+            "min": 30.0,
+            "max": 600.0,
+            "description": "Minimum time between signals per symbol",
+            "example": 60.0,
+        },
+    },
+    
+    # ==========================================================================
+    # Iceberg Detector Strategy
+    # ==========================================================================
+    "iceberg_detector": {
+        "min_refill_count": {
+            "type": "int",
+            "min": 2,
+            "max": 10,
+            "description": "Minimum number of refills to detect iceberg",
+            "example": 3,
+        },
+        "refill_speed_threshold_seconds": {
+            "type": "float",
+            "min": 1.0,
+            "max": 30.0,
+            "description": "Maximum refill time to consider fast refill",
+            "example": 5.0,
+        },
+        "consistency_threshold": {
+            "type": "float",
+            "min": 0.05,
+            "max": 0.5,
+            "description": "Maximum std dev ratio for consistent volume",
+            "example": 0.1,
+        },
+        "persistence_threshold_seconds": {
+            "type": "float",
+            "min": 60.0,
+            "max": 600.0,
+            "description": "Minimum persistence time for anchoring pattern",
+            "example": 120.0,
+        },
+        "level_proximity_pct": {
+            "type": "float",
+            "min": 0.1,
+            "max": 5.0,
+            "description": "Only signal if price within X% of iceberg level",
+            "example": 1.0,
+        },
+        "base_confidence": {
+            "type": "float",
+            "min": 0.5,
+            "max": 1.0,
+            "description": "Base confidence level for signals",
+            "example": 0.70,
+        },
+        "history_window_seconds": {
+            "type": "int",
+            "min": 60,
+            "max": 900,
+            "description": "Order book history tracking window",
+            "example": 300,
+        },
+        "max_symbols": {
+            "type": "int",
+            "min": 10,
+            "max": 200,
+            "description": "Maximum symbols to track simultaneously",
+            "example": 100,
+        },
+        "min_signal_interval_seconds": {
+            "type": "float",
+            "min": 60.0,
+            "max": 600.0,
+            "description": "Minimum time between signals per symbol",
+            "example": 120.0,
+        },
+    },
 }
 
 
@@ -437,6 +595,21 @@ STRATEGY_METADATA: Dict[str, Dict[str, str]] = {
         "description": "Analyzes blockchain data for whale activity and exchange flows",
         "category": "Market Logic",
         "type": "fundamental",
+    },
+    
+    # Microstructure Strategies
+    "spread_liquidity": {
+        "name": "Spread Liquidity",
+        "description": "Detects liquidity events through bid-ask spread widening and narrowing patterns",
+        "category": "Microstructure",
+        "type": "liquidity",
+    },
+    
+    "iceberg_detector": {
+        "name": "Iceberg Detector",
+        "description": "Identifies large hidden institutional orders through order book pattern analysis",
+        "category": "Microstructure",
+        "type": "pattern_recognition",
     },
 }
 

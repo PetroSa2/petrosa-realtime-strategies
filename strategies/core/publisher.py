@@ -76,7 +76,7 @@ class TradeOrderPublisher:
             asyncio.create_task(self._publishing_loop())
             
             # Return immediately after starting the background task
-            self.logger.info("Trade order publisher started successfully")
+            self.logger.info("Trade order publisher started", event="publisher_started", topic=self.topic)
 
         except Exception as e:
             self.logger.error("Failed to start trade order publisher", error=str(e))
@@ -84,7 +84,7 @@ class TradeOrderPublisher:
 
     async def stop(self) -> None:
         """Stop the trade order publisher gracefully."""
-        self.logger.info("Stopping trade order publisher")
+        self.logger.info("Stopping trade order publisher", event="publisher_stopping", order_count=self.order_count, error_count=self.error_count)
 
         # Signal shutdown
         self.shutdown_event.set()
@@ -94,11 +94,11 @@ class TradeOrderPublisher:
         if self.nats_client:
             try:
                 await self.nats_client.close()
-                self.logger.info("NATS connection closed")
+                self.logger.info("NATS connection closed", event="nats_disconnected", nats_url=self.nats_url)
             except Exception as e:
-                self.logger.warning("Error closing NATS connection", error=str(e))
+                self.logger.warning("Error closing NATS connection", event="nats_disconnect_error", error=str(e))
 
-        self.logger.info("Trade order publisher stopped")
+        self.logger.info("Trade order publisher stopped", event="publisher_stopped", total_orders=self.order_count, total_errors=self.error_count)
 
     async def _connect_to_nats(self) -> None:
         """Connect to NATS server."""
@@ -111,7 +111,7 @@ class TradeOrderPublisher:
                 max_reconnect_attempts=10,
                 connect_timeout=10,
             )
-            self.logger.info("Connected to NATS server", url=self.nats_url)
+            self.logger.info("Connected to NATS server", event="nats_connected", nats_url=self.nats_url, client_name="trade-order-publisher")
 
         except Exception as e:
             self.logger.error("Failed to connect to NATS", error=str(e))
@@ -119,7 +119,7 @@ class TradeOrderPublisher:
 
     async def _publishing_loop(self) -> None:
         """Main publishing loop for sending orders."""
-        self.logger.info("Starting order publishing loop")
+        self.logger.info("Starting order publishing loop", event="publishing_loop_started", batch_size=self.batch_size, batch_timeout=self.batch_timeout)
 
         while self.is_running and not self.shutdown_event.is_set():
             try:
