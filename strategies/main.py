@@ -182,41 +182,41 @@ class StrategiesService:
             await self.shutdown_event.wait()
 
         except Exception as e:
-            self.logger.error("Error starting service", event="service_start_error", error=str(e))
+            self.logger.error("Error starting service", event_type="service_start_error", error=str(e))
             raise
         finally:
             await self.stop()
 
     async def stop(self):
         """Stop the service gracefully."""
-        self.logger.info("Stopping Petrosa Realtime Strategies service", event="service_stopping")
+        self.logger.info("Stopping Petrosa Realtime Strategies service", event_type="service_stopping")
 
         # Stop heartbeat manager first
         if self.heartbeat_manager:
             await self.heartbeat_manager.stop()
-            self.logger.info("Heartbeat manager stopped", event="heartbeat_manager_stopped")
+            self.logger.info("Heartbeat manager stopped", event_type="heartbeat_manager_stopped")
 
         # Stop NATS consumer
         if self.consumer:
             await self.consumer.stop()
-            self.logger.info("NATS consumer stopped", event="nats_consumer_stopped")
+            self.logger.info("NATS consumer stopped", event_type="nats_consumer_stopped")
 
         # Stop trade order publisher
         if self.publisher:
             await self.publisher.stop()
-            self.logger.info("Trade order publisher stopped", event="publisher_stopped")
+            self.logger.info("Trade order publisher stopped", event_type="publisher_stopped")
 
         # Stop health server
         if self.health_server:
             await self.health_server.stop()
-            self.logger.info("Health server stopped", event="health_server_stopped")
+            self.logger.info("Health server stopped", event_type="health_server_stopped")
         
         # Stop configuration manager
         if self.config_manager:
             await self.config_manager.stop()
-            self.logger.info("Configuration manager stopped", event="config_manager_stopped")
+            self.logger.info("Configuration manager stopped", event_type="config_manager_stopped")
 
-        self.logger.info("Service stopped gracefully", event="service_stopped")
+        self.logger.info("Service stopped gracefully", event_type="service_stopped")
 
 
 def signal_handler(signum, frame):
