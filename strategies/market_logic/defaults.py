@@ -6,17 +6,16 @@ These defaults are used when no database configuration exists and are
 automatically persisted to MongoDB on first use.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 # =============================================================================
 # STRATEGY DEFAULT PARAMETERS
 # =============================================================================
 
-STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
+STRATEGY_DEFAULTS: dict[str, dict[str, Any]] = {
     # ==========================================================================
     # Realtime Data Strategies (WebSocket-based)
     # ==========================================================================
-    
     "orderbook_skew": {
         "top_levels": 5,
         "buy_threshold": 1.2,
@@ -27,7 +26,6 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "spread_weight": 0.4,
         "min_total_volume": 0.001,
     },
-    
     "trade_momentum": {
         "price_weight": 0.4,
         "quantity_weight": 0.3,
@@ -39,7 +37,6 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "time_decay_seconds": 300,
         "momentum_window": 10,
     },
-    
     "ticker_velocity": {
         "time_window": 60,
         "buy_threshold": 0.5,
@@ -50,11 +47,9 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "volume_confirmation": True,
         "min_volume_change": 0.2,
     },
-    
     # ==========================================================================
     # Market Logic Strategies (Analysis-based)
     # ==========================================================================
-    
     "btc_dominance": {
         "high_threshold": 70.0,
         "low_threshold": 40.0,
@@ -65,7 +60,6 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "base_confidence_low": 0.75,
         "momentum_confidence": 0.70,
     },
-    
     "cross_exchange_spread": {
         "spread_threshold_percent": 0.5,
         "min_signal_interval": 300,  # 5 minutes in seconds
@@ -76,7 +70,6 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "high_spread_threshold": 1.0,
         "high_spread_confidence": 0.85,
     },
-    
     "onchain_metrics": {
         "whale_threshold_btc": 100,
         "whale_threshold_eth": 1000,
@@ -87,11 +80,9 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "base_confidence": 0.77,
         "strong_signal_confidence": 0.85,
     },
-    
     # ==========================================================================
     # Microstructure Strategies (Order Book Analysis)
     # ==========================================================================
-    
     "spread_liquidity": {
         "spread_threshold_bps": 10.0,
         "spread_ratio_threshold": 2.5,
@@ -102,7 +93,6 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "lookback_ticks": 20,
         "min_signal_interval_seconds": 60.0,
     },
-    
     "iceberg_detector": {
         "min_refill_count": 3,
         "refill_speed_threshold_seconds": 5.0,
@@ -121,7 +111,7 @@ STRATEGY_DEFAULTS: Dict[str, Dict[str, Any]] = {
 # PARAMETER SCHEMAS (for validation)
 # =============================================================================
 
-PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
+PARAMETER_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
     # ==========================================================================
     # Orderbook Skew Strategy
     # ==========================================================================
@@ -183,7 +173,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 0.001,
         },
     },
-    
     # ==========================================================================
     # Trade Momentum Strategy
     # ==========================================================================
@@ -252,7 +241,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 10,
         },
     },
-    
     # ==========================================================================
     # Ticker Velocity Strategy
     # ==========================================================================
@@ -312,7 +300,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 0.2,
         },
     },
-    
     # ==========================================================================
     # BTC Dominance Strategy
     # ==========================================================================
@@ -353,7 +340,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 14400,
         },
     },
-    
     # ==========================================================================
     # Cross-Exchange Spread Strategy
     # ==========================================================================
@@ -380,7 +366,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 500,
         },
     },
-    
     # ==========================================================================
     # On-Chain Metrics Strategy
     # ==========================================================================
@@ -414,7 +399,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 3600,
         },
     },
-    
     # ==========================================================================
     # Spread Liquidity Strategy
     # ==========================================================================
@@ -476,7 +460,6 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
             "example": 60.0,
         },
     },
-    
     # ==========================================================================
     # Iceberg Detector Strategy
     # ==========================================================================
@@ -552,7 +535,7 @@ PARAMETER_SCHEMAS: Dict[str, Dict[str, Dict[str, Any]]] = {
 # STRATEGY METADATA
 # =============================================================================
 
-STRATEGY_METADATA: Dict[str, Dict[str, str]] = {
+STRATEGY_METADATA: dict[str, dict[str, str]] = {
     # Realtime Data Strategies
     "orderbook_skew": {
         "name": "Order Book Skew",
@@ -560,21 +543,18 @@ STRATEGY_METADATA: Dict[str, Dict[str, str]] = {
         "category": "Realtime Data",
         "type": "microstructure",
     },
-    
     "trade_momentum": {
         "name": "Trade Momentum",
         "description": "Tracks recent trade flow to identify momentum shifts in market direction",
         "category": "Realtime Data",
         "type": "momentum",
     },
-    
     "ticker_velocity": {
         "name": "Ticker Velocity",
         "description": "Measures price velocity and acceleration to capture rapid price movements",
         "category": "Realtime Data",
         "type": "velocity",
     },
-    
     # Market Logic Strategies
     "btc_dominance": {
         "name": "Bitcoin Dominance",
@@ -582,21 +562,18 @@ STRATEGY_METADATA: Dict[str, Dict[str, str]] = {
         "category": "Market Logic",
         "type": "rotation",
     },
-    
     "cross_exchange_spread": {
         "name": "Cross-Exchange Spread",
         "description": "Monitors price differences across exchanges to identify arbitrage opportunities",
         "category": "Market Logic",
         "type": "arbitrage",
     },
-    
     "onchain_metrics": {
         "name": "On-Chain Metrics",
         "description": "Analyzes blockchain data for whale activity and exchange flows",
         "category": "Market Logic",
         "type": "fundamental",
     },
-    
     # Microstructure Strategies
     "spread_liquidity": {
         "name": "Spread Liquidity",
@@ -604,7 +581,6 @@ STRATEGY_METADATA: Dict[str, Dict[str, str]] = {
         "category": "Microstructure",
         "type": "liquidity",
     },
-    
     "iceberg_detector": {
         "name": "Iceberg Detector",
         "description": "Identifies large hidden institutional orders through order book pattern analysis",
@@ -614,48 +590,51 @@ STRATEGY_METADATA: Dict[str, Dict[str, str]] = {
 }
 
 
-def get_strategy_defaults(strategy_id: str) -> Dict[str, Any]:
+def get_strategy_defaults(strategy_id: str) -> dict[str, Any]:
     """
     Get default parameters for a strategy.
-    
+
     Args:
         strategy_id: Strategy identifier
-        
+
     Returns:
         Dictionary of default parameters
     """
     return STRATEGY_DEFAULTS.get(strategy_id, {})
 
 
-def get_parameter_schema(strategy_id: str) -> Dict[str, Dict[str, Any]]:
+def get_parameter_schema(strategy_id: str) -> dict[str, dict[str, Any]]:
     """
     Get parameter schema for a strategy.
-    
+
     Args:
         strategy_id: Strategy identifier
-        
+
     Returns:
         Dictionary of parameter schemas
     """
     return PARAMETER_SCHEMAS.get(strategy_id, {})
 
 
-def get_strategy_metadata(strategy_id: str) -> Dict[str, str]:
+def get_strategy_metadata(strategy_id: str) -> dict[str, str]:
     """
     Get metadata for a strategy.
-    
+
     Args:
         strategy_id: Strategy identifier
-        
+
     Returns:
         Dictionary of strategy metadata
     """
-    return STRATEGY_METADATA.get(strategy_id, {
-        "name": strategy_id.replace("_", " ").title(),
-        "description": "No description available",
-        "category": "Market Logic",
-        "type": "unknown",
-    })
+    return STRATEGY_METADATA.get(
+        strategy_id,
+        {
+            "name": strategy_id.replace("_", " ").title(),
+            "description": "No description available",
+            "category": "Market Logic",
+            "type": "unknown",
+        },
+    )
 
 
 def list_all_strategies() -> list[str]:
@@ -663,14 +642,16 @@ def list_all_strategies() -> list[str]:
     return list(STRATEGY_DEFAULTS.keys())
 
 
-def validate_parameters(strategy_id: str, parameters: Dict[str, Any]) -> tuple[bool, list[str]]:
+def validate_parameters(
+    strategy_id: str, parameters: dict[str, Any]
+) -> tuple[bool, list[str]]:
     """
     Validate parameters against schema.
-    
+
     Args:
         strategy_id: Strategy identifier
         parameters: Parameters to validate
-        
+
     Returns:
         Tuple of (is_valid, list_of_errors)
     """
@@ -678,17 +659,17 @@ def validate_parameters(strategy_id: str, parameters: Dict[str, Any]) -> tuple[b
     if not schema:
         # No schema defined, accept all parameters
         return True, []
-    
+
     errors = []
-    
+
     for param_name, param_value in parameters.items():
         if param_name not in schema:
             errors.append(f"Unknown parameter: {param_name}")
             continue
-        
+
         param_schema = schema[param_name]
         param_type = param_schema.get("type")
-        
+
         # Type validation
         if param_type == "int" and not isinstance(param_value, int):
             errors.append(f"{param_name} must be an integer")
@@ -702,7 +683,7 @@ def validate_parameters(strategy_id: str, parameters: Dict[str, Any]) -> tuple[b
         elif param_type == "str" and not isinstance(param_value, str):
             errors.append(f"{param_name} must be a string")
             continue
-        
+
         # Range validation for numeric types
         if param_type in ("int", "float"):
             if "min" in param_schema and param_value < param_schema["min"]:
@@ -713,6 +694,5 @@ def validate_parameters(strategy_id: str, parameters: Dict[str, Any]) -> tuple[b
                 errors.append(
                     f"{param_name} must be <= {param_schema['max']}, got {param_value}"
                 )
-    
-    return len(errors) == 0, errors
 
+    return len(errors) == 0, errors

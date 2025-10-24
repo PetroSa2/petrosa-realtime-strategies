@@ -23,8 +23,8 @@ import constants  # noqa: E402
 from strategies.core.consumer import NATSConsumer  # noqa: E402
 from strategies.core.publisher import TradeOrderPublisher  # noqa: E402
 from strategies.health.server import HealthServer  # noqa: E402
-from strategies.utils.logger import setup_logging  # noqa: E402
 from strategies.utils.heartbeat import HeartbeatManager  # noqa: E402
+from strategies.utils.logger import setup_logging  # noqa: E402
 
 # Initialize OpenTelemetry as early as possible
 try:
@@ -50,15 +50,16 @@ class StrategiesService:
     def __init__(self):
         """Initialize the service."""
         self.logger = setup_logging(level=constants.LOG_LEVEL)
-        
+
         # Attach OTLP logging handler AFTER setup_logging() configures logging
         # This ensures the handler survives any logging reconfiguration
         try:
             import otel_init
+
             otel_init.attach_logging_handler_simple()
         except Exception as e:
             print(f"⚠️  Failed to attach OTLP handler: {e}")
-        
+
         self.consumer: Optional[NATSConsumer] = None
         self.publisher: Optional[TradeOrderPublisher] = None
         self.health_server: Optional[HealthServer] = None
@@ -74,7 +75,7 @@ class StrategiesService:
             event_type="service_starting",
             service_name=constants.SERVICE_NAME,
             service_version=constants.SERVICE_VERSION,
-            environment=constants.ENVIRONMENT
+            environment=constants.ENVIRONMENT,
         )
 
         try:
@@ -82,13 +83,13 @@ class StrategiesService:
             from strategies.db.mongodb_client import MongoDBClient
             from strategies.services.config_manager import StrategyConfigManager
             from strategies.services.depth_analyzer import DepthAnalyzer
-            
+
             mongodb_client = MongoDBClient(
                 uri=constants.MONGODB_URI,
                 database=constants.MONGODB_DATABASE,
                 timeout_ms=constants.MONGODB_TIMEOUT_MS,
             )
-            
+
             self.config_manager = StrategyConfigManager(
                 mongodb_client=mongodb_client,
                 cache_ttl_seconds=60,
@@ -97,9 +98,9 @@ class StrategiesService:
             self.logger.info(
                 "Configuration manager initialized",
                 event_type="config_manager_initialized",
-                cache_ttl_seconds=60
+                cache_ttl_seconds=60,
             )
-            
+
             # Initialize depth analyzer for market metrics
             self.depth_analyzer = DepthAnalyzer(
                 history_window_seconds=900,  # 15 minutes
@@ -111,9 +112,9 @@ class StrategiesService:
                 event_type="depth_analyzer_initialized",
                 history_window_seconds=900,
                 max_symbols=100,
-                metrics_ttl_seconds=300
+                metrics_ttl_seconds=300,
             )
-            
+
             # Start health server first to handle Kubernetes probes
             self.health_server = HealthServer(
                 port=constants.HEALTH_CHECK_PORT,
@@ -128,7 +129,7 @@ class StrategiesService:
             self.logger.info(
                 "Health server started",
                 event_type="health_server_started",
-                port=constants.HEALTH_CHECK_PORT
+                port=constants.HEALTH_CHECK_PORT,
             )
 
             # Start trade order publisher
@@ -156,7 +157,7 @@ class StrategiesService:
             self.logger.info(
                 "NATS consumer started",
                 event_type="nats_consumer_started",
-                topic=constants.NATS_CONSUMER_TOPIC
+                topic=constants.NATS_CONSUMER_TOPIC,
             )
 
             # Update health server with consumer reference
@@ -172,7 +173,7 @@ class StrategiesService:
             self.logger.info(
                 "Heartbeat manager started",
                 event_type="heartbeat_manager_started",
-                interval_seconds=constants.HEARTBEAT_INTERVAL_SECONDS
+                interval_seconds=constants.HEARTBEAT_INTERVAL_SECONDS,
             )
 
             # Update health server with heartbeat manager reference
@@ -182,39 +183,54 @@ class StrategiesService:
             await self.shutdown_event.wait()
 
         except Exception as e:
-            self.logger.error("Error starting service", event_type="service_start_error", error=str(e))
+            self.logger.error(
+                "Error starting service", event_type="service_start_error", error=str(e)
+            )
             raise
         finally:
             await self.stop()
 
     async def stop(self):
         """Stop the service gracefully."""
-        self.logger.info("Stopping Petrosa Realtime Strategies service", event_type="service_stopping")
+        self.logger.info(
+            "Stopping Petrosa Realtime Strategies service",
+            event_type="service_stopping",
+        )
 
         # Stop heartbeat manager first
         if self.heartbeat_manager:
             await self.heartbeat_manager.stop()
-            self.logger.info("Heartbeat manager stopped", event_type="heartbeat_manager_stopped")
+            self.logger.info(
+                "Heartbeat manager stopped", event_type="heartbeat_manager_stopped"
+            )
 
         # Stop NATS consumer
         if self.consumer:
             await self.consumer.stop()
-            self.logger.info("NATS consumer stopped", event_type="nats_consumer_stopped")
+            self.logger.info(
+                "NATS consumer stopped", event_type="nats_consumer_stopped"
+            )
 
         # Stop trade order publisher
         if self.publisher:
             await self.publisher.stop()
-            self.logger.info("Trade order publisher stopped", event_type="publisher_stopped")
+            self.logger.info(
+                "Trade order publisher stopped", event_type="publisher_stopped"
+            )
 
         # Stop health server
         if self.health_server:
             await self.health_server.stop()
-            self.logger.info("Health server stopped", event_type="health_server_stopped")
-        
+            self.logger.info(
+                "Health server stopped", event_type="health_server_stopped"
+            )
+
         # Stop configuration manager
         if self.config_manager:
             await self.config_manager.stop()
-            self.logger.info("Configuration manager stopped", event_type="config_manager_stopped")
+            self.logger.info(
+                "Configuration manager stopped", event_type="config_manager_stopped"
+            )
 
         self.logger.info("Service stopped gracefully", event_type="service_stopped")
 
@@ -228,9 +244,7 @@ def signal_handler(signum, frame):
 
 @app.command()
 def run(
-    nats_url: Optional[str] = typer.Option(
-        None, "--nats-url", help="NATS server URL"
-    ),
+    nats_url: Optional[str] = typer.Option(None, "--nats-url", help="NATS server URL"),
     consumer_topic: Optional[str] = typer.Option(
         None, "--consumer-topic", help="NATS consumer topic"
     ),
@@ -320,7 +334,7 @@ def config():
 def heartbeat():
     """Trigger a manual heartbeat (for testing)."""
     import requests
-    
+
     try:
         # Try to trigger heartbeat via health endpoint
         response = requests.get(
@@ -335,12 +349,14 @@ def heartbeat():
             print(f"  Count: {heartbeat_info.get('heartbeat_count', 'unknown')}")
             print(f"  Uptime: {heartbeat_info.get('uptime_seconds', 'unknown')}s")
             print(f"  Interval: {heartbeat_info.get('interval_seconds', 'unknown')}s")
-            
+
             # Show recent stats if available
             consumer_info = data.get("components", {}).get("consumer", {})
             publisher_info = data.get("components", {}).get("publisher", {})
             print("\n📊 Current Stats:")
-            print(f"  Messages Processed: {consumer_info.get('message_count', 'unknown')}")
+            print(
+                f"  Messages Processed: {consumer_info.get('message_count', 'unknown')}"
+            )
             print(f"  Consumer Errors: {consumer_info.get('error_count', 'unknown')}")
             print(f"  Orders Published: {publisher_info.get('order_count', 'unknown')}")
             print(f"  Publisher Errors: {publisher_info.get('error_count', 'unknown')}")

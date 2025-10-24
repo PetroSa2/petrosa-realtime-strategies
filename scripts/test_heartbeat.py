@@ -6,22 +6,21 @@ This script tests the heartbeat manager in isolation to verify it works correctl
 """
 
 import asyncio
-import sys
 import os
+import sys
 import time
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-import constants
 from strategies.utils.heartbeat import HeartbeatManager
 from strategies.utils.logger import setup_logging
 
 
 class MockConsumer:
     """Mock consumer for testing."""
-    
+
     def __init__(self):
         self.message_count = 0
         self.error_count = 0
@@ -29,13 +28,13 @@ class MockConsumer:
         self.last_message_time = time.time()
         self.avg_processing_time_ms = 5.2
         self.max_processing_time_ms = 12.8
-        
+
     def get_metrics(self):
         # Simulate increasing message count
         self.message_count += 10
         if self.message_count > 50:
             self.error_count += 1
-            
+
         return {
             "message_count": self.message_count,
             "error_count": self.error_count,
@@ -46,7 +45,7 @@ class MockConsumer:
             "processing_times_count": 100,
             "circuit_breaker_state": "closed",
         }
-    
+
     def get_health_status(self):
         return {
             "healthy": True,
@@ -61,7 +60,7 @@ class MockConsumer:
 
 class MockPublisher:
     """Mock publisher for testing."""
-    
+
     def __init__(self):
         self.order_count = 0
         self.error_count = 0
@@ -70,13 +69,13 @@ class MockPublisher:
         self.avg_publishing_time_ms = 3.1
         self.max_publishing_time_ms = 8.9
         self.queue_size = 5
-        
+
     def get_metrics(self):
         # Simulate increasing order count
         self.order_count += 3
         if self.order_count > 20:
             self.error_count += 1
-            
+
         return {
             "order_count": self.order_count,
             "error_count": self.error_count,
@@ -88,7 +87,7 @@ class MockPublisher:
             "queue_size": self.queue_size,
             "circuit_breaker_state": "closed",
         }
-    
+
     def get_health_status(self):
         return {
             "healthy": True,
@@ -105,11 +104,11 @@ async def test_heartbeat():
     """Test the heartbeat functionality."""
     logger = setup_logging(level="INFO")
     logger.info("Starting heartbeat test")
-    
+
     # Create mock components
     consumer = MockConsumer()
     publisher = MockPublisher()
-    
+
     # Create heartbeat manager with short interval for testing
     heartbeat_manager = HeartbeatManager(
         consumer=consumer,
@@ -119,27 +118,27 @@ async def test_heartbeat():
         interval_seconds=5,  # 5 seconds for testing
         include_detailed_stats=True,
     )
-    
+
     try:
         # Start heartbeat manager
         await heartbeat_manager.start()
         logger.info("Heartbeat manager started")
-        
+
         # Let it run for a few heartbeats
         logger.info("Running test for 20 seconds to see multiple heartbeats...")
         await asyncio.sleep(20)
-        
+
         # Check status
         status = heartbeat_manager.get_heartbeat_status()
         logger.info("Heartbeat status", **status)
-        
+
         # Force a heartbeat
         logger.info("Forcing immediate heartbeat...")
         heartbeat_manager.force_heartbeat()
         await asyncio.sleep(1)  # Give it time to log
-        
+
         logger.info("✅ Heartbeat test completed successfully")
-        
+
     except Exception as e:
         logger.error("❌ Heartbeat test failed", error=str(e))
         raise
@@ -152,7 +151,7 @@ async def test_heartbeat():
 if __name__ == "__main__":
     print("🧪 Testing Heartbeat Functionality")
     print("=" * 50)
-    
+
     try:
         asyncio.run(test_heartbeat())
         print("\n✅ All tests passed!")

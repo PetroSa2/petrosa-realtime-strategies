@@ -7,7 +7,6 @@ including environment variables, default values, and service-specific settings.
 """
 
 import os
-from typing import List
 
 # Service Information
 SERVICE_NAME = "petrosa-realtime-strategies"
@@ -33,61 +32,115 @@ MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "petrosa")
 MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 
 # Strategy Configuration
-STRATEGY_ENABLED_ORDERBOOK_SKEW = os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "true").lower() == "true"
-STRATEGY_ENABLED_TRADE_MOMENTUM = os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "true").lower() == "true"
-STRATEGY_ENABLED_TICKER_VELOCITY = os.getenv("STRATEGY_ENABLED_TICKER_VELOCITY", "true").lower() == "true"
+STRATEGY_ENABLED_ORDERBOOK_SKEW = (
+    os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "true").lower() == "true"
+)
+STRATEGY_ENABLED_TRADE_MOMENTUM = (
+    os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "true").lower() == "true"
+)
+STRATEGY_ENABLED_TICKER_VELOCITY = (
+    os.getenv("STRATEGY_ENABLED_TICKER_VELOCITY", "true").lower() == "true"
+)
 
 # Market Logic Strategies (from QTZD adaptation)
-STRATEGY_ENABLED_BTC_DOMINANCE = os.getenv("STRATEGY_ENABLED_BTC_DOMINANCE", "true").lower() == "true"
-STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD = os.getenv("STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD", "true").lower() == "true"
-STRATEGY_ENABLED_ONCHAIN_METRICS = os.getenv("STRATEGY_ENABLED_ONCHAIN_METRICS", "false").lower() == "true"
+STRATEGY_ENABLED_BTC_DOMINANCE = (
+    os.getenv("STRATEGY_ENABLED_BTC_DOMINANCE", "true").lower() == "true"
+)
+STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD = (
+    os.getenv("STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD", "true").lower() == "true"
+)
+STRATEGY_ENABLED_ONCHAIN_METRICS = (
+    os.getenv("STRATEGY_ENABLED_ONCHAIN_METRICS", "false").lower() == "true"
+)
 
 # Microstructure Strategies
-STRATEGY_ENABLED_SPREAD_LIQUIDITY = os.getenv("STRATEGY_ENABLED_SPREAD_LIQUIDITY", "true").lower() == "true"
-STRATEGY_ENABLED_ICEBERG_DETECTOR = os.getenv("STRATEGY_ENABLED_ICEBERG_DETECTOR", "true").lower() == "true"
+STRATEGY_ENABLED_SPREAD_LIQUIDITY = (
+    os.getenv("STRATEGY_ENABLED_SPREAD_LIQUIDITY", "true").lower() == "true"
+)
+STRATEGY_ENABLED_ICEBERG_DETECTOR = (
+    os.getenv("STRATEGY_ENABLED_ICEBERG_DETECTOR", "true").lower() == "true"
+)
 
 # Order Book Skew Strategy Parameters
 ORDERBOOK_SKEW_TOP_LEVELS = int(os.getenv("ORDERBOOK_SKEW_TOP_LEVELS", "5"))
 ORDERBOOK_SKEW_BUY_THRESHOLD = float(os.getenv("ORDERBOOK_SKEW_BUY_THRESHOLD", "1.2"))
 ORDERBOOK_SKEW_SELL_THRESHOLD = float(os.getenv("ORDERBOOK_SKEW_SELL_THRESHOLD", "0.8"))
-ORDERBOOK_SKEW_MIN_SPREAD_PERCENT = float(os.getenv("ORDERBOOK_SKEW_MIN_SPREAD_PERCENT", "0.1"))
+ORDERBOOK_SKEW_MIN_SPREAD_PERCENT = float(
+    os.getenv("ORDERBOOK_SKEW_MIN_SPREAD_PERCENT", "0.1")
+)
 
 # Trade Momentum Strategy Parameters
 TRADE_MOMENTUM_PRICE_WEIGHT = float(os.getenv("TRADE_MOMENTUM_PRICE_WEIGHT", "0.4"))
-TRADE_MOMENTUM_QUANTITY_WEIGHT = float(os.getenv("TRADE_MOMENTUM_QUANTITY_WEIGHT", "0.3"))
+TRADE_MOMENTUM_QUANTITY_WEIGHT = float(
+    os.getenv("TRADE_MOMENTUM_QUANTITY_WEIGHT", "0.3")
+)
 TRADE_MOMENTUM_MAKER_WEIGHT = float(os.getenv("TRADE_MOMENTUM_MAKER_WEIGHT", "0.3"))
 TRADE_MOMENTUM_BUY_THRESHOLD = float(os.getenv("TRADE_MOMENTUM_BUY_THRESHOLD", "0.7"))
-TRADE_MOMENTUM_SELL_THRESHOLD = float(os.getenv("TRADE_MOMENTUM_SELL_THRESHOLD", "-0.7"))
+TRADE_MOMENTUM_SELL_THRESHOLD = float(
+    os.getenv("TRADE_MOMENTUM_SELL_THRESHOLD", "-0.7")
+)
 TRADE_MOMENTUM_MIN_QUANTITY = float(os.getenv("TRADE_MOMENTUM_MIN_QUANTITY", "0.001"))
 
 # Ticker Velocity Strategy Parameters
-TICKER_VELOCITY_TIME_WINDOW = int(os.getenv("TICKER_VELOCITY_TIME_WINDOW", "60"))  # seconds
+TICKER_VELOCITY_TIME_WINDOW = int(
+    os.getenv("TICKER_VELOCITY_TIME_WINDOW", "60")
+)  # seconds
 TICKER_VELOCITY_BUY_THRESHOLD = float(os.getenv("TICKER_VELOCITY_BUY_THRESHOLD", "0.5"))
-TICKER_VELOCITY_SELL_THRESHOLD = float(os.getenv("TICKER_VELOCITY_SELL_THRESHOLD", "-0.5"))
-TICKER_VELOCITY_MIN_PRICE_CHANGE = float(os.getenv("TICKER_VELOCITY_MIN_PRICE_CHANGE", "0.1"))
+TICKER_VELOCITY_SELL_THRESHOLD = float(
+    os.getenv("TICKER_VELOCITY_SELL_THRESHOLD", "-0.5")
+)
+TICKER_VELOCITY_MIN_PRICE_CHANGE = float(
+    os.getenv("TICKER_VELOCITY_MIN_PRICE_CHANGE", "0.1")
+)
 
 # Bitcoin Dominance Strategy Parameters (from QTZD adaptation)
-BTC_DOMINANCE_HIGH_THRESHOLD = float(os.getenv("BTC_DOMINANCE_HIGH_THRESHOLD", "70.0"))  # Above 70% = rotate to BTC
-BTC_DOMINANCE_LOW_THRESHOLD = float(os.getenv("BTC_DOMINANCE_LOW_THRESHOLD", "40.0"))   # Below 40% = alt season
-BTC_DOMINANCE_CHANGE_THRESHOLD = float(os.getenv("BTC_DOMINANCE_CHANGE_THRESHOLD", "5.0"))  # 5% change triggers signal
-BTC_DOMINANCE_WINDOW_HOURS = int(os.getenv("BTC_DOMINANCE_WINDOW_HOURS", "24"))  # 24-hour analysis window
-BTC_DOMINANCE_MIN_SIGNAL_INTERVAL = int(os.getenv("BTC_DOMINANCE_MIN_SIGNAL_INTERVAL", "14400"))  # 4 hours between signals
+BTC_DOMINANCE_HIGH_THRESHOLD = float(
+    os.getenv("BTC_DOMINANCE_HIGH_THRESHOLD", "70.0")
+)  # Above 70% = rotate to BTC
+BTC_DOMINANCE_LOW_THRESHOLD = float(
+    os.getenv("BTC_DOMINANCE_LOW_THRESHOLD", "40.0")
+)  # Below 40% = alt season
+BTC_DOMINANCE_CHANGE_THRESHOLD = float(
+    os.getenv("BTC_DOMINANCE_CHANGE_THRESHOLD", "5.0")
+)  # 5% change triggers signal
+BTC_DOMINANCE_WINDOW_HOURS = int(
+    os.getenv("BTC_DOMINANCE_WINDOW_HOURS", "24")
+)  # 24-hour analysis window
+BTC_DOMINANCE_MIN_SIGNAL_INTERVAL = int(
+    os.getenv("BTC_DOMINANCE_MIN_SIGNAL_INTERVAL", "14400")
+)  # 4 hours between signals
 
 # Cross-Exchange Spread Strategy Parameters (from QTZD adaptation)
-SPREAD_THRESHOLD_PERCENT = float(os.getenv("SPREAD_THRESHOLD_PERCENT", "0.5"))  # 0.5% minimum spread
-SPREAD_MIN_SIGNAL_INTERVAL = int(os.getenv("SPREAD_MIN_SIGNAL_INTERVAL", "300"))  # 5 minutes between signals
-SPREAD_MAX_POSITION_SIZE = float(os.getenv("SPREAD_MAX_POSITION_SIZE", "500"))  # USDT per arbitrage
+SPREAD_THRESHOLD_PERCENT = float(
+    os.getenv("SPREAD_THRESHOLD_PERCENT", "0.5")
+)  # 0.5% minimum spread
+SPREAD_MIN_SIGNAL_INTERVAL = int(
+    os.getenv("SPREAD_MIN_SIGNAL_INTERVAL", "300")
+)  # 5 minutes between signals
+SPREAD_MAX_POSITION_SIZE = float(
+    os.getenv("SPREAD_MAX_POSITION_SIZE", "500")
+)  # USDT per arbitrage
 SPREAD_EXCHANGES = os.getenv("SPREAD_EXCHANGES", "binance,coinbase").split(",")
 
 # On-Chain Metrics Strategy Parameters (from QTZD adaptation)
-ONCHAIN_NETWORK_GROWTH_THRESHOLD = float(os.getenv("ONCHAIN_NETWORK_GROWTH_THRESHOLD", "10.0"))  # 10% growth
-ONCHAIN_VOLUME_THRESHOLD = float(os.getenv("ONCHAIN_VOLUME_THRESHOLD", "15.0"))  # 15% volume increase
-ONCHAIN_MIN_SIGNAL_INTERVAL = int(os.getenv("ONCHAIN_MIN_SIGNAL_INTERVAL", "86400"))  # 24 hours between signals
+ONCHAIN_NETWORK_GROWTH_THRESHOLD = float(
+    os.getenv("ONCHAIN_NETWORK_GROWTH_THRESHOLD", "10.0")
+)  # 10% growth
+ONCHAIN_VOLUME_THRESHOLD = float(
+    os.getenv("ONCHAIN_VOLUME_THRESHOLD", "15.0")
+)  # 15% volume increase
+ONCHAIN_MIN_SIGNAL_INTERVAL = int(
+    os.getenv("ONCHAIN_MIN_SIGNAL_INTERVAL", "86400")
+)  # 24 hours between signals
 
 # Trading Configuration
 TRADING_SYMBOLS = os.getenv("TRADING_SYMBOLS", "BTCUSDT,ETHUSDT,BNBUSDT").split(",")
-TRADING_QUANTITY_PERCENT = float(os.getenv("TRADING_QUANTITY_PERCENT", "0.1"))  # 0.1% of available balance
-TRADING_MAX_POSITION_SIZE = float(os.getenv("TRADING_MAX_POSITION_SIZE", "1000"))  # USDT
+TRADING_QUANTITY_PERCENT = float(
+    os.getenv("TRADING_QUANTITY_PERCENT", "0.1")
+)  # 0.1% of available balance
+TRADING_MAX_POSITION_SIZE = float(
+    os.getenv("TRADING_MAX_POSITION_SIZE", "1000")
+)  # USDT
 TRADING_MIN_POSITION_SIZE = float(os.getenv("TRADING_MIN_POSITION_SIZE", "10"))  # USDT
 TRADING_LEVERAGE = int(os.getenv("TRADING_LEVERAGE", "1"))  # 1x leverage (spot-like)
 TRADING_ENABLE_SHORTS = os.getenv("TRADING_ENABLE_SHORTS", "true").lower() == "true"
@@ -100,7 +153,9 @@ RISK_TAKE_PROFIT_PERCENT = float(os.getenv("RISK_TAKE_PROFIT_PERCENT", "4.0"))
 RISK_MAX_DRAWDOWN_PERCENT = float(os.getenv("RISK_MAX_DRAWDOWN_PERCENT", "10.0"))
 
 # TradeEngine API Configuration
-TRADEENGINE_API_URL = os.getenv("TRADEENGINE_API_URL", "http://petrosa-tradeengine:8080")
+TRADEENGINE_API_URL = os.getenv(
+    "TRADEENGINE_API_URL", "http://petrosa-tradeengine:8080"
+)
 TRADEENGINE_API_TIMEOUT = int(os.getenv("TRADEENGINE_API_TIMEOUT", "30"))
 TRADEENGINE_API_RETRY_ATTEMPTS = int(os.getenv("TRADEENGINE_API_RETRY_ATTEMPTS", "3"))
 TRADEENGINE_API_RETRY_DELAY = float(os.getenv("TRADEENGINE_API_RETRY_DELAY", "1.0"))
@@ -111,13 +166,23 @@ HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
 
 # Heartbeat Configuration
 HEARTBEAT_ENABLED = os.getenv("HEARTBEAT_ENABLED", "true").lower() == "true"
-HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60"))  # 60 seconds default
-HEARTBEAT_INCLUDE_DETAILED_STATS = os.getenv("HEARTBEAT_INCLUDE_DETAILED_STATS", "true").lower() == "true"
+HEARTBEAT_INTERVAL_SECONDS = int(
+    os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60")
+)  # 60 seconds default
+HEARTBEAT_INCLUDE_DETAILED_STATS = (
+    os.getenv("HEARTBEAT_INCLUDE_DETAILED_STATS", "true").lower() == "true"
+)
 
 # Circuit Breaker Configuration
-CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(os.getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5"))
-CIRCUIT_BREAKER_RECOVERY_TIMEOUT = int(os.getenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "60"))
-CIRCUIT_BREAKER_EXPECTED_EXCEPTION = os.getenv("CIRCUIT_BREAKER_EXPECTED_EXCEPTION", "Exception")
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(
+    os.getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5")
+)
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT = int(
+    os.getenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "60")
+)
+CIRCUIT_BREAKER_EXPECTED_EXCEPTION = os.getenv(
+    "CIRCUIT_BREAKER_EXPECTED_EXCEPTION", "Exception"
+)
 
 # Performance Configuration
 MAX_MEMORY_MB = int(os.getenv("MAX_MEMORY_MB", "512"))
@@ -129,7 +194,9 @@ BATCH_TIMEOUT = float(os.getenv("BATCH_TIMEOUT", "1.0"))
 # OpenTelemetry Configuration
 ENABLE_OTEL = os.getenv("ENABLE_OTEL", "true").lower() == "true"
 OTEL_SERVICE_VERSION = os.getenv("OTEL_SERVICE_VERSION", SERVICE_VERSION)
-OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv(
+    "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317"
+)
 OTEL_METRICS_EXPORTER = os.getenv("OTEL_METRICS_EXPORTER", "otlp")
 OTEL_TRACES_EXPORTER = os.getenv("OTEL_TRACES_EXPORTER", "otlp")
 OTEL_LOGS_EXPORTER = os.getenv("OTEL_LOGS_EXPORTER", "otlp")
@@ -181,7 +248,9 @@ DEFAULT_TIME_IN_FORCE = os.getenv("DEFAULT_TIME_IN_FORCE", "GTC")
 
 # Market data stream types
 SUPPORTED_STREAM_TYPES = ["depth20", "trade", "ticker"]
-ENABLED_STREAM_TYPES = os.getenv("ENABLED_STREAM_TYPES", "depth20,trade,ticker").split(",")
+ENABLED_STREAM_TYPES = os.getenv("ENABLED_STREAM_TYPES", "depth20,trade,ticker").split(
+    ","
+)
 
 # Signal types
 SIGNAL_TYPES = ["BUY", "SELL", "HOLD"]
@@ -207,7 +276,8 @@ SUCCESS_CODES = {
     "HEALTH_CHECK_PASSED": "S004",
 }
 
-def get_enabled_strategies() -> List[str]:
+
+def get_enabled_strategies() -> list[str]:
     """Get list of enabled strategies."""
     strategies = []
     if STRATEGY_ENABLED_ORDERBOOK_SKEW:
@@ -217,6 +287,7 @@ def get_enabled_strategies() -> List[str]:
     if STRATEGY_ENABLED_TICKER_VELOCITY:
         strategies.append("ticker_velocity")
     return strategies
+
 
 def get_trading_config() -> dict:
     """Get trading configuration as a dictionary."""
@@ -229,6 +300,7 @@ def get_trading_config() -> dict:
         "enable_shorts": TRADING_ENABLE_SHORTS,
     }
 
+
 def get_risk_config() -> dict:
     """Get risk management configuration as a dictionary."""
     return {
@@ -239,7 +311,8 @@ def get_risk_config() -> dict:
         "max_drawdown_percent": RISK_MAX_DRAWDOWN_PERCENT,
     }
 
-def get_enabled_strategies() -> List[str]:
+
+def get_enabled_strategies() -> list[str]:
     """Get list of enabled strategies."""
     enabled = []
     if STRATEGY_ENABLED_ORDERBOOK_SKEW:
@@ -259,6 +332,7 @@ def get_enabled_strategies() -> List[str]:
     if STRATEGY_ENABLED_ICEBERG_DETECTOR:
         enabled.append("iceberg_detector")
     return enabled
+
 
 def get_strategy_config() -> dict:
     """Get strategy configuration as a dictionary."""

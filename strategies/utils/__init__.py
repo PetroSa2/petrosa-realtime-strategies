@@ -5,8 +5,8 @@ This package contains utility functions and classes for logging,
 circuit breakers, and other common functionality.
 """
 
-from .logger import setup_logging
 from .circuit_breaker import CircuitBreaker
+from .logger import setup_logging
 
 __all__ = [
     "setup_logging",

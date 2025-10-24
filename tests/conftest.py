@@ -2,9 +2,10 @@
 Pytest configuration and fixtures for Petrosa Realtime Strategies tests.
 """
 
+from unittest.mock import Mock
+
 import pytest
 import structlog
-from unittest.mock import Mock
 
 
 @pytest.fixture
@@ -31,9 +32,15 @@ def sample_market_data():
             "event_time": 1234567890000,
             "first_update_id": 123456789,
             "final_update_id": 123456789,
-            "bids": [{"price": "50000.00", "quantity": "1.0"}, {"price": "49999.00", "quantity": "2.0"}],
-            "asks": [{"price": "50001.00", "quantity": "1.0"}, {"price": "50002.00", "quantity": "2.0"}]
-        }
+            "bids": [
+                {"price": "50000.00", "quantity": "1.0"},
+                {"price": "49999.00", "quantity": "2.0"},
+            ],
+            "asks": [
+                {"price": "50001.00", "quantity": "1.0"},
+                {"price": "50002.00", "quantity": "2.0"},
+            ],
+        },
     }
 
 
@@ -51,8 +58,8 @@ def sample_trade_data():
             "seller_order_id": 123456790,
             "trade_time": 1234567890000,
             "is_buyer_maker": False,
-            "event_time": 1234567890000
-        }
+            "event_time": 1234567890000,
+        },
     }
 
 
@@ -83,6 +90,6 @@ def sample_ticker_data():
             "first_id": 123456789,
             "last_id": 123456790,
             "count": 100,
-            "event_time": 1234567890000
-        }
+            "event_time": 1234567890000,
+        },
     }

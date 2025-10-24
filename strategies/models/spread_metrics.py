@@ -14,7 +14,7 @@ from typing import Optional
 class SpreadMetrics:
     """
     Comprehensive spread metrics for a single orderbook snapshot.
-    
+
     Attributes:
         symbol: Trading symbol (e.g., BTCUSDT)
         timestamp: Snapshot timestamp
@@ -28,55 +28,59 @@ class SpreadMetrics:
         ask_volume_top5: Total ask volume in top 5 levels
         total_depth: bid_volume + ask_volume
     """
-    
+
     symbol: str
     timestamp: datetime
-    
+
     # Price levels
     best_bid: float
     best_ask: float
     mid_price: float
-    
+
     # Spread measurements
     spread_abs: float
     spread_bps: float
     spread_pct: float
-    
+
     # Depth context
     bid_volume_top5: float
     ask_volume_top5: float
     total_depth: float
-    
+
     def __post_init__(self):
         """Validate metrics."""
         if self.best_bid <= 0 or self.best_ask <= 0:
-            raise ValueError(f"Invalid bid/ask prices: bid={self.best_bid}, ask={self.best_ask}")
-        
+            raise ValueError(
+                f"Invalid bid/ask prices: bid={self.best_bid}, ask={self.best_ask}"
+            )
+
         if self.best_ask <= self.best_bid:
-            raise ValueError(f"Ask must be greater than bid: bid={self.best_bid}, ask={self.best_ask}")
+            raise ValueError(
+                f"Ask must be greater than bid: bid={self.best_bid}, ask={self.best_ask}"
+            )
 
 
 @dataclass
 class SpreadSnapshot:
     """
     Historical snapshot with comparative metrics.
-    
+
     Used for tracking spread evolution over time and detecting
     significant changes (widening/narrowing events).
     """
-    
+
     metrics: SpreadMetrics
-    
+
     # Comparative metrics (vs recent history)
     spread_ratio: Optional[float] = None  # current_spread / avg_spread
     spread_velocity: Optional[float] = None  # rate of change (% per second)
     persistence_seconds: Optional[float] = None  # time above/below threshold
-    
+
     # Context flags
     is_widening: bool = False  # Spread increasing rapidly
     is_narrowing: bool = False  # Spread decreasing rapidly
     is_abnormal: bool = False  # Spread significantly different from avg
-    
+
     # Depth analysis
     depth_reduction_pct: Optional[float] = None  # % reduction vs avg depth
 
@@ -85,29 +89,28 @@ class SpreadSnapshot:
 class SpreadEvent:
     """
     Detected spread event (widening or narrowing).
-    
+
     Represents a significant liquidity event that may generate
     a trading signal.
     """
-    
+
     event_type: str  # "widening" or "narrowing"
     symbol: str
     timestamp: datetime
-    
+
     # Event metrics
     spread_before_bps: float
     spread_current_bps: float
     spread_ratio: float
     spread_velocity: float
-    
+
     # Persistence
     duration_seconds: float
     persistence_above_threshold: bool
-    
+
     # Signal strength
     confidence: float
     reasoning: str
-    
+
     # Context
     snapshot: SpreadSnapshot
-

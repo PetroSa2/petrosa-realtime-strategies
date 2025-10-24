@@ -1,5 +1,3 @@
-import asyncio
-
 class MessageProcessor:
     def __init__(self, publisher_queue):
         self.publisher_queue = publisher_queue

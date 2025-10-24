@@ -1,7 +1,7 @@
 """
 Market Logic Strategies Package.
 
-This package contains advanced market logic strategies adapted from the 
+This package contains advanced market logic strategies adapted from the
 QTZD MS Cash NoSQL service for cryptocurrency trading, plus microstructure
 strategies for order book analysis.
 """
@@ -14,7 +14,7 @@ from .spread_liquidity import SpreadLiquidityStrategy
 
 __all__ = [
     "BitcoinDominanceStrategy",
-    "CrossExchangeSpreadStrategy", 
+    "CrossExchangeSpreadStrategy",
     "OnChainMetricsStrategy",
     "IcebergDetectorStrategy",
     "SpreadLiquidityStrategy",

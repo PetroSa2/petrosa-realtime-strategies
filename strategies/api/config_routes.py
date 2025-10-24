@@ -6,7 +6,7 @@ All endpoints are LLM-compatible and include detailed documentation.
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
@@ -57,14 +57,14 @@ def get_config_manager() -> StrategyConfigManager:
     description="""
     **For LLM Agents**: Use this endpoint to discover all available trading strategies
     and their current configuration status.
-    
+
     Returns a list of all strategies with:
     - Basic metadata (name, description)
     - Configuration status (has global config, symbol overrides)
     - Parameter count
-    
+
     **Use Case**: Start here to see what strategies exist before modifying their configurations.
-    
+
     **Example Response**:
     ```json
     {
@@ -81,7 +81,7 @@ def get_config_manager() -> StrategyConfigManager:
       ]
     }
     ```
-    
+
     **Next Steps**:
     1. Pick a strategy from the list
     2. Use `GET /strategies/{strategy_id}/schema` to see available parameters
@@ -92,7 +92,7 @@ def get_config_manager() -> StrategyConfigManager:
 async def list_strategies():
     """
     List all available trading strategies with their configuration status.
-    
+
     This endpoint provides an overview of all strategies in the system,
     showing which ones have custom configurations and which symbols have
     strategy-specific overrides.
@@ -100,9 +100,9 @@ async def list_strategies():
     try:
         manager = get_config_manager()
         strategies = await manager.list_strategies()
-        
+
         strategy_list = [StrategyListItem(**strategy) for strategy in strategies]
-        
+
         return APIResponse(
             success=True,
             data=strategy_list,
@@ -122,19 +122,19 @@ async def list_strategies():
     description="""
     **For LLM Agents**: Use this endpoint to understand what parameters a strategy accepts
     BEFORE attempting to modify its configuration.
-    
+
     Returns detailed schema for each parameter including:
     - Data type (int, float, bool, str)
     - Valid range (min/max for numbers)
     - Default value
     - Description of what the parameter controls
     - Example valid value
-    
+
     **Use Case**: Always check the schema before calling POST /strategies/{strategy_id}/config
     to ensure you provide valid parameter values.
-    
+
     **Example Request**: `GET /api/v1/strategies/orderbook_skew/schema`
-    
+
     **Parameter Validation**: The system will reject updates that don't conform to the schema
     (e.g., values outside min/max range, wrong data types).
     """,
@@ -146,14 +146,14 @@ async def get_strategy_schema(
 ):
     """
     Get parameter schema for a strategy.
-    
+
     Returns the complete schema definition for all configurable parameters,
     including types, constraints, and descriptions.
     """
     try:
         schema = get_parameter_schema(strategy_id)
         defaults = get_strategy_defaults(strategy_id)
-        
+
         if not defaults:
             return APIResponse(
                 success=False,
@@ -163,7 +163,7 @@ async def get_strategy_schema(
                     "suggestion": "Use GET /api/v1/strategies to see available strategies",
                 },
             )
-        
+
         schema_items = []
         for param_name, param_value in defaults.items():
             param_schema = schema.get(param_name, {})
@@ -181,7 +181,7 @@ async def get_strategy_schema(
                     example=param_schema.get("example", param_value),
                 )
             )
-        
+
         return APIResponse(
             success=True,
             data=schema_items,
@@ -200,10 +200,10 @@ async def get_strategy_schema(
     summary="Get default parameters for a strategy",
     description="""
     **For LLM Agents**: Use this to see the hardcoded default values for a strategy.
-    
+
     These are the values that will be used if no configuration exists in the database.
     Useful for understanding the baseline behavior before making changes.
-    
+
     **Example Request**: `GET /api/v1/strategies/orderbook_skew/defaults`
     """,
 )
@@ -214,7 +214,7 @@ async def get_strategy_defaults_endpoint(
     try:
         defaults = get_strategy_defaults(strategy_id)
         metadata = get_strategy_metadata(strategy_id)
-        
+
         if not defaults:
             return APIResponse(
                 success=False,
@@ -223,7 +223,7 @@ async def get_strategy_defaults_endpoint(
                     "message": f"Strategy not found: {strategy_id}",
                 },
             )
-        
+
         return APIResponse(
             success=True,
             data=defaults,
@@ -246,17 +246,17 @@ async def get_strategy_defaults_endpoint(
     summary="Get global configuration for a strategy",
     description="""
     **For LLM Agents**: Use this to retrieve the current global configuration for a strategy.
-    
+
     Global configurations apply to all trading symbols unless overridden by symbol-specific configs.
-    
+
     The response indicates:
     - Current parameter values
     - Configuration version (increments with each update)
     - Source (mongodb, environment, or default)
     - When it was created/updated
-    
+
     **Example Request**: `GET /api/v1/strategies/orderbook_skew/config`
-    
+
     **Note**: If source is "default" or "environment", no custom configuration exists yet.
     """,
 )
@@ -267,7 +267,7 @@ async def get_global_config(
     try:
         manager = get_config_manager()
         config = await manager.get_config(strategy_id, symbol=None)
-        
+
         response_data = ConfigResponse(
             strategy_id=strategy_id,
             symbol=None,
@@ -278,7 +278,7 @@ async def get_global_config(
             created_at=config.get("created_at"),
             updated_at=config.get("updated_at"),
         )
-        
+
         return APIResponse(
             success=True,
             data=response_data,
@@ -300,16 +300,16 @@ async def get_global_config(
     summary="Get symbol-specific configuration override",
     description="""
     **For LLM Agents**: Use this to retrieve configuration specific to a trading symbol.
-    
+
     Symbol-specific configurations OVERRIDE global configurations for that symbol.
     This allows different behavior for different trading pairs.
-    
+
     **Priority**: Symbol config > Global config > Environment > Defaults
-    
+
     **Example Use Case**:
     - BTCUSDT might need different thresholds than ETHUSDT due to volatility differences
     - You can set global defaults, then override specific symbols as needed
-    
+
     **Example Request**: `GET /api/v1/strategies/orderbook_skew/config/BTCUSDT`
     """,
 )
@@ -321,7 +321,7 @@ async def get_symbol_config(
     try:
         manager = get_config_manager()
         config = await manager.get_config(strategy_id, symbol=symbol.upper())
-        
+
         response_data = ConfigResponse(
             strategy_id=strategy_id,
             symbol=symbol.upper(),
@@ -332,7 +332,7 @@ async def get_symbol_config(
             created_at=config.get("created_at"),
             updated_at=config.get("updated_at"),
         )
-        
+
         return APIResponse(
             success=True,
             data=response_data,
@@ -354,17 +354,17 @@ async def get_symbol_config(
     summary="Create or update global configuration",
     description="""
     **For LLM Agents**: Use this to modify the global configuration for a strategy.
-    
+
     **IMPORTANT STEPS**:
     1. First call `GET /strategies/{strategy_id}/schema` to see valid parameters
     2. Prepare your parameter updates following the schema constraints
     3. POST to this endpoint with parameters, changed_by, and optional reason
     4. Configuration takes effect within 60 seconds (cache TTL)
-    
+
     **Validation**: Parameters are validated against the schema. Invalid values will be rejected.
-    
+
     **Audit Trail**: All changes are logged with who/what/when/why for tracking.
-    
+
     **Example Request**:
     ```json
     POST /api/v1/strategies/orderbook_skew/config
@@ -379,7 +379,7 @@ async def get_symbol_config(
       "validate_only": false
     }
     ```
-    
+
     **Dry Run**: Set `validate_only: true` to test parameters without saving.
     """,
     status_code=status.HTTP_200_OK,
@@ -391,7 +391,7 @@ async def update_global_config(
     """Create or update global configuration for a strategy."""
     try:
         manager = get_config_manager()
-        
+
         success, config, errors = await manager.set_config(
             strategy_id=strategy_id,
             parameters=request.parameters,
@@ -400,7 +400,7 @@ async def update_global_config(
             reason=request.reason,
             validate_only=request.validate_only,
         )
-        
+
         if not success:
             return APIResponse(
                 success=False,
@@ -410,7 +410,7 @@ async def update_global_config(
                     "details": {"errors": errors},
                 },
             )
-        
+
         if request.validate_only:
             return APIResponse(
                 success=True,
@@ -420,7 +420,7 @@ async def update_global_config(
                     "message": "Parameters are valid but not saved (validate_only=true)",
                 },
             )
-        
+
         response_data = ConfigResponse(
             strategy_id=config.strategy_id,
             symbol=None,
@@ -431,7 +431,7 @@ async def update_global_config(
             created_at=config.created_at.isoformat(),
             updated_at=config.updated_at.isoformat(),
         )
-        
+
         return APIResponse(
             success=True,
             data=response_data,
@@ -453,17 +453,17 @@ async def update_global_config(
     summary="Create or update symbol-specific configuration",
     description="""
     **For LLM Agents**: Use this to create configuration overrides for specific trading symbols.
-    
+
     This allows you to customize strategy behavior for individual trading pairs while keeping
     global defaults for all other pairs.
-    
+
     **Example Scenario**:
     - Global config: buy_threshold = 1.2 (applies to all symbols)
     - BTCUSDT override: buy_threshold = 1.3 (only for BTC)
     - ETHUSDT: uses global (1.2)
-    
+
     **Best Practice**: Start with global config, then add symbol overrides only when needed.
-    
+
     **Example Request**:
     ```json
     POST /api/v1/strategies/orderbook_skew/config/BTCUSDT
@@ -487,7 +487,7 @@ async def update_symbol_config(
     """Create or update symbol-specific configuration for a strategy."""
     try:
         manager = get_config_manager()
-        
+
         success, config, errors = await manager.set_config(
             strategy_id=strategy_id,
             parameters=request.parameters,
@@ -496,7 +496,7 @@ async def update_symbol_config(
             reason=request.reason,
             validate_only=request.validate_only,
         )
-        
+
         if not success:
             return APIResponse(
                 success=False,
@@ -506,7 +506,7 @@ async def update_symbol_config(
                     "details": {"errors": errors},
                 },
             )
-        
+
         if request.validate_only:
             return APIResponse(
                 success=True,
@@ -516,7 +516,7 @@ async def update_symbol_config(
                     "message": "Parameters are valid but not saved (validate_only=true)",
                 },
             )
-        
+
         response_data = ConfigResponse(
             strategy_id=config.strategy_id,
             symbol=symbol.upper(),
@@ -527,7 +527,7 @@ async def update_symbol_config(
             created_at=config.created_at.isoformat(),
             updated_at=config.updated_at.isoformat(),
         )
-        
+
         return APIResponse(
             success=True,
             data=response_data,
@@ -549,10 +549,10 @@ async def update_symbol_config(
     summary="Delete global configuration",
     description="""
     **For LLM Agents**: Use this to remove a global configuration and revert to defaults.
-    
+
     **Warning**: This will delete the configuration from MongoDB.
     After deletion, the strategy will use environment variables or hardcoded defaults.
-    
+
     **Example Request**: `DELETE /api/v1/strategies/orderbook_skew/config?changed_by=admin&reason=Reset to defaults`
     """,
 )
@@ -564,11 +564,11 @@ async def delete_global_config(
     """Delete global configuration for a strategy."""
     try:
         manager = get_config_manager()
-        
+
         success, errors = await manager.delete_config(
             strategy_id=strategy_id, changed_by=changed_by, symbol=None, reason=reason
         )
-        
+
         if not success:
             return APIResponse(
                 success=False,
@@ -578,7 +578,7 @@ async def delete_global_config(
                     "details": {"errors": errors},
                 },
             )
-        
+
         return APIResponse(
             success=True,
             data={"message": "Configuration deleted successfully"},
@@ -597,9 +597,9 @@ async def delete_global_config(
     summary="Delete symbol-specific configuration",
     description="""
     **For LLM Agents**: Use this to remove a symbol-specific configuration override.
-    
+
     After deletion, the symbol will use the global configuration.
-    
+
     **Example Request**: `DELETE /api/v1/strategies/orderbook_skew/config/BTCUSDT?changed_by=admin`
     """,
 )
@@ -612,14 +612,14 @@ async def delete_symbol_config(
     """Delete symbol-specific configuration for a strategy."""
     try:
         manager = get_config_manager()
-        
+
         success, errors = await manager.delete_config(
             strategy_id=strategy_id,
             changed_by=changed_by,
             symbol=symbol.upper(),
             reason=reason,
         )
-        
+
         if not success:
             return APIResponse(
                 success=False,
@@ -629,7 +629,7 @@ async def delete_symbol_config(
                     "details": {"errors": errors},
                 },
             )
-        
+
         return APIResponse(
             success=True,
             data={"message": "Configuration deleted successfully"},
@@ -648,19 +648,19 @@ async def delete_symbol_config(
     summary="Get configuration change history",
     description="""
     **For LLM Agents**: Use this to see the complete history of configuration changes.
-    
+
     The audit trail shows:
     - What changed (old vs new parameters)
     - Who made the change
     - When it was changed
     - Why it was changed (if reason was provided)
-    
+
     This is useful for:
     - Tracking performance impact of parameter changes
     - Understanding configuration evolution
     - Debugging issues related to config changes
     - Rolling back to previous configurations
-    
+
     **Example Request**: `GET /api/v1/strategies/orderbook_skew/audit?limit=50`
     """,
 )
@@ -672,11 +672,11 @@ async def get_audit_trail(
     """Get configuration change history for a strategy."""
     try:
         manager = get_config_manager()
-        
+
         audit_records = await manager.get_audit_trail(
             strategy_id=strategy_id, symbol=symbol, limit=limit
         )
-        
+
         audit_items = [
             AuditTrailItem(
                 id=record.id or "",
@@ -691,7 +691,7 @@ async def get_audit_trail(
             )
             for record in audit_records
         ]
-        
+
         return APIResponse(
             success=True,
             data=audit_items,
@@ -710,15 +710,15 @@ async def get_audit_trail(
     summary="Force refresh configuration cache",
     description="""
     **For LLM Agents**: Use this to immediately clear the configuration cache.
-    
+
     Normally, configuration changes take up to 60 seconds to propagate due to caching.
     Call this endpoint after making configuration changes to force immediate refresh.
-    
+
     **When to use**:
     - After updating multiple configurations
     - When you need changes to take effect immediately
     - For testing configuration changes
-    
+
     **Example Request**: `POST /api/v1/strategies/cache/refresh`
     """,
 )
@@ -727,7 +727,7 @@ async def refresh_cache():
     try:
         manager = get_config_manager()
         await manager.refresh_cache()
-        
+
         return APIResponse(
             success=True,
             data={"message": "Cache refreshed successfully"},
@@ -740,4 +740,3 @@ async def refresh_cache():
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
-

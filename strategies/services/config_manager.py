@@ -12,15 +12,13 @@ Manages runtime configuration for trading strategies with:
 
 import asyncio
 import logging
-import os
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import constants
 from strategies.db.mongodb_client import MongoDBClient
 from strategies.market_logic.defaults import (
-    get_parameter_schema,
     get_strategy_defaults,
     get_strategy_metadata,
     list_all_strategies,
@@ -34,7 +32,7 @@ logger = logging.getLogger(__name__)
 class StrategyConfigManager:
     """
     Strategy configuration manager with MongoDB persistence and caching.
-    
+
     Configuration Resolution Priority:
     1. Cache (if not expired)
     2. MongoDB symbol-specific config
@@ -42,7 +40,7 @@ class StrategyConfigManager:
     4. Environment variables (backward compatibility)
     5. Hardcoded defaults
     """
-    
+
     def __init__(
         self,
         mongodb_client: Optional[MongoDBClient] = None,
@@ -50,21 +48,21 @@ class StrategyConfigManager:
     ):
         """
         Initialize configuration manager.
-        
+
         Args:
             mongodb_client: MongoDB client (will create if None)
             cache_ttl_seconds: Cache TTL in seconds (default: 60)
         """
         self.mongodb_client = mongodb_client
         self.cache_ttl_seconds = cache_ttl_seconds
-        
+
         # Cache: key = f"{strategy_id}:{symbol or 'global'}", value = (config, timestamp)
-        self._cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
-        
+        self._cache: dict[str, tuple[dict[str, Any], float]] = {}
+
         # Background tasks
         self._cache_refresh_task: Optional[asyncio.Task] = None
         self._running = False
-        
+
     async def start(self) -> None:
         """Start the configuration manager and background tasks."""
         # Initialize database connections
@@ -72,32 +70,34 @@ class StrategyConfigManager:
             await self.mongodb_client.connect()
             logger.info("Configuration manager MongoDB connection established")
         else:
-            logger.warning("Configuration manager running without MongoDB (env vars + defaults only)")
-        
+            logger.warning(
+                "Configuration manager running without MongoDB (env vars + defaults only)"
+            )
+
         # Start cache refresh task
         self._running = True
         self._cache_refresh_task = asyncio.create_task(self._cache_refresh_loop())
-        
+
         logger.info(
             f"Configuration manager started (cache_ttl={self.cache_ttl_seconds}s)"
         )
-    
+
     async def stop(self) -> None:
         """Stop the configuration manager and clean up."""
         self._running = False
-        
+
         if self._cache_refresh_task:
             self._cache_refresh_task.cancel()
             try:
                 await self._cache_refresh_task
             except asyncio.CancelledError:
                 pass
-        
+
         if self.mongodb_client:
             await self.mongodb_client.disconnect()
-        
+
         logger.info("Configuration manager stopped")
-    
+
     async def _cache_refresh_loop(self) -> None:
         """Background task to refresh cache periodically."""
         while self._running:
@@ -112,47 +112,47 @@ class StrategyConfigManager:
                 ]
                 for key in expired_keys:
                     del self._cache[key]
-                
+
                 if expired_keys:
                     logger.debug(f"Cleared {len(expired_keys)} expired cache entries")
             except Exception as e:
                 logger.error(f"Cache refresh loop error: {e}")
                 await asyncio.sleep(10)
-    
+
     def _make_cache_key(self, strategy_id: str, symbol: Optional[str]) -> str:
         """Generate cache key for config lookup."""
         symbol_part = symbol or "global"
         return f"{strategy_id}:{symbol_part}"
-    
-    def _get_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+
+    def _get_from_cache(self, cache_key: str) -> Optional[dict[str, Any]]:
         """Get configuration from cache if not expired."""
         if cache_key in self._cache:
             config, timestamp = self._cache[cache_key]
             if time.time() - timestamp < self.cache_ttl_seconds:
                 return config.copy()
         return None
-    
-    def _set_cache(self, cache_key: str, config: Dict[str, Any]) -> None:
+
+    def _set_cache(self, cache_key: str, config: dict[str, Any]) -> None:
         """Store configuration in cache with current timestamp."""
         self._cache[cache_key] = (config.copy(), time.time())
-    
+
     async def get_config(
         self, strategy_id: str, symbol: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get configuration for a strategy.
-        
+
         Implements priority resolution:
         1. Check cache
         2. MongoDB symbol-specific (if symbol provided)
         3. MongoDB global
         4. Environment variables (backward compatibility)
         5. Hardcoded defaults
-        
+
         Args:
             strategy_id: Strategy identifier
             symbol: Optional trading symbol for symbol-specific config
-        
+
         Returns:
             Dictionary containing:
                 - parameters: Dict of parameter values
@@ -161,7 +161,7 @@ class StrategyConfigManager:
                 - is_override: Whether this is a symbol-specific override
         """
         start_time = time.time()
-        
+
         # Check cache first
         cache_key = self._make_cache_key(strategy_id, symbol)
         cached = self._get_from_cache(cache_key)
@@ -169,7 +169,7 @@ class StrategyConfigManager:
             cached["cache_hit"] = True
             cached["load_time_ms"] = (time.time() - start_time) * 1000
             return cached
-        
+
         # Try MongoDB symbol-specific
         if symbol and self.mongodb_client and self.mongodb_client.is_connected:
             config_doc = await self.mongodb_client.get_symbol_config(
@@ -181,7 +181,7 @@ class StrategyConfigManager:
                 result["cache_hit"] = False
                 result["load_time_ms"] = (time.time() - start_time) * 1000
                 return result
-        
+
         # Try MongoDB global
         if self.mongodb_client and self.mongodb_client.is_connected:
             config_doc = await self.mongodb_client.get_global_config(strategy_id)
@@ -191,7 +191,7 @@ class StrategyConfigManager:
                 result["cache_hit"] = False
                 result["load_time_ms"] = (time.time() - start_time) * 1000
                 return result
-        
+
         # Try environment variables (backward compatibility)
         env_params = self._get_from_environment(strategy_id)
         if env_params:
@@ -207,7 +207,7 @@ class StrategyConfigManager:
             result["cache_hit"] = False
             result["load_time_ms"] = (time.time() - start_time) * 1000
             return result
-        
+
         # Use hardcoded defaults
         defaults = get_strategy_defaults(strategy_id)
         result = {
@@ -222,28 +222,32 @@ class StrategyConfigManager:
         result["cache_hit"] = False
         result["load_time_ms"] = (time.time() - start_time) * 1000
         return result
-    
+
     def _doc_to_config_result(
-        self, doc: Dict[str, Any], source: str, is_override: bool
-    ) -> Dict[str, Any]:
+        self, doc: dict[str, Any], source: str, is_override: bool
+    ) -> dict[str, Any]:
         """Convert MongoDB document to config result format."""
         return {
             "parameters": doc.get("parameters", {}),
             "version": doc.get("version", 1),
             "source": source,
             "is_override": is_override,
-            "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
-            "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None,
+            "created_at": doc.get("created_at").isoformat()
+            if doc.get("created_at")
+            else None,
+            "updated_at": doc.get("updated_at").isoformat()
+            if doc.get("updated_at")
+            else None,
         }
-    
-    def _get_from_environment(self, strategy_id: str) -> Dict[str, Any]:
+
+    def _get_from_environment(self, strategy_id: str) -> dict[str, Any]:
         """
         Get configuration from environment variables (backward compatibility).
-        
+
         Reads from constants.py which loads from environment.
         """
         env_params = {}
-        
+
         if strategy_id == "orderbook_skew":
             env_params = {
                 "top_levels": constants.ORDERBOOK_SKEW_TOP_LEVELS,
@@ -288,22 +292,22 @@ class StrategyConfigManager:
                 "volume_threshold": constants.ONCHAIN_VOLUME_THRESHOLD,
                 "min_signal_interval": constants.ONCHAIN_MIN_SIGNAL_INTERVAL,
             }
-        
+
         # Only return if we found env vars (not empty dict)
         return env_params if env_params else {}
-    
+
     async def set_config(
         self,
         strategy_id: str,
-        parameters: Dict[str, Any],
+        parameters: dict[str, Any],
         changed_by: str,
         symbol: Optional[str] = None,
         reason: Optional[str] = None,
         validate_only: bool = False,
-    ) -> Tuple[bool, Optional[StrategyConfig], List[str]]:
+    ) -> tuple[bool, Optional[StrategyConfig], list[str]]:
         """
         Set strategy configuration.
-        
+
         Args:
             strategy_id: Strategy identifier
             parameters: Configuration parameters to set
@@ -311,7 +315,7 @@ class StrategyConfigManager:
             symbol: Trading symbol (None for global)
             reason: Reason for the change
             validate_only: If True, only validate without saving
-        
+
         Returns:
             Tuple of (success, config, errors)
         """
@@ -319,13 +323,13 @@ class StrategyConfigManager:
         is_valid, errors = validate_parameters(strategy_id, parameters)
         if not is_valid:
             return False, None, errors
-        
+
         if validate_only:
             return True, None, []
-        
+
         if not self.mongodb_client or not self.mongodb_client.is_connected:
             return False, None, ["MongoDB not available - cannot save configuration"]
-        
+
         try:
             # Get existing config for version increment
             existing_config = None
@@ -337,28 +341,30 @@ class StrategyConfigManager:
                 existing_config = await self.mongodb_client.get_global_config(
                     strategy_id
                 )
-            
+
             # Create new config
             version = (existing_config.get("version", 0) + 1) if existing_config else 1
             now = datetime.utcnow()
-            
+
             new_config = StrategyConfig(
                 strategy_id=strategy_id,
                 symbol=symbol,
                 parameters=parameters,
                 version=version,
-                created_at=existing_config.get("created_at", now) if existing_config else now,
+                created_at=existing_config.get("created_at", now)
+                if existing_config
+                else now,
                 updated_at=now,
                 created_by=changed_by,
                 metadata={"reason": reason} if reason else {},
             )
-            
+
             # Save to MongoDB
             metadata = {
                 "changed_by": changed_by,
                 "reason": reason,
             }
-            
+
             if symbol:
                 config_id = await self.mongodb_client.upsert_symbol_config(
                     strategy_id, symbol, parameters, metadata
@@ -367,22 +373,24 @@ class StrategyConfigManager:
                 config_id = await self.mongodb_client.upsert_global_config(
                     strategy_id, parameters, metadata
                 )
-            
+
             if not config_id:
                 return False, None, ["Failed to save configuration"]
-            
+
             # Create audit record
             audit = StrategyConfigAudit(
                 strategy_id=strategy_id,
                 symbol=symbol,
                 action="UPDATE" if existing_config else "CREATE",
-                old_parameters=existing_config.get("parameters") if existing_config else None,
+                old_parameters=existing_config.get("parameters")
+                if existing_config
+                else None,
                 new_parameters=parameters,
                 changed_by=changed_by,
                 changed_at=now,
                 reason=reason,
             )
-            
+
             audit_data = {
                 "strategy_id": audit.strategy_id,
                 "symbol": audit.symbol,
@@ -394,45 +402,45 @@ class StrategyConfigManager:
                 "reason": audit.reason,
             }
             await self.mongodb_client.create_audit_record(audit_data)
-            
+
             # Invalidate cache
             cache_key = self._make_cache_key(strategy_id, symbol)
             if cache_key in self._cache:
                 del self._cache[cache_key]
-            
+
             logger.info(
                 f"Config updated: {strategy_id}"
                 f"{' (' + symbol + ')' if symbol else ''} by {changed_by}"
             )
-            
+
             return True, new_config, []
-        
+
         except Exception as e:
             logger.error(f"Error setting config: {e}")
             return False, None, [str(e)]
-    
+
     async def delete_config(
         self,
         strategy_id: str,
         changed_by: str,
         symbol: Optional[str] = None,
         reason: Optional[str] = None,
-    ) -> Tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """
         Delete strategy configuration.
-        
+
         Args:
             strategy_id: Strategy identifier
             changed_by: Who is making the change
             symbol: Trading symbol (None for global)
             reason: Reason for deletion
-        
+
         Returns:
             Tuple of (success, errors)
         """
         if not self.mongodb_client or not self.mongodb_client.is_connected:
             return False, ["MongoDB not available - cannot delete configuration"]
-        
+
         try:
             # Get existing config for audit
             existing_config = None
@@ -444,7 +452,7 @@ class StrategyConfigManager:
                 existing_config = await self.mongodb_client.get_global_config(
                     strategy_id
                 )
-            
+
             # Delete from MongoDB
             if symbol:
                 success = await self.mongodb_client.delete_symbol_config(
@@ -452,10 +460,10 @@ class StrategyConfigManager:
                 )
             else:
                 success = await self.mongodb_client.delete_global_config(strategy_id)
-            
+
             if not success:
                 return False, ["Failed to delete configuration"]
-            
+
             # Create audit record
             if existing_config:
                 audit_data = {
@@ -469,86 +477,88 @@ class StrategyConfigManager:
                     "reason": reason,
                 }
                 await self.mongodb_client.create_audit_record(audit_data)
-            
+
             # Invalidate cache
             cache_key = self._make_cache_key(strategy_id, symbol)
             if cache_key in self._cache:
                 del self._cache[cache_key]
-            
+
             logger.info(
                 f"Config deleted: {strategy_id}"
                 f"{' (' + symbol + ')' if symbol else ''} by {changed_by}"
             )
-            
+
             return True, []
-        
+
         except Exception as e:
             logger.error(f"Error deleting config: {e}")
             return False, [str(e)]
-    
-    async def list_strategies(self) -> List[Dict[str, Any]]:
+
+    async def list_strategies(self) -> list[dict[str, Any]]:
         """
         List all available strategies with their configuration status.
-        
+
         Returns:
             List of strategy info dictionaries
         """
         all_strategy_ids = list_all_strategies()
         result = []
-        
+
         for strategy_id in all_strategy_ids:
             metadata = get_strategy_metadata(strategy_id)
             defaults = get_strategy_defaults(strategy_id)
-            
+
             # Check if has global config
             has_global = False
             if self.mongodb_client and self.mongodb_client.is_connected:
                 global_config = await self.mongodb_client.get_global_config(strategy_id)
                 has_global = global_config is not None
-            
+
             # Get symbol overrides
             symbol_overrides = []
             if self.mongodb_client and self.mongodb_client.is_connected:
                 symbol_overrides = await self.mongodb_client.list_symbol_overrides(
                     strategy_id
                 )
-            
-            result.append({
-                "strategy_id": strategy_id,
-                "name": metadata.get("name", strategy_id),
-                "description": metadata.get("description", ""),
-                "has_global_config": has_global,
-                "symbol_overrides": symbol_overrides,
-                "parameter_count": len(defaults),
-            })
-        
+
+            result.append(
+                {
+                    "strategy_id": strategy_id,
+                    "name": metadata.get("name", strategy_id),
+                    "description": metadata.get("description", ""),
+                    "has_global_config": has_global,
+                    "symbol_overrides": symbol_overrides,
+                    "parameter_count": len(defaults),
+                }
+            )
+
         return result
-    
+
     async def get_audit_trail(
         self,
         strategy_id: str,
         symbol: Optional[str] = None,
         limit: int = 100,
-    ) -> List[StrategyConfigAudit]:
+    ) -> list[StrategyConfigAudit]:
         """
         Get configuration change history.
-        
+
         Args:
             strategy_id: Strategy identifier
             symbol: Optional symbol filter
             limit: Maximum number of records to return
-        
+
         Returns:
             List of audit records (most recent first)
         """
         if not self.mongodb_client or not self.mongodb_client.is_connected:
             return []
-        
+
         try:
             records = await self.mongodb_client.get_audit_trail(
                 strategy_id, symbol, limit
             )
-            
+
             # Convert to StrategyConfigAudit objects
             audit_list = []
             for record in records:
@@ -564,15 +574,14 @@ class StrategyConfigManager:
                     reason=record.get("reason"),
                 )
                 audit_list.append(audit)
-            
+
             return audit_list
-        
+
         except Exception as e:
             logger.error(f"Error getting audit trail: {e}")
             return []
-    
+
     async def refresh_cache(self) -> None:
         """Force immediate cache invalidation."""
         self._cache.clear()
         logger.info("Configuration cache cleared")
-

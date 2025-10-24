@@ -6,16 +6,15 @@ for Kubernetes liveness and readiness probes, plus configuration API.
 """
 
 import asyncio
-import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -25,10 +24,14 @@ from prometheus_client import (
 )
 
 import constants
-from strategies.api.config_routes import router as config_router
-from strategies.api.config_routes import set_config_manager
-from strategies.api.metrics_routes import router as metrics_router
-from strategies.api.metrics_routes import set_depth_analyzer
+from strategies.api.config_routes import (
+    router as config_router,
+    set_config_manager,
+)
+from strategies.api.metrics_routes import (
+    router as metrics_router,
+    set_depth_analyzer,
+)
 
 # Prometheus metrics
 STRATEGY_SIGNALS_GENERATED = Counter(
@@ -88,26 +91,31 @@ class HealthServer:
             # Startup: Attach OTLP handler after uvicorn configures logging
             try:
                 import otel_init
+
                 otel_init.attach_logging_handler()
             except Exception as e:
                 self.logger.warning(f"Failed to attach OTLP logging handler: {e}")
-            
+
             # Set config manager for API routes if available
             if self.config_manager:
                 set_config_manager(self.config_manager)
                 self.logger.info("✅ Configuration manager set for API routes")
             else:
-                self.logger.warning("⚠️  No configuration manager provided - Config API routes will be unavailable")
-            
+                self.logger.warning(
+                    "⚠️  No configuration manager provided - Config API routes will be unavailable"
+                )
+
             # Set depth analyzer for metrics routes if available
             if self.depth_analyzer:
                 set_depth_analyzer(self.depth_analyzer)
                 self.logger.info("✅ Depth analyzer set for metrics API routes")
             else:
-                self.logger.warning("⚠️  No depth analyzer provided - Metrics API routes will be unavailable")
-            
+                self.logger.warning(
+                    "⚠️  No depth analyzer provided - Metrics API routes will be unavailable"
+                )
+
             yield
-            
+
             # Shutdown: Nothing to clean up
 
         # FastAPI app with lifespan
@@ -121,6 +129,7 @@ class HealthServer:
         # Instrument FastAPI for OpenTelemetry tracing
         try:
             from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
             FastAPIInstrumentor.instrument_app(self.app)
             self.logger.info("✅ FastAPI instrumented for OpenTelemetry tracing")
         except Exception as e:
@@ -129,7 +138,7 @@ class HealthServer:
         # Include configuration API router
         self.app.include_router(config_router)
         self.logger.info("✅ Configuration API routes registered")
-        
+
         # Include market metrics API router
         self.app.include_router(metrics_router)
         self.logger.info("✅ Market metrics API routes registered")
@@ -237,7 +246,7 @@ class HealthServer:
         except Exception as e:
             self.logger.error(f"Health server error: {e}")
 
-    async def _get_health_status(self) -> Dict[str, Any]:
+    async def _get_health_status(self) -> dict[str, Any]:
         """Get health status for liveness probe."""
         try:
             # Update uptime
@@ -279,7 +288,7 @@ class HealthServer:
             self.logger.error(f"Health check failed: {e}")
             raise HTTPException(status_code=503, detail=f"Health check failed: {e}")
 
-    async def _get_readiness_status(self) -> Dict[str, Any]:
+    async def _get_readiness_status(self) -> dict[str, Any]:
         """Get readiness status for readiness probe."""
         try:
             # Get health status first
@@ -352,7 +361,7 @@ class HealthServer:
                 content=f"# Error generating metrics: {e}\n", status_code=500
             )
 
-    async def _get_metrics(self) -> Dict[str, Any]:
+    async def _get_metrics(self) -> dict[str, Any]:
         """Get service metrics."""
         try:
             metrics = {
@@ -388,7 +397,7 @@ class HealthServer:
             self.logger.error(f"Failed to get metrics: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to get metrics: {e}")
 
-    async def _get_service_info(self) -> Dict[str, Any]:
+    async def _get_service_info(self) -> dict[str, Any]:
         """Get service information."""
         try:
             info = {
@@ -456,11 +465,11 @@ class HealthServer:
         except Exception:
             return 0.0
 
-    def update_health_status(self, status: Dict[str, Any]) -> None:
+    def update_health_status(self, status: dict[str, Any]) -> None:
         """Update health status with external information."""
         self.health_status.update(status)
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """Get current health status."""
         return self.health_status.copy()
 
@@ -468,7 +477,7 @@ class HealthServer:
         """Check if the service is healthy."""
         return self.health_status.get("status") == "healthy"
 
-    def _get_component_metrics(self) -> Dict[str, Any]:
+    def _get_component_metrics(self) -> dict[str, Any]:
         """Get metrics from all service components."""
         components = {}
 
