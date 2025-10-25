@@ -31,6 +31,11 @@ from strategies.models.market_data import (
     TradeData,
 )
 from strategies.utils.circuit_breaker import CircuitBreaker
+from strategies.utils.metrics import (
+    MetricsContext,
+    RealtimeStrategyMetrics,
+    initialize_metrics,
+)
 
 
 class NATSConsumer:
@@ -77,6 +82,14 @@ class NATSConsumer:
         self.processing_times = []
         self.max_processing_time = 0.0
         self.avg_processing_time = 0.0
+
+        # Initialize OpenTelemetry custom business metrics
+        self.metrics = initialize_metrics()
+        self.logger.info(
+            "Custom business metrics initialized",
+            event_type="metrics_initialized",
+            meter_name="petrosa.realtime.strategies",
+        )
 
         # Initialize market logic strategies (from QTZD adaptation)
         self.market_logic_strategies = {}
@@ -294,6 +307,7 @@ class NATSConsumer:
         """Process a single NATS message."""
         start_time = time.time()
         processing_time = 0.0
+        message_data = None
 
         try:
             # Parse message data
@@ -304,7 +318,15 @@ class NATSConsumer:
             market_data = self._parse_market_data(message_data)
             if not market_data:
                 self.logger.warning("Invalid market data message", data=message_data)
+                self.metrics.record_error("invalid_message")
                 return
+
+            # Determine message type for metrics
+            message_type = market_data.stream_type or "unknown"
+            symbol = market_data.symbol or "UNKNOWN"
+
+            # Record message type received
+            self.metrics.record_message_type(message_type)
 
             # Process message through strategies
             await self._process_market_data(market_data)
@@ -319,6 +341,14 @@ class NATSConsumer:
             # Update processing time metrics
             self._update_processing_metrics(processing_time)
 
+            # Record message processed with OpenTelemetry metrics
+            self.metrics.record_message_processed(symbol, message_type)
+
+            # Update consumer lag (time since message was created)
+            if hasattr(market_data, "timestamp") and market_data.timestamp:
+                lag_seconds = time.time() - market_data.timestamp.timestamp()
+                self.metrics.update_consumer_lag(max(0, lag_seconds))
+
             self.logger.debug(
                 "Message processed successfully",
                 message_count=self.message_count,
@@ -329,9 +359,10 @@ class NATSConsumer:
             self.logger.error(
                 "Error processing message",
                 error=str(e),
-                message_data=message_data if "message_data" in locals() else None,
+                message_data=message_data if message_data else None,
             )
             self.error_count += 1
+            self.metrics.record_error("message_processing")
 
     def _parse_market_data(
         self, message_data: dict[str, Any]
@@ -540,28 +571,37 @@ class NATSConsumer:
         """Process microstructure strategies (spread liquidity, iceberg detector)."""
         try:
             for strategy_name, strategy in self.microstructure_strategies.items():
-                try:
-                    # Analyze order book
-                    signal = strategy.analyze(symbol=symbol, bids=bids, asks=asks)
+                # Use metrics context for timing and signal recording
+                with MetricsContext(
+                    strategy=strategy_name, symbol=symbol, metrics=self.metrics
+                ) as ctx:
+                    try:
+                        # Analyze order book
+                        signal = strategy.analyze(symbol=symbol, bids=bids, asks=asks)
 
-                    if signal:
-                        # Publish signal
-                        await self.publisher.publish_signal(signal)
+                        if signal:
+                            # Record signal in metrics
+                            ctx.record_signal(signal.action, signal.confidence)
 
-                        self.logger.info(
-                            f"Microstructure signal: {strategy_name}",
+                            # Publish signal
+                            await self.publisher.publish_signal(signal)
+
+                            self.logger.info(
+                                f"Microstructure signal: {strategy_name}",
+                                symbol=symbol,
+                                action=signal.action,
+                                confidence=round(signal.confidence, 2),
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error in {strategy_name} strategy",
+                            error=str(e),
                             symbol=symbol,
-                            action=signal.action,
-                            confidence=round(signal.confidence, 2),
                         )
-                except Exception as e:
-                    self.logger.error(
-                        f"Error in {strategy_name} strategy",
-                        error=str(e),
-                        symbol=symbol,
-                    )
+                        # Error is automatically recorded by MetricsContext
         except Exception as e:
             self.logger.error(f"Error processing microstructure strategies: {e}")
+            self.metrics.record_error("microstructure_processing")
 
     async def _process_trade_data(self, market_data: MarketDataMessage) -> None:
         """Process trade data."""
@@ -583,35 +623,54 @@ class NATSConsumer:
         """
         try:
             signals_to_publish = []
+            symbol = market_data.symbol or "UNKNOWN"
 
             # Process through each enabled market logic strategy
             for strategy_name, strategy in self.market_logic_strategies.items():
-                try:
-                    if strategy_name == "btc_dominance":
-                        # Bitcoin Dominance Strategy
-                        signal = await strategy.process_market_data(market_data)
-                        if signal:
-                            signals_to_publish.append(signal)
+                # Use metrics context for timing and signal recording
+                with MetricsContext(
+                    strategy=strategy_name, symbol=symbol, metrics=self.metrics
+                ) as ctx:
+                    try:
+                        if strategy_name == "btc_dominance":
+                            # Bitcoin Dominance Strategy
+                            signal = await strategy.process_market_data(market_data)
+                            if signal:
+                                ctx.record_signal(
+                                    signal.signal_type, signal.confidence_score
+                                )
+                                signals_to_publish.append(signal)
 
-                    elif strategy_name == "cross_exchange_spread":
-                        # Cross-Exchange Spread Strategy (can return multiple signals)
-                        signals = await strategy.process_market_data(market_data)
-                        if signals:
-                            if isinstance(signals, list):
-                                signals_to_publish.extend(signals)
-                            else:
-                                signals_to_publish.append(signals)
+                        elif strategy_name == "cross_exchange_spread":
+                            # Cross-Exchange Spread Strategy (can return multiple signals)
+                            signals = await strategy.process_market_data(market_data)
+                            if signals:
+                                if isinstance(signals, list):
+                                    for sig in signals:
+                                        ctx.record_signal(
+                                            sig.signal_type, sig.confidence_score
+                                        )
+                                    signals_to_publish.extend(signals)
+                                else:
+                                    ctx.record_signal(
+                                        signals.signal_type, signals.confidence_score
+                                    )
+                                    signals_to_publish.append(signals)
 
-                    elif strategy_name == "onchain_metrics":
-                        # On-Chain Metrics Strategy
-                        signal = await strategy.process_market_data(market_data)
-                        if signal:
-                            signals_to_publish.append(signal)
+                        elif strategy_name == "onchain_metrics":
+                            # On-Chain Metrics Strategy
+                            signal = await strategy.process_market_data(market_data)
+                            if signal:
+                                ctx.record_signal(
+                                    signal.signal_type, signal.confidence_score
+                                )
+                                signals_to_publish.append(signal)
 
-                except Exception as e:
-                    self.logger.error(
-                        f"Error in {strategy_name} strategy", error=str(e)
-                    )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error in {strategy_name} strategy", error=str(e)
+                        )
+                        # Error is automatically recorded by MetricsContext
 
             # Publish generated signals (QTZD-style batch publishing)
             if signals_to_publish:
@@ -619,6 +678,7 @@ class NATSConsumer:
 
         except Exception as e:
             self.logger.error("Error processing market logic strategies", error=str(e))
+            self.metrics.record_error("market_logic_processing")
 
     async def _publish_market_logic_signals(self, signals) -> None:
         """
