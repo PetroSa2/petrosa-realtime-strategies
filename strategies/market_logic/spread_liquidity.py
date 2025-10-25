@@ -17,7 +17,7 @@ from typing import Optional
 
 import structlog
 
-from strategies.models.signals import Signal
+from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 from strategies.models.spread_metrics import SpreadEvent, SpreadMetrics, SpreadSnapshot
 
 logger = structlog.get_logger(__name__)
@@ -374,50 +374,60 @@ class SpreadLiquidityStrategy:
 
         metrics = snapshot.metrics
 
-        # Determine action
+        # Determine signal type and action
         if event.event_type == "narrowing":
-            action = "buy"
+            signal_type = SignalType.BUY
+            signal_action = SignalAction.OPEN_LONG
         elif event.event_type == "widening":
-            action = "sell"
+            signal_type = SignalType.SELL
+            signal_action = SignalAction.OPEN_SHORT
         else:
             return None
+
+        # Map confidence float to enum
+        confidence_score = event.confidence
+        if confidence_score >= 0.8:
+            confidence_level = SignalConfidence.HIGH
+        elif confidence_score >= 0.6:
+            confidence_level = SignalConfidence.MEDIUM
+        else:
+            confidence_level = SignalConfidence.LOW
 
         # Calculate risk management levels
         atr_proxy = metrics.spread_abs * 2  # Rough ATR approximation
 
-        if action == "buy":
+        if signal_type == SignalType.BUY:
             stop_loss = metrics.mid_price - atr_proxy
             take_profit = metrics.mid_price + (atr_proxy * 2)
-        else:  # sell
+        else:  # SELL
             stop_loss = metrics.mid_price + atr_proxy
             take_profit = metrics.mid_price - (atr_proxy * 2)
 
-        # Create signal
+        # Create signal with all required fields
         signal = Signal(
-            strategy_id="spread_liquidity",
             symbol=event.symbol,
-            action=action,
-            confidence=event.confidence,
+            signal_type=signal_type,
+            signal_action=signal_action,
+            confidence=confidence_level,
+            confidence_score=confidence_score,
             price=metrics.mid_price,
-            current_price=metrics.mid_price,
-            quantity=0.001,  # Will be calculated by TradeEngine
-            timeframe="tick",
-            stop_loss=stop_loss,
-            take_profit=take_profit,
-            indicators={
-                "spread_bps": metrics.spread_bps,
-                "spread_ratio": snapshot.spread_ratio,
-                "spread_velocity": snapshot.spread_velocity,
-                "total_depth": metrics.total_depth,
-                "depth_reduction_pct": snapshot.depth_reduction_pct,
-            },
+            strategy_name="Spread Liquidity Monitor",
             metadata={
-                "strategy": "spread_liquidity",
+                "strategy_id": "spread_liquidity",
                 "event_type": event.event_type,
                 "reasoning": event.reasoning,
                 "persistence_seconds": event.duration_seconds,
                 "best_bid": metrics.best_bid,
                 "best_ask": metrics.best_ask,
+                "spread_bps": metrics.spread_bps,
+                "spread_ratio": snapshot.spread_ratio,
+                "spread_velocity": snapshot.spread_velocity,
+                "total_depth": metrics.total_depth,
+                "depth_reduction_pct": snapshot.depth_reduction_pct,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "quantity": 0.001,
+                "timeframe": "tick",
             },
         )
 
@@ -425,10 +435,11 @@ class SpreadLiquidityStrategy:
         self.last_signal_time[event.symbol] = current_time
 
         logger.info(
-            f"Spread signal generated: {action.upper()}",
+            f"Spread signal generated: {signal_type.value}",
             symbol=event.symbol,
             event_type=event.event_type,
-            confidence=round(event.confidence, 2),
+            confidence=confidence_level.value,
+            confidence_score=round(confidence_score, 2),
             spread_bps=round(metrics.spread_bps, 2),
             spread_ratio=round(snapshot.spread_ratio, 2),
         )

@@ -97,19 +97,21 @@ class TestConfigManager:
 
     @pytest.mark.asyncio
     async def test_all_strategies_have_defaults(self):
-        """Test that all 6 strategies have defaults configured."""
+        """Test that all strategies have defaults configured."""
         from strategies.market_logic.defaults import list_all_strategies
 
         all_strategies = list_all_strategies()
 
-        # Should have all 6 strategies
-        assert len(all_strategies) == 6
+        # Should have all 8 strategies (including microstructure strategies)
+        assert len(all_strategies) == 8
         assert "orderbook_skew" in all_strategies
         assert "trade_momentum" in all_strategies
         assert "ticker_velocity" in all_strategies
         assert "btc_dominance" in all_strategies
         assert "cross_exchange_spread" in all_strategies
         assert "onchain_metrics" in all_strategies
+        assert "iceberg_detector" in all_strategies
+        assert "spread_liquidity" in all_strategies
 
         # Each should have defaults
         for strategy_id in all_strategies:

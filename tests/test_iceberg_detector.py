@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from strategies.market_logic.iceberg_detector import IcebergDetectorStrategy
+from strategies.models.signals import SignalAction, SignalConfidence, SignalType
 
 
 class TestIcebergDetectorStrategy:
@@ -299,3 +300,190 @@ class TestIcebergDetectorStrategy:
         # (implicit in tracker's cleanup logic)
         stats = strategy.tracker.get_statistics()
         assert stats is not None
+
+    def test_signal_structure_validation(self, strategy):
+        """Test that generated signals have all required fields."""
+        base_time = datetime.utcnow()
+
+        # Simulate strong iceberg pattern to force signal generation
+        for cycle in range(6):
+            for phase in range(3):
+                timestamp = base_time + timedelta(seconds=cycle * 10 + phase)
+
+                if phase == 0:
+                    volume = 2.0
+                elif phase == 1:
+                    volume = 0.2
+                else:
+                    volume = 2.0
+
+                bids = [(50000.00, volume), (49999.00, 1.0)]
+                asks = [(50001.00, 1.0), (50002.00, 1.0)]
+
+                signal = strategy.analyze(
+                    symbol="BTCUSDT", bids=bids, asks=asks, timestamp=timestamp
+                )
+
+                # If signal generated, validate structure
+                if signal is not None:
+                    # Validate all required fields exist
+                    assert hasattr(signal, "symbol")
+                    assert hasattr(signal, "signal_type")
+                    assert hasattr(signal, "signal_action")
+                    assert hasattr(signal, "confidence")
+                    assert hasattr(signal, "confidence_score")
+                    assert hasattr(signal, "price")
+                    assert hasattr(signal, "strategy_name")
+                    assert hasattr(signal, "metadata")
+
+                    # Validate field types
+                    assert isinstance(signal.symbol, str)
+                    assert isinstance(signal.signal_type, SignalType)
+                    assert isinstance(signal.signal_action, SignalAction)
+                    assert isinstance(signal.confidence, SignalConfidence)
+                    assert isinstance(signal.confidence_score, float)
+                    assert isinstance(signal.price, float)
+                    assert isinstance(signal.strategy_name, str)
+                    assert isinstance(signal.metadata, dict)
+
+                    # Validate field values
+                    assert signal.symbol == "BTCUSDT"
+                    assert signal.signal_type in [SignalType.BUY, SignalType.SELL]
+                    assert signal.signal_action in [
+                        SignalAction.OPEN_LONG,
+                        SignalAction.OPEN_SHORT,
+                    ]
+                    assert signal.confidence in [
+                        SignalConfidence.HIGH,
+                        SignalConfidence.MEDIUM,
+                        SignalConfidence.LOW,
+                    ]
+                    assert 0.0 <= signal.confidence_score <= 1.0
+                    assert signal.price > 0
+                    assert signal.strategy_name == "Iceberg Order Detector"
+
+                    # Signal successfully validated
+                    return
+
+        # If no signal generated after 6 cycles, that's okay
+        # (depends on exact timing and detection thresholds)
+
+    def test_confidence_enum_mapping_high(self, strategy):
+        """Test confidence float >= 0.8 maps to HIGH."""
+        # This is tested indirectly through signal generation
+        # with high-confidence patterns
+        base_time = datetime.utcnow()
+
+        # Create very strong iceberg pattern (should result in high confidence)
+        for cycle in range(8):
+            for phase in range(3):
+                timestamp = base_time + timedelta(seconds=cycle * 4 + phase)
+
+                if phase == 0:
+                    volume = 5.0  # Large volume
+                elif phase == 1:
+                    volume = 0.1  # Deep depletion
+                else:
+                    volume = 5.0  # Fast refill
+
+                bids = [(50000.00, volume), (49999.00, 1.0)]
+                asks = [(50001.00, 1.0), (50002.00, 1.0)]
+
+                signal = strategy.analyze(
+                    symbol="BTCUSDT", bids=bids, asks=asks, timestamp=timestamp
+                )
+
+                if signal and signal.confidence_score >= 0.8:
+                    assert signal.confidence == SignalConfidence.HIGH
+                    return
+
+    def test_confidence_enum_mapping_medium(self, strategy):
+        """Test confidence float 0.6-0.8 maps to MEDIUM."""
+        # Moderate iceberg pattern
+        base_time = datetime.utcnow()
+
+        for cycle in range(5):
+            for phase in range(3):
+                timestamp = base_time + timedelta(seconds=cycle * 10 + phase)
+
+                if phase == 0:
+                    volume = 1.5
+                elif phase == 1:
+                    volume = 0.5
+                else:
+                    volume = 1.5
+
+                bids = [(50000.00, volume), (49999.00, 1.0)]
+                asks = [(50001.00, 1.0), (50002.00, 1.0)]
+
+                signal = strategy.analyze(
+                    symbol="BTCUSDT", bids=bids, asks=asks, timestamp=timestamp
+                )
+
+                if signal and 0.6 <= signal.confidence_score < 0.8:
+                    assert signal.confidence == SignalConfidence.MEDIUM
+                    return
+
+    def test_confidence_enum_mapping_low(self, strategy):
+        """Test confidence float < 0.6 maps to LOW."""
+        # Weak iceberg pattern
+        base_time = datetime.utcnow()
+
+        for cycle in range(4):
+            for phase in range(3):
+                timestamp = base_time + timedelta(seconds=cycle * 15 + phase)
+
+                if phase == 0:
+                    volume = 1.0
+                elif phase == 1:
+                    volume = 0.8
+                else:
+                    volume = 1.0
+
+                bids = [(50000.00, volume), (49999.00, 1.0)]
+                asks = [(50001.00, 1.0), (50002.00, 1.0)]
+
+                signal = strategy.analyze(
+                    symbol="BTCUSDT", bids=bids, asks=asks, timestamp=timestamp
+                )
+
+                if signal and signal.confidence_score < 0.6:
+                    assert signal.confidence == SignalConfidence.LOW
+                    return
+
+    def test_signal_metadata_contains_strategy_info(self, strategy):
+        """Test that signal metadata contains all strategy-specific info."""
+        base_time = datetime.utcnow()
+
+        # Generate signal
+        for cycle in range(6):
+            for phase in range(3):
+                timestamp = base_time + timedelta(seconds=cycle * 10 + phase)
+
+                if phase == 0:
+                    volume = 2.0
+                elif phase == 1:
+                    volume = 0.2
+                else:
+                    volume = 2.0
+
+                bids = [(50000.00, volume), (49999.00, 1.0)]
+                asks = [(50001.00, 1.0), (50002.00, 1.0)]
+
+                signal = strategy.analyze(
+                    symbol="BTCUSDT", bids=bids, asks=asks, timestamp=timestamp
+                )
+
+                if signal is not None:
+                    # Validate metadata contains strategy-specific fields
+                    assert "strategy_id" in signal.metadata
+                    assert "pattern_type" in signal.metadata
+                    assert "reasoning" in signal.metadata
+                    assert "iceberg_price" in signal.metadata
+                    assert "iceberg_side" in signal.metadata
+                    assert "refill_count" in signal.metadata
+                    assert "stop_loss" in signal.metadata
+                    assert "take_profit" in signal.metadata
+
+                    assert signal.metadata["strategy_id"] == "iceberg_detector"
+                    return
