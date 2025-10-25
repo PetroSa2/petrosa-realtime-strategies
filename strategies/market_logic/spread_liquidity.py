@@ -424,7 +424,6 @@ class SpreadLiquidityStrategy:
                 "spread_velocity": snapshot.spread_velocity,
                 "total_depth": metrics.total_depth,
                 "depth_reduction_pct": snapshot.depth_reduction_pct,
-                "current_price": metrics.mid_price,
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "quantity": 0.001,

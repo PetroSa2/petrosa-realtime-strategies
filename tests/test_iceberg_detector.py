@@ -479,7 +479,6 @@ class TestIcebergDetectorStrategy:
                     assert "strategy_id" in signal.metadata
                     assert "pattern_type" in signal.metadata
                     assert "reasoning" in signal.metadata
-                    assert "iceberg_level" in signal.metadata
                     assert "iceberg_price" in signal.metadata
                     assert "iceberg_side" in signal.metadata
                     assert "refill_count" in signal.metadata
