@@ -154,8 +154,8 @@ class TestSpreadLiquidityStrategy:
         # May or may not generate signal depending on velocity
         # At minimum, event should be tracked
         if signal:
-            from strategies.models.signals import SignalType, SignalConfidence
-            
+            from strategies.models.signals import SignalConfidence, SignalType
+
             assert signal.signal_type == SignalType.BUY
             assert signal.confidence in [
                 SignalConfidence.HIGH,
