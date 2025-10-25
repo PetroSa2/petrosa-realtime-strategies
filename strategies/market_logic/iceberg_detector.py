@@ -17,7 +17,7 @@ from typing import Optional
 import structlog
 
 from strategies.models.orderbook_tracker import IcebergPattern, OrderBookTracker
-from strategies.models.signals import Signal
+from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 
 logger = structlog.get_logger(__name__)
 
@@ -189,60 +189,72 @@ class IcebergDetectorStrategy:
                 )
                 return None
 
-        # Determine action based on iceberg side
+        # Determine signal type and action based on iceberg side
         if iceberg.side == "bid":
-            # Hidden buyer (support) → BUY
-            action = "buy"
+            # Hidden buyer (support) → BUY signal
+            signal_type = SignalType.BUY
+            signal_action = SignalAction.OPEN_LONG
             reasoning = f"Large hidden buyer detected at {iceberg.price} ({iceberg.pattern_type})"
         elif iceberg.side == "ask":
-            # Hidden seller (resistance) → SELL
-            action = "sell"
+            # Hidden seller (resistance) → SELL signal
+            signal_type = SignalType.SELL
+            signal_action = SignalAction.OPEN_SHORT
             reasoning = f"Large hidden seller detected at {iceberg.price} ({iceberg.pattern_type})"
         else:
             return None
+
+        # Calculate confidence score and map to enum
+        confidence_score = iceberg.confidence
+        if confidence_score >= 0.8:
+            confidence_level = SignalConfidence.HIGH
+        elif confidence_score >= 0.6:
+            confidence_level = SignalConfidence.MEDIUM
+        else:
+            confidence_level = SignalConfidence.LOW
 
         # Calculate risk management levels
         # Use distance to iceberg level as ATR proxy
         distance_to_level = abs(current_price - iceberg.price)
         atr_proxy = max(distance_to_level, current_price * 0.005)  # Min 0.5%
 
-        if action == "buy":
+        if signal_type == SignalType.BUY:
             # Enter near support, stop below iceberg
             entry_price = current_price
             stop_loss = iceberg.price - atr_proxy
             take_profit = entry_price + (atr_proxy * 2.5)
-        else:  # sell
+        else:  # SELL
             # Enter near resistance, stop above iceberg
             entry_price = current_price
             stop_loss = iceberg.price + atr_proxy
             take_profit = entry_price - (atr_proxy * 2.5)
 
-        # Create signal
+        # Create signal with all required fields
         signal = Signal(
-            strategy_id="iceberg_detector",
             symbol=iceberg.symbol,
-            action=action,
-            confidence=iceberg.confidence,
+            signal_type=signal_type,
+            signal_action=signal_action,
+            confidence=confidence_level,
+            confidence_score=confidence_score,
             price=entry_price,
-            current_price=current_price,
-            quantity=0.001,  # Will be calculated by TradeEngine
-            timeframe="tick",
-            stop_loss=stop_loss,
-            take_profit=take_profit,
-            indicators={
+            strategy_name="Iceberg Order Detector",
+            metadata={
+                "strategy_id": "iceberg_detector",
+                "pattern_type": iceberg.pattern_type,
+                "reasoning": reasoning,
+                "distance_to_level_pct": (distance_to_level / current_price) * 100,
+                "iceberg_level": iceberg.price,
                 "iceberg_price": iceberg.price,
                 "iceberg_side": iceberg.side,
                 "refill_count": iceberg.refill_count,
                 "avg_refill_speed": iceberg.avg_refill_speed_seconds,
                 "volume_consistency": iceberg.volume_consistency_score,
                 "persistence_seconds": iceberg.persistence_seconds,
-            },
-            metadata={
-                "strategy": "iceberg_detector",
-                "pattern_type": iceberg.pattern_type,
-                "reasoning": reasoning,
-                "distance_to_level_pct": (distance_to_level / current_price) * 100,
-                "iceberg_level": iceberg.price,
+                "current_price": current_price,
+                "entry_price": entry_price,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "quantity": 0.001,
+                "timeframe": "tick",
             },
         )
 
@@ -250,12 +262,13 @@ class IcebergDetectorStrategy:
         self.last_signal_time[signal_key] = current_time
 
         logger.info(
-            f"Iceberg signal generated: {action.upper()}",
+            f"Iceberg signal generated: {signal_type.value}",
             symbol=iceberg.symbol,
             iceberg_price=round(iceberg.price, 2),
             current_price=round(current_price, 2),
             pattern_type=iceberg.pattern_type,
-            confidence=round(iceberg.confidence, 2),
+            confidence=confidence_level.value,
+            confidence_score=round(confidence_score, 2),
             refill_count=iceberg.refill_count,
         )
 
