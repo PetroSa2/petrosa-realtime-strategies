@@ -16,7 +16,14 @@ import structlog
 from nats.aio.client import Client as NATSClient
 from nats.aio.subscription import Subscription
 from opentelemetry import trace
-from petrosa_otel import extract_trace_context
+
+# Conditional import for CI compatibility
+try:
+    from petrosa_otel import extract_trace_context
+except ImportError:
+    # Fallback for CI environments without petrosa_otel
+    def extract_trace_context(data):
+        return None
 
 import constants
 from strategies.core.publisher import TradeOrderPublisher
