@@ -12,7 +12,14 @@ from typing import Any, Optional
 import nats
 import structlog
 from nats.aio.client import Client as NATSClient
-from petrosa_otel import inject_trace_context
+
+# Conditional import for CI compatibility
+try:
+    from petrosa_otel import inject_trace_context
+except ImportError:
+    # Fallback for CI environments without petrosa_otel
+    def inject_trace_context(data):
+        return data
 
 import constants
 from strategies.models.orders import OrderResponse, TradeOrder
