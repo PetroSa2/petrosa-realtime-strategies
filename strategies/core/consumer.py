@@ -332,7 +332,7 @@ class NATSConsumer:
             # Create span with extracted context for distributed tracing
             with tracer.start_as_current_span(
                 "process_market_data_message",
-                context=ctx,
+                context=ctx if ctx is not None else None,
                 kind=trace.SpanKind.CONSUMER,
             ) as span:
                 try:
@@ -351,6 +351,12 @@ class NATSConsumer:
                             "Invalid market data message", data=message_data
                         )
                         self.metrics.record_error("invalid_message")
+                        span.set_status(
+                            trace.Status(
+                                trace.StatusCode.ERROR,
+                                description="Invalid market data message",
+                            )
+                        )
                         return
 
                     # Determine message type for metrics
