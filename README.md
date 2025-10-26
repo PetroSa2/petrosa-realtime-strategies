@@ -976,6 +976,65 @@ spec:
 3. **No Shared State**: No coordination required between pods
 4. **Linear Scalability**: Performance scales with pod count
 
+---
+
+## Monitoring & Observability
+
+### Grafana Dashboard
+📊 **[Realtime Strategies Business Metrics](https://grafana.com/)** (Dashboard pending import - see [issue #72](https://github.com/PetroSa2/petrosa-realtime-strategies/issues/72))
+
+The service exposes comprehensive business metrics via OpenTelemetry:
+
+#### Key Metrics
+- **Message Processing Rate**: `rate(realtime_messages_processed_total[1m])`
+- **Strategy Latency (p95)**: `histogram_quantile(0.95, rate(realtime_strategy_latency_bucket[1m]))`
+- **Consumer Lag**: `realtime_consumer_lag`
+- **Signal Generation Rate**: `rate(realtime_signals_generated_total[1m])`
+- **Strategy Success Rate**: `rate(realtime_strategy_executions_total{result="success"}[1m]) / rate(realtime_strategy_executions_total[1m])`
+
+#### Expected Performance
+- Message processing: **1000+ msg/sec**
+- Strategy latency (p95): **< 50ms**
+- Consumer lag: **< 5 seconds**
+- Strategy success rate: **> 90%**
+
+### Documentation
+- 📖 [Complete Metrics Guide](docs/BUSINESS_METRICS.md) - Metric descriptions, PromQL queries, alerting rules
+- 🎨 [Grafana Dashboard Config](docs/grafana-dashboard.json) - Dashboard JSON for import
+
+### Quick Troubleshooting
+
+**High consumer lag?**
+```bash
+# Check message processing rate
+kubectl logs -n petrosa-apps deployment/petrosa-realtime-strategies | grep "Message processed"
+
+# Scale horizontally if needed
+kubectl scale deployment/petrosa-realtime-strategies --replicas=5 -n petrosa-apps
+```
+
+**High strategy latency?**
+```bash
+# Check which strategy is slow
+curl http://petrosa-realtime-strategies:8080/metrics | grep strategy_latency
+
+# Review strategy configuration
+curl http://petrosa-realtime-strategies:8080/api/v1/strategies
+```
+
+**No signals being generated?**
+```bash
+# Check strategy execution results
+curl http://petrosa-realtime-strategies:8080/metrics | grep strategy_executions
+
+# Verify strategies are enabled
+python -m strategies.main config
+```
+
+See [BUSINESS_METRICS.md](docs/BUSINESS_METRICS.md#troubleshooting) for complete troubleshooting guide.
+
+---
+
 ### Monitoring
 
 **Heartbeat Logs (Every 60s):**
