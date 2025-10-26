@@ -12,6 +12,7 @@ from typing import Any, Optional
 import nats
 import structlog
 from nats.aio.client import Client as NATSClient
+from petrosa_otel import inject_trace_context
 
 import constants
 from strategies.models.orders import OrderResponse, TradeOrder
@@ -198,7 +199,9 @@ class TradeOrderPublisher:
             order_messages = []
             for order in orders:
                 order_dict = order.to_dict()
-                order_messages.append(json.dumps(order_dict))
+                # Inject trace context into order for distributed tracing
+                order_dict_with_trace = inject_trace_context(order_dict)
+                order_messages.append(json.dumps(order_dict_with_trace))
 
             # Publish messages to NATS
             for order_message in order_messages:
@@ -293,7 +296,9 @@ class TradeOrderPublisher:
         try:
             # Convert order to JSON
             order_dict = order.to_dict()
-            order_message = json.dumps(order_dict)
+            # Inject trace context into order for distributed tracing
+            order_dict_with_trace = inject_trace_context(order_dict)
+            order_message = json.dumps(order_dict_with_trace)
 
             # Publish message to NATS
             await self.nats_client.publish(
