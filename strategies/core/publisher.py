@@ -21,6 +21,7 @@ except ImportError:
     def inject_trace_context(data):
         return data
 
+
 import constants
 from strategies.models.orders import OrderResponse, TradeOrder
 from strategies.utils.circuit_breaker import CircuitBreaker

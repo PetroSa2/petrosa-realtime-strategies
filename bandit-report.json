@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "generated_at": "2025-10-26T12:13:11Z",
+  "generated_at": "2025-10-26T15:07:58Z",
   "metrics": {
     "./constants.py": {
       "CONFIDENCE.HIGH": 0,
@@ -180,7 +180,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 686,
+      "loc": 696,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -206,7 +206,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 319,
+      "loc": 323,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -653,15 +653,15 @@
       "skipped_tests": 0
     },
     "./tests/test_metrics.py": {
-      "CONFIDENCE.HIGH": 21,
+      "CONFIDENCE.HIGH": 22,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 21,
+      "SEVERITY.LOW": 22,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 176,
+      "loc": 199,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -679,15 +679,15 @@
       "skipped_tests": 0
     },
     "./tests/test_nats_trace_propagation.py": {
-      "CONFIDENCE.HIGH": 9,
+      "CONFIDENCE.HIGH": 10,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 9,
+      "SEVERITY.LOW": 10,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 161,
+      "loc": 162,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -731,15 +731,15 @@
       "skipped_tests": 0
     },
     "_totals": {
-      "CONFIDENCE.HIGH": 362,
+      "CONFIDENCE.HIGH": 364,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 1,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 362,
+      "SEVERITY.LOW": 364,
       "SEVERITY.MEDIUM": 1,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 12167,
+      "loc": 12205,
       "nosec": 0,
       "skipped_tests": 0
     }

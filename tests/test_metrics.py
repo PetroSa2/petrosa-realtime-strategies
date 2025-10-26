@@ -208,7 +208,7 @@ class TestMetricsContext:
 
     def test_context_manager_with_signal_object(self):
         """Test context manager with Signal object using signal_action attribute.
-        
+
         This test verifies the fix for issue #62 where signal.action was incorrectly
         used instead of signal.signal_action, causing AttributeError.
         """

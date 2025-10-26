@@ -25,6 +25,7 @@ except ImportError:
     def extract_trace_context(data):
         return None
 
+
 import constants
 from strategies.core.publisher import TradeOrderPublisher
 from strategies.market_logic.btc_dominance import BitcoinDominanceStrategy
@@ -641,7 +642,7 @@ class NATSConsumer:
 
                         if signal:
                             # Record signal in metrics
-                            ctx.record_signal(signal.action, signal.confidence)
+                            ctx.record_signal(signal.signal_action, signal.confidence)
 
                             # Publish signal
                             await self.publisher.publish_signal(signal)
@@ -649,7 +650,7 @@ class NATSConsumer:
                             self.logger.info(
                                 f"Microstructure signal: {strategy_name}",
                                 symbol=symbol,
-                                action=signal.action,
+                                action=signal.signal_action,
                                 confidence=round(signal.confidence, 2),
                             )
                     except Exception as e:
