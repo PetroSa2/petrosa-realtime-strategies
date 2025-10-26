@@ -105,7 +105,9 @@ class TestConsumerMetricsIntegration:
         assert consumer.error_count == 1
 
     @pytest.mark.asyncio
-    async def test_consumer_lag_calculation(self, consumer_with_metrics, mock_publisher):
+    async def test_consumer_lag_calculation(
+        self, consumer_with_metrics, mock_publisher
+    ):
         """Test that consumer lag is calculated correctly."""
         consumer, metrics = consumer_with_metrics
 
@@ -190,10 +192,9 @@ class TestConsumerMetricsIntegration:
 
         # Add a mock depth analyzer to enable microstructure strategy processing
         mock_depth_analyzer = Mock()
-        mock_depth_analyzer.analyze_depth = Mock(return_value=Mock(
-            net_pressure=0.1,
-            imbalance_percent=5.0
-        ))
+        mock_depth_analyzer.analyze_depth = Mock(
+            return_value=Mock(net_pressure=0.1, imbalance_percent=5.0)
+        )
         consumer.depth_analyzer = mock_depth_analyzer
 
         # Mock a strategy that returns a signal
@@ -461,4 +462,3 @@ class TestMetricsContextEdgeCases:
                     ctx.record_signal("buy", 0.8)
 
         # All executions should be recorded
-

@@ -15,6 +15,8 @@ import nats
 import structlog
 from nats.aio.client import Client as NATSClient
 from nats.aio.subscription import Subscription
+from opentelemetry import trace
+from petrosa_otel import extract_trace_context
 
 import constants
 from strategies.core.publisher import TradeOrderPublisher
@@ -36,6 +38,9 @@ from strategies.utils.metrics import (
     RealtimeStrategyMetrics,
     initialize_metrics,
 )
+
+# OpenTelemetry tracer
+tracer = trace.get_tracer(__name__)
 
 
 class NATSConsumer:
@@ -304,7 +309,7 @@ class NATSConsumer:
         )
 
     async def _process_message(self, msg) -> None:
-        """Process a single NATS message."""
+        """Process a single NATS message with trace context extraction."""
         start_time = time.time()
         processing_time = 0.0
         message_data = None
@@ -314,46 +319,88 @@ class NATSConsumer:
             message_data = json.loads(msg.data.decode())
             self.logger.debug("Received message", data=message_data)
 
-            # Validate and parse market data message
-            market_data = self._parse_market_data(message_data)
-            if not market_data:
-                self.logger.warning("Invalid market data message", data=message_data)
-                self.metrics.record_error("invalid_message")
-                return
+            # Extract trace context from message (with error handling)
+            try:
+                ctx = extract_trace_context(message_data)
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to extract trace context, using current context",
+                    error=str(e),
+                )
+                ctx = None
 
-            # Determine message type for metrics
-            message_type = market_data.stream_type or "unknown"
-            symbol = market_data.symbol or "UNKNOWN"
+            # Create span with extracted context for distributed tracing
+            with tracer.start_as_current_span(
+                "process_market_data_message",
+                context=ctx,
+                kind=trace.SpanKind.CONSUMER,
+            ) as span:
+                try:
+                    # Set messaging attributes for observability
+                    span.set_attribute("messaging.system", "nats")
+                    span.set_attribute("messaging.destination", self.topic)
+                    span.set_attribute("messaging.operation", "receive")
+                    span.set_attribute(
+                        "market_data.symbol", message_data.get("s", "unknown")
+                    )
 
-            # Record message type received
-            self.metrics.record_message_type(message_type)
+                    # Validate and parse market data message
+                    market_data = self._parse_market_data(message_data)
+                    if not market_data:
+                        self.logger.warning(
+                            "Invalid market data message", data=message_data
+                        )
+                        self.metrics.record_error("invalid_message")
+                        return
 
-            # Process message through strategies
-            await self._process_market_data(market_data)
+                    # Determine message type for metrics
+                    message_type = market_data.stream_type or "unknown"
+                    symbol = market_data.symbol or "UNKNOWN"
 
-            # Update metrics
-            self.message_count += 1
-            self.last_message_time = time.time()
-            processing_time = (
-                time.time() - start_time
-            ) * 1000  # Convert to milliseconds
+                    # Record message type received
+                    self.metrics.record_message_type(message_type)
 
-            # Update processing time metrics
-            self._update_processing_metrics(processing_time)
+                    # Process message through strategies
+                    await self._process_market_data(market_data)
 
-            # Record message processed with OpenTelemetry metrics
-            self.metrics.record_message_processed(symbol, message_type)
+                    # Update metrics
+                    self.message_count += 1
+                    self.last_message_time = time.time()
+                    processing_time = (
+                        time.time() - start_time
+                    ) * 1000  # Convert to milliseconds
 
-            # Update consumer lag (time since message was created)
-            if hasattr(market_data, "timestamp") and market_data.timestamp:
-                lag_seconds = time.time() - market_data.timestamp.timestamp()
-                self.metrics.update_consumer_lag(max(0, lag_seconds))
+                    # Update processing time metrics
+                    self._update_processing_metrics(processing_time)
 
-            self.logger.debug(
-                "Message processed successfully",
-                message_count=self.message_count,
-                processing_time_ms=processing_time,
-            )
+                    # Record message processed with OpenTelemetry metrics
+                    self.metrics.record_message_processed(symbol, message_type)
+
+                    # Update consumer lag (time since message was created)
+                    if hasattr(market_data, "timestamp") and market_data.timestamp:
+                        lag_seconds = time.time() - market_data.timestamp.timestamp()
+                        self.metrics.update_consumer_lag(max(0, lag_seconds))
+
+                    self.logger.debug(
+                        "Message processed successfully",
+                        message_count=self.message_count,
+                        processing_time_ms=processing_time,
+                    )
+
+                    # Mark span as successful
+                    span.set_status(trace.Status(trace.StatusCode.OK))
+
+                except Exception as processing_error:
+                    # Mark span as error
+                    span.set_status(
+                        trace.Status(
+                            trace.StatusCode.ERROR,
+                            description=f"Message processing failed: {processing_error}",
+                        )
+                    )
+                    span.record_exception(processing_error)
+                    # Re-raise to be caught by outer handler
+                    raise
 
         except Exception as e:
             self.logger.error(
