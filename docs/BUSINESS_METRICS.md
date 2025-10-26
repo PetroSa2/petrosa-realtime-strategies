@@ -241,7 +241,7 @@ with MetricsContext(strategy="my_strategy", symbol="BTCUSDT", metrics=metrics) a
     
     if signal:
         # Record signal
-        ctx.record_signal(signal.action, signal.confidence)
+        ctx.record_signal(signal.signal_action, signal.confidence)
 
 # Record errors
 metrics.record_error("custom_error", strategy="my_strategy")

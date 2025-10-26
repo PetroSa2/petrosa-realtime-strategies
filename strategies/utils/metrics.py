@@ -261,7 +261,7 @@ class MetricsContext:
 
             # Record signal if generated
             if signal:
-                ctx.record_signal(signal.action, signal.confidence)
+                ctx.record_signal(signal.signal_action, signal.confidence)
     """
 
     def __init__(
