@@ -12,7 +12,7 @@ from typing import Any, Optional
 import nats
 import structlog
 from nats.aio.client import Client as NATSClient
-from petrosa_otel.nats_propagation import inject_trace_context
+from petrosa_otel import inject_trace_context
 
 import constants
 from strategies.models.orders import OrderResponse, TradeOrder

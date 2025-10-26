@@ -16,7 +16,7 @@ import structlog
 from nats.aio.client import Client as NATSClient
 from nats.aio.subscription import Subscription
 from opentelemetry import trace
-from petrosa_otel.nats_propagation import extract_trace_context
+from petrosa_otel import extract_trace_context
 
 import constants
 from strategies.core.publisher import TradeOrderPublisher
