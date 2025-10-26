@@ -195,7 +195,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: petrosa-sensitive-credentials
-              key: mongodb-url
+              key: mongodb-connection-string
         - name: MONGODB_DATABASE
           value: "petrosa"
         # Data Manager API configuration
