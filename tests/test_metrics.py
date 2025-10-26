@@ -2,10 +2,12 @@
 Tests for custom business metrics.
 """
 
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
 
+from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 from strategies.utils.metrics import (
     MetricsContext,
     RealtimeStrategyMetrics,
@@ -203,6 +205,34 @@ class TestMetricsContext:
             ctx.record_signal("buy", 0.9)
 
         # Should complete without error
+
+    def test_context_manager_with_signal_object(self):
+        """Test context manager with Signal object using signal_action attribute.
+        
+        This test verifies the fix for issue #62 where signal.action was incorrectly
+        used instead of signal.signal_action, causing AttributeError.
+        """
+        metrics = RealtimeStrategyMetrics()
+
+        # Create a Signal object with signal_action attribute
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy",
+            timestamp=datetime.utcnow(),
+        )
+
+        with MetricsContext(
+            strategy="test_strategy", symbol="BTCUSDT", metrics=metrics
+        ) as ctx:
+            # Should not raise AttributeError
+            ctx.record_signal(signal.signal_action.value, signal.confidence_score)
+
+        assert ctx.signal_recorded is True
 
 
 class TestMetricsIntegration:
