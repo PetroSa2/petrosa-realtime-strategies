@@ -6,7 +6,7 @@ Tests the publisher's ability to publish trade orders and trading signals to NAT
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -52,7 +52,7 @@ async def test_publish_signal_success(publisher, mock_nats_client):
         confidence=SignalConfidence.HIGH,
         confidence_score=0.85,
         price=50000.0,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         strategy_name="iceberg_detector",
         metadata={"test": "data"},
     )
@@ -80,7 +80,7 @@ async def test_publish_signal_success(publisher, mock_nats_client):
     assert payload_dict["strategy_name"] == "iceberg_detector"
 
     # Verify metrics were updated
-    assert publisher.order_count == 1
+    assert publisher.signal_count == 1
     assert publisher.last_order_time is not None
 
 
@@ -167,9 +167,9 @@ async def test_publish_signal_error_handling(publisher, mock_nats_client):
 @pytest.mark.asyncio
 async def test_publish_signal_updates_metrics(publisher, mock_nats_client):
     """Test that publishing updates metrics correctly."""
-    initial_count = publisher.order_count
+    initial_signal_count = publisher.signal_count
     initial_error_count = publisher.error_count
-
+    
     signal = Signal(
         symbol="BTCUSDT",
         signal_type=SignalType.BUY,
@@ -179,12 +179,12 @@ async def test_publish_signal_updates_metrics(publisher, mock_nats_client):
         price=50000.0,
         strategy_name="test_strategy",
     )
-
+    
     # Publish signal
     await publisher.publish_signal(signal)
-
+    
     # Check metrics updated
-    assert publisher.order_count == initial_count + 1
+    assert publisher.signal_count == initial_signal_count + 1
     assert publisher.error_count == initial_error_count
     assert publisher.last_order_time is not None
     assert len(publisher.publishing_times) == 1
@@ -261,7 +261,7 @@ async def test_publish_multiple_signals(publisher, mock_nats_client):
 
     # Check that all were published
     assert mock_nats_client.publish.call_count == 3
-    assert publisher.order_count == 3
+    assert publisher.signal_count == 3
 
 
 @pytest.mark.asyncio
@@ -318,6 +318,7 @@ async def test_get_metrics_includes_signal_counts(publisher):
 
     # Check metrics structure
     assert "order_count" in metrics
+    assert "signal_count" in metrics
     assert "error_count" in metrics
     assert "is_running" in metrics
     assert "last_order_time" in metrics
@@ -325,5 +326,5 @@ async def test_get_metrics_includes_signal_counts(publisher):
     assert "avg_publishing_time_ms" in metrics
 
     # Check values
-    assert metrics["order_count"] == 1
+    assert metrics["signal_count"] == 1
     assert metrics["error_count"] == 0

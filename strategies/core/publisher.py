@@ -55,6 +55,7 @@ class TradeOrderPublisher:
         self.is_running = False
         self.shutdown_event = asyncio.Event()
         self.order_count = 0
+        self.signal_count = 0
         self.error_count = 0
         self.last_order_time = None
 
@@ -403,7 +404,7 @@ class TradeOrderPublisher:
             )
 
             # Update metrics
-            self.order_count += 1  # Reusing order_count for signals
+            self.signal_count += 1
             self.last_order_time = time.time()
             publishing_time = (time.time() - start_time) * 1000
 
@@ -418,6 +419,7 @@ class TradeOrderPublisher:
                 confidence=signal_dict.get("confidence"),
                 strategy_name=signal_dict.get("strategy_name"),
                 publishing_time_ms=publishing_time,
+                signal_count=self.signal_count,
                 topic=self.topic,
             )
 
@@ -453,6 +455,7 @@ class TradeOrderPublisher:
         """Get publisher metrics."""
         return {
             "order_count": self.order_count,
+            "signal_count": self.signal_count,
             "error_count": self.error_count,
             "is_running": self.is_running,
             "last_order_time": self.last_order_time,
