@@ -55,6 +55,7 @@ class TradeOrderPublisher:
         self.is_running = False
         self.shutdown_event = asyncio.Event()
         self.order_count = 0
+        self.signal_count = 0
         self.error_count = 0
         self.last_order_time = None
 
@@ -363,6 +364,76 @@ class TradeOrderPublisher:
                 },
             )
 
+    async def publish_signal(self, signal: Any) -> None:
+        """Publish a trading signal to NATS.
+
+        Args:
+            signal: Trading signal object (Signal or StrategySignal model)
+
+        Raises:
+            Exception: If publishing fails
+        """
+        start_time = time.time()
+
+        try:
+            # Convert signal to dict
+            if hasattr(signal, "dict"):
+                # Pydantic v1 style
+                signal_dict = signal.dict()
+            elif hasattr(signal, "model_dump"):
+                # Pydantic v2 style
+                signal_dict = signal.model_dump()
+            else:
+                # Fallback to dict conversion
+                signal_dict = dict(signal)
+
+            # Convert datetime objects to ISO format strings for JSON serialization
+            if "timestamp" in signal_dict and hasattr(
+                signal_dict["timestamp"], "isoformat"
+            ):
+                signal_dict["timestamp"] = signal_dict["timestamp"].isoformat()
+
+            # Inject trace context into signal for distributed tracing
+            signal_dict_with_trace = inject_trace_context(signal_dict)
+            signal_message = json.dumps(signal_dict_with_trace)
+
+            # Publish message to NATS
+            await self.nats_client.publish(
+                subject=self.topic,
+                payload=signal_message.encode(),
+            )
+
+            # Update metrics
+            self.signal_count += 1
+            self.last_order_time = time.time()
+            publishing_time = (time.time() - start_time) * 1000
+
+            # Update publishing time metrics
+            self._update_publishing_metrics(publishing_time)
+
+            self.logger.info(
+                "Signal published successfully",
+                symbol=signal_dict.get("symbol"),
+                signal_type=signal_dict.get("signal_type"),
+                signal_action=signal_dict.get("signal_action"),
+                confidence=signal_dict.get("confidence"),
+                strategy_name=signal_dict.get("strategy_name"),
+                publishing_time_ms=publishing_time,
+                signal_count=self.signal_count,
+                topic=self.topic,
+            )
+
+        except Exception as e:
+            self.logger.error(
+                "Error publishing signal",
+                error=str(e),
+                symbol=signal_dict.get("symbol")
+                if "signal_dict" in locals()
+                else "unknown",
+            )
+            self.error_count += 1
+            raise
+
     def _update_publishing_metrics(self, publishing_time: float) -> None:
         """Update publishing time metrics."""
         self.publishing_times.append(publishing_time)
@@ -384,6 +455,7 @@ class TradeOrderPublisher:
         """Get publisher metrics."""
         return {
             "order_count": self.order_count,
+            "signal_count": self.signal_count,
             "error_count": self.error_count,
             "is_running": self.is_running,
             "last_order_time": self.last_order_time,
