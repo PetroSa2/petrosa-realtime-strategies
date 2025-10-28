@@ -22,6 +22,9 @@ Additionally, this service exposes a **Runtime Configuration API** for live para
 - **Ecosystem Architecture**: See master § System Architecture Overview → Signal Generation Layer
 - **Work Tracking**: See master § Centralized Work Tracking with GitHub Projects
 - **NATS Topics**: See master § NATS Message Bus → `binance.websocket.data` (input), `signals.trading` (output)
+  - **Canonical NATS Registry**: `/Users/yurisa2/petrosa/petrosa_k8s/docs/NATS_TOPICS.md`
+  - This service MUST publish to `signals.trading` (configured via `NATS_PUBLISHER_TOPIC`)
+  - Consult registry before any NATS configuration changes
 - **Deployment Patterns**: See master § Realtime Strategies Configuration
 - **Scaling Strategy**: See master § Deployment Patterns (horizontal scaling via NATS consumer groups)
 - **Runtime Configuration**: See master § Configuration Management

@@ -23,6 +23,7 @@ except ImportError:
 
 
 import constants
+from strategies.adapters.signal_adapter import transform_signal_for_tradeengine
 from strategies.models.orders import OrderResponse, TradeOrder
 from strategies.utils.circuit_breaker import CircuitBreaker
 
@@ -40,6 +41,15 @@ class TradeOrderPublisher:
         self.nats_url = nats_url
         self.topic = topic
         self.logger = logger or structlog.get_logger()
+
+        # Validate topic configuration
+        if self.topic != "signals.trading":
+            self.logger.error(
+                "CRITICAL: NATS publisher topic misconfigured!",
+                configured_topic=self.topic,
+                expected_topic="signals.trading",
+                message="Signals will NOT reach tradeengine with this configuration"
+            )
 
         # NATS client
         self.nats_client: Optional[NATSClient] = None
@@ -376,22 +386,8 @@ class TradeOrderPublisher:
         start_time = time.time()
 
         try:
-            # Convert signal to dict
-            if hasattr(signal, "dict"):
-                # Pydantic v1 style
-                signal_dict = signal.dict()
-            elif hasattr(signal, "model_dump"):
-                # Pydantic v2 style
-                signal_dict = signal.model_dump()
-            else:
-                # Fallback to dict conversion
-                signal_dict = dict(signal)
-
-            # Convert datetime objects to ISO format strings for JSON serialization
-            if "timestamp" in signal_dict and hasattr(
-                signal_dict["timestamp"], "isoformat"
-            ):
-                signal_dict["timestamp"] = signal_dict["timestamp"].isoformat()
+            # Transform signal to tradeengine contract format
+            signal_dict = transform_signal_for_tradeengine(signal)
 
             # Inject trace context into signal for distributed tracing
             signal_dict_with_trace = inject_trace_context(signal_dict)
