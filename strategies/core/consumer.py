@@ -642,7 +642,7 @@ class NATSConsumer:
 
                         if signal:
                             # Record signal in metrics
-                            ctx.record_signal(signal.signal_action, signal.confidence)
+                            ctx.record_signal(signal.signal_action.value, signal.confidence_score)
 
                             # Publish signal
                             await self.publisher.publish_signal(signal)
@@ -651,7 +651,7 @@ class NATSConsumer:
                                 f"Microstructure signal: {strategy_name}",
                                 symbol=symbol,
                                 action=signal.signal_action,
-                                confidence=round(signal.confidence, 2),
+                                confidence=signal.confidence.value,
                             )
                     except Exception as e:
                         self.logger.error(
