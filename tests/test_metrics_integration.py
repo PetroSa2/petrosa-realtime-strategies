@@ -198,10 +198,20 @@ class TestConsumerMetricsIntegration:
         consumer.depth_analyzer = mock_depth_analyzer
 
         # Mock a strategy that returns a signal
+        # Use a proper Signal object instead of Mock to work with adapter
+        from strategies.models.signals import Signal, SignalType, SignalAction, SignalConfidence
+        
+        mock_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy"
+        )
+        
         mock_strategy = Mock()
-        mock_signal = Mock()
-        mock_signal.action = "buy"
-        mock_signal.confidence = 0.85
         mock_strategy.analyze = Mock(return_value=mock_signal)
 
         consumer.microstructure_strategies["test_strategy"] = mock_strategy
