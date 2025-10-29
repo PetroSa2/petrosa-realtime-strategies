@@ -72,10 +72,10 @@ async def test_publish_signal_success(publisher, mock_nats_client):
     payload_dict = json.loads(payload)
 
     assert payload_dict["symbol"] == "BTCUSDT"
-    assert payload_dict["signal_type"] == "BUY"
-    assert payload_dict["signal_action"] == "OPEN_LONG"
-    assert payload_dict["confidence"] == "HIGH"
-    assert payload_dict["confidence_score"] == 0.85
+    assert payload_dict["signal_type"] == "BUY"  # Not transformed - publisher sends raw signal
+    assert payload_dict["signal_action"] == "OPEN_LONG"  # Actual field name
+    assert payload_dict["confidence"] == "HIGH"  # Enum value
+    assert payload_dict["confidence_score"] == 0.85  # Numeric confidence
     assert payload_dict["price"] == 50000.0
     assert payload_dict["strategy_name"] == "iceberg_detector"
 
@@ -109,7 +109,8 @@ async def test_publish_signal_with_dict_method(publisher, mock_nats_client):
     payload_dict = json.loads(payload)
 
     assert payload_dict["symbol"] == "ETHUSDT"
-    assert payload_dict["signal_type"] == "SELL"
+    assert payload_dict["signal_type"] == "SELL"  # Not transformed - publisher sends raw signal
+    assert payload_dict["signal_action"] == "OPEN_SHORT"  # Actual field name
 
 
 @pytest.mark.asyncio
@@ -286,10 +287,12 @@ async def test_publish_signal_trace_context_injection(publisher, mock_nats_clien
 
     # Note: inject_trace_context might add tracing fields
     # If petrosa_otel is available, check for trace fields
-    # For now, just verify the basic signal fields are present
+    # Verify the basic signal fields are present (raw signal, no transformation)
     assert "symbol" in payload_dict
     assert "signal_type" in payload_dict
-    assert "signal_action" in payload_dict
+    assert "signal_action" in payload_dict  # Raw signal has 'signal_action' field
+    assert "metadata" in payload_dict
+    # Note: Publisher sends raw signal, so no "original_*" fields in metadata
 
 
 @pytest.mark.asyncio
