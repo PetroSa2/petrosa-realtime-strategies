@@ -16,6 +16,8 @@ from strategies.models.signals import (
     SignalType,
     SignalAction,
     SignalConfidence,
+    StrategySignal,
+    SignalAggregation,
 )
 
 
@@ -386,4 +388,291 @@ class TestSignalEdgeCases:
         after = datetime.utcnow()
         
         assert before <= signal.timestamp <= after
+
+
+class TestStrategySignal:
+    """Test StrategySignal model (wrapper for Signal with strategy metadata)."""
+
+    def test_strategy_signal_creation(self):
+        """Test StrategySignal creation - covers lines 108-121."""
+        base_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy"
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=15.5,
+            strategy_parameters={"threshold": 1.5},
+            input_data={"rsi": 75},
+            strategy_specific_metrics={"confidence_factor": 0.95}
+        )
+        
+        assert strategy_signal.signal == base_signal
+        assert strategy_signal.strategy_version == "1.0.0"
+        assert strategy_signal.processing_time_ms == 15.5
+
+    def test_strategy_signal_symbol_property(self):
+        """Test StrategySignal.symbol property - covers line 126."""
+        base_signal = Signal(
+            symbol="ETHUSDT",
+            signal_type=SignalType.SELL,
+            signal_action=SignalAction.OPEN_SHORT,
+            confidence=SignalConfidence.MEDIUM,
+            confidence_score=0.65,
+            price=3000.0,
+            strategy_name="test"
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        assert strategy_signal.symbol == "ETHUSDT"
+
+    def test_strategy_signal_signal_type_property(self):
+        """Test StrategySignal.signal_type property - covers line 131."""
+        base_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test"
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        assert strategy_signal.signal_type == SignalType.BUY
+
+    def test_strategy_signal_confidence_score_property(self):
+        """Test StrategySignal.confidence_score property - covers line 136."""
+        base_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.90,
+            price=50000.0,
+            strategy_name="test"
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        assert strategy_signal.confidence_score == 0.90
+
+    def test_strategy_signal_timestamp_property(self):
+        """Test StrategySignal.timestamp property - covers line 141."""
+        custom_time = datetime(2024, 6, 1, 12, 0, 0)
+        base_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test",
+            timestamp=custom_time
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        assert strategy_signal.timestamp == custom_time
+
+
+class TestSignalAggregation:
+    """Test SignalAggregation model for multi-strategy signal aggregation."""
+
+    def test_signal_aggregation_creation(self):
+        """Test SignalAggregation creation."""
+        base_signal1 = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="strategy1"
+        )
+        
+        strategy_signal1 = StrategySignal(
+            signal=base_signal1,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        aggregation = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.BUY,
+            aggregated_signal_action=SignalAction.OPEN_LONG,
+            aggregated_confidence_score=0.85,
+            aggregated_confidence=SignalConfidence.HIGH,
+            strategy_signals={"strategy1": strategy_signal1},
+            aggregation_method="weighted_average"
+        )
+        
+        assert aggregation.symbol == "BTCUSDT"
+        assert aggregation.aggregation_method == "weighted_average"
+
+    def test_signal_aggregation_symbol_validator_error(self):
+        """Test SignalAggregation symbol validator - covers lines 177-179."""
+        base_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test"
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        with pytest.raises(ValueError, match="Invalid symbol format"):
+            SignalAggregation(
+                symbol="BTC",  # Too short
+                aggregated_signal_type=SignalType.BUY,
+                aggregated_signal_action=SignalAction.OPEN_LONG,
+                aggregated_confidence_score=0.85,
+                aggregated_confidence=SignalConfidence.HIGH,
+                strategy_signals={"test": strategy_signal},
+                aggregation_method="test"
+            )
+
+    def test_signal_aggregation_confidence_score_validator_error(self):
+        """Test SignalAggregation confidence validator - covers lines 184-186."""
+        from pydantic import ValidationError
+        
+        base_signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test"
+        )
+        
+        strategy_signal = StrategySignal(
+            signal=base_signal,
+            strategy_version="1.0.0",
+            processing_time_ms=10.0
+        )
+        
+        with pytest.raises(ValidationError):
+            SignalAggregation(
+                symbol="BTCUSDT",
+                aggregated_signal_type=SignalType.BUY,
+                aggregated_signal_action=SignalAction.OPEN_LONG,
+                aggregated_confidence_score=1.5,  # Invalid - above 1.0
+                aggregated_confidence=SignalConfidence.HIGH,
+                strategy_signals={"test": strategy_signal},
+                aggregation_method="test"
+            )
+
+    def test_signal_aggregation_strategy_count_property(self):
+        """Test strategy_count property - covers line 191."""
+        base_signal1 = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="strategy1"
+        )
+        
+        base_signal2 = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.MEDIUM,
+            confidence_score=0.75,
+            price=50000.0,
+            strategy_name="strategy2"
+        )
+        
+        strategy_signals = {
+            "strategy1": StrategySignal(signal=base_signal1, strategy_version="1.0.0", processing_time_ms=10.0),
+            "strategy2": StrategySignal(signal=base_signal2, strategy_version="1.0.0", processing_time_ms=12.0)
+        }
+        
+        aggregation = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.BUY,
+            aggregated_signal_action=SignalAction.OPEN_LONG,
+            aggregated_confidence_score=0.80,
+            aggregated_confidence=SignalConfidence.HIGH,
+            strategy_signals=strategy_signals,
+            aggregation_method="weighted"
+        )
+        
+        assert aggregation.strategy_count == 2
+
+    def test_signal_aggregation_average_confidence_empty(self):
+        """Test average_confidence_score with empty signals - covers lines 196-198."""
+        aggregation = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.BUY,
+            aggregated_signal_action=SignalAction.OPEN_LONG,
+            aggregated_confidence_score=0.0,
+            aggregated_confidence=SignalConfidence.LOW,
+            strategy_signals={},  # Empty
+            aggregation_method="test"
+        )
+        
+        assert aggregation.average_confidence_score == 0.0
+
+    def test_signal_aggregation_consensus_signal_type_empty(self):
+        """Test consensus_signal_type with empty signals - covers lines 204-205."""
+        aggregation = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.BUY,
+            aggregated_signal_action=SignalAction.OPEN_LONG,
+            aggregated_confidence_score=0.0,
+            aggregated_confidence=SignalConfidence.LOW,
+            strategy_signals={},  # Empty
+            aggregation_method="test"
+        )
+        
+        assert aggregation.consensus_signal_type is None
+
+    def test_signal_aggregation_is_strong_consensus_empty(self):
+        """Test is_strong_consensus with empty signals - covers lines 217-218."""
+        aggregation = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.BUY,
+            aggregated_signal_action=SignalAction.OPEN_LONG,
+            aggregated_confidence_score=0.0,
+            aggregated_confidence=SignalConfidence.LOW,
+            strategy_signals={},  # Empty
+            aggregation_method="test"
+        )
+        
+        assert aggregation.is_strong_consensus is False
 
