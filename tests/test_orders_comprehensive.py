@@ -518,3 +518,169 @@ class TestTradeOrderCreation:
         )
         assert order2.quantity == 100000.0
 
+
+class TestTradeOrderProperties:
+    """Test TradeOrder property methods."""
+
+    def test_is_market_order_property(self):
+        """Test is_market_order property - covers line 132."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.1,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order.is_market_order is True
+
+    def test_is_limit_order_property(self):
+        """Test is_limit_order property - covers line 137."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=0.1,
+            price=50000.0,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order.is_limit_order is True
+
+    def test_is_stop_order_property(self):
+        """Test is_stop_order property - covers line 142."""
+        order1 = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.SELL,
+            order_type=OrderType.STOP_MARKET,
+            quantity=0.1,
+            stop_price=51000.0,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order1.is_stop_order is True
+        
+        order2 = TradeOrder(
+            order_id="order123457",
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP_LIMIT,
+            quantity=0.1,
+            price=48000.0,
+            stop_price=49000.0,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123457",
+            confidence_score=0.85
+        )
+        assert order2.is_stop_order is True
+
+    def test_is_sell_order_property(self):
+        """Test is_sell_order property - covers line 152."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.SELL,
+            order_type=OrderType.MARKET,
+            quantity=0.1,
+            position_type=PositionType.SHORT,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order.is_sell_order is True
+
+    def test_is_short_position_property(self):
+        """Test is_short_position property - covers line 162."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.SELL,
+            order_type=OrderType.MARKET,
+            quantity=0.1,
+            position_type=PositionType.SHORT,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order.is_short_position is True
+
+    def test_estimated_value_with_price(self):
+        """Test estimated_value when price is set - covers lines 167-168."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=0.5,
+            price=48000.0,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order.estimated_value == 24000.0  # 0.5 * 48000
+
+    def test_estimated_value_without_price(self):
+        """Test estimated_value when price is None - covers line 169."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.5,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        assert order.estimated_value == 0.0  # No price
+
+    def test_to_dict_with_price_and_stop_price(self):
+        """Test to_dict includes optional fields - covers lines 192, 195."""
+        order = TradeOrder(
+            order_id="order123456",
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP_LIMIT,
+            quantity=0.1,
+            price=48500.0,
+            stop_price=49000.0,
+            position_type=PositionType.LONG,
+            strategy_name="test",
+            signal_id="signal123456",
+            confidence_score=0.85
+        )
+        
+        order_dict = order.to_dict()
+        
+        assert order_dict["price"] == 48500.0
+        assert order_dict["stop_price"] == 49000.0
+        assert order_dict["symbol"] == "BTCUSDT"
+
+    def test_validate_confidence_score_out_of_range(self):
+        """Test confidence_score validator - covers line 126."""
+        from pydantic import ValidationError
+        
+        with pytest.raises(ValidationError):
+            TradeOrder(
+                order_id="order123456",
+                symbol="BTCUSDT",
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                quantity=0.1,
+                position_type=PositionType.LONG,
+                strategy_name="test",
+                signal_id="signal123456",
+                confidence_score=1.5  # Invalid
+            )
+
