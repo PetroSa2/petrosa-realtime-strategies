@@ -11,6 +11,20 @@ from uuid import uuid4
 
 from strategies.models.signals import Signal, SignalAction, SignalType
 
+# Risk management constants
+HIGH_CONFIDENCE_THRESHOLD = 0.8
+MEDIUM_CONFIDENCE_THRESHOLD = 0.6
+
+# Stop loss percentages by confidence level
+STOP_LOSS_HIGH_CONFIDENCE = 0.02  # 2% for high confidence signals
+STOP_LOSS_MEDIUM_CONFIDENCE = 0.03  # 3% for medium confidence signals
+STOP_LOSS_LOW_CONFIDENCE = 0.05  # 5% for low confidence signals
+
+# Take profit percentages by confidence level
+TAKE_PROFIT_HIGH_CONFIDENCE = 0.05  # 5% for high confidence signals
+TAKE_PROFIT_MEDIUM_CONFIDENCE = 0.04  # 4% for medium confidence signals
+TAKE_PROFIT_LOW_CONFIDENCE = 0.03  # 3% for low confidence signals
+
 
 def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
     """
@@ -164,12 +178,12 @@ def _calculate_default_stop_loss(confidence_score: float) -> float:
     Returns:
         Stop loss percentage (0-1)
     """
-    if confidence_score >= 0.8:
-        return 0.02  # 2% for high confidence
-    elif confidence_score >= 0.6:
-        return 0.03  # 3% for medium confidence
+    if confidence_score >= HIGH_CONFIDENCE_THRESHOLD:
+        return STOP_LOSS_HIGH_CONFIDENCE
+    elif confidence_score >= MEDIUM_CONFIDENCE_THRESHOLD:
+        return STOP_LOSS_MEDIUM_CONFIDENCE
     else:
-        return 0.05  # 5% for low confidence
+        return STOP_LOSS_LOW_CONFIDENCE
 
 
 def _calculate_default_take_profit(confidence_score: float) -> float:
@@ -184,10 +198,10 @@ def _calculate_default_take_profit(confidence_score: float) -> float:
     Returns:
         Take profit percentage (0-1)
     """
-    if confidence_score >= 0.8:
-        return 0.05  # 5% for high confidence
-    elif confidence_score >= 0.6:
-        return 0.04  # 4% for medium confidence
+    if confidence_score >= HIGH_CONFIDENCE_THRESHOLD:
+        return TAKE_PROFIT_HIGH_CONFIDENCE
+    elif confidence_score >= MEDIUM_CONFIDENCE_THRESHOLD:
+        return TAKE_PROFIT_MEDIUM_CONFIDENCE
     else:
-        return 0.03  # 3% for low confidence
+        return TAKE_PROFIT_LOW_CONFIDENCE
 
