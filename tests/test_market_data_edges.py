@@ -154,3 +154,8 @@ def test_market_data_message_stream_validation_and_props():
     assert msg.is_depth is True
     assert msg.is_trade is False
     assert msg.is_ticker is False
+
+
+
+
+
