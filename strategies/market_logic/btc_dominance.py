@@ -411,8 +411,8 @@ class BitcoinDominanceStrategy:
             "last_dominance": self.last_dominance_calculation,
             "dominance_history_size": len(self.dominance_history),
             "price_history_symbols": list(self.price_history.keys()),
-            "last_signal_time": self.last_signal_time.isoformat()
-            if self.last_signal_time
-            else None,
+            "last_signal_time": (
+                self.last_signal_time.isoformat() if self.last_signal_time else None
+            ),
             "uptime_seconds": time.time() - self.last_update_time,
         }

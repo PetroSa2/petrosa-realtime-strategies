@@ -2,14 +2,16 @@
 Edge-case tests for market_data models to raise coverage.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from strategies.models.market_data import (
     DepthLevel,
     DepthUpdate,
-    TradeData,
-    TickerData,
     MarketDataMessage,
+    TickerData,
+    TradeData,
 )
 
 

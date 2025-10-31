@@ -5,9 +5,11 @@ Current coverage: 95.56% → Target: 100%
 Missing lines: 53, 58 (validator error paths in __post_init__)
 """
 
-import pytest
 from datetime import datetime
-from strategies.models.spread_metrics import SpreadMetrics, SpreadSnapshot, SpreadEvent
+
+import pytest
+
+from strategies.models.spread_metrics import SpreadEvent, SpreadMetrics, SpreadSnapshot
 
 
 def test_spread_metrics_valid_creation():
@@ -23,9 +25,9 @@ def test_spread_metrics_valid_creation():
         spread_pct=0.02,
         bid_volume_top5=1000.0,
         ask_volume_top5=950.0,
-        total_depth=1950.0
+        total_depth=1950.0,
     )
-    
+
     assert metrics.symbol == "BTCUSDT"
     assert metrics.best_bid == 50000.0
     assert metrics.best_ask == 50010.0
@@ -45,7 +47,7 @@ def test_spread_metrics_invalid_bid_zero():
             spread_pct=0.02,
             bid_volume_top5=1000.0,
             ask_volume_top5=950.0,
-            total_depth=1950.0
+            total_depth=1950.0,
         )
 
 
@@ -63,7 +65,7 @@ def test_spread_metrics_invalid_ask_zero():
             spread_pct=0.02,
             bid_volume_top5=1000.0,
             ask_volume_top5=950.0,
-            total_depth=1950.0
+            total_depth=1950.0,
         )
 
 
@@ -81,7 +83,7 @@ def test_spread_metrics_invalid_ask_less_than_bid():
             spread_pct=0.02,
             bid_volume_top5=1000.0,
             ask_volume_top5=950.0,
-            total_depth=1950.0
+            total_depth=1950.0,
         )
 
 
@@ -99,7 +101,7 @@ def test_spread_metrics_invalid_ask_equal_to_bid():
             spread_pct=0.0,
             bid_volume_top5=1000.0,
             ask_volume_top5=950.0,
-            total_depth=1950.0
+            total_depth=1950.0,
         )
 
 
@@ -116,15 +118,11 @@ def test_spread_snapshot_creation():
         spread_pct=0.02,
         bid_volume_top5=1000.0,
         ask_volume_top5=950.0,
-        total_depth=1950.0
+        total_depth=1950.0,
     )
-    
-    snapshot = SpreadSnapshot(
-        metrics=metrics,
-        spread_ratio=1.5,
-        is_widening=True
-    )
-    
+
+    snapshot = SpreadSnapshot(metrics=metrics, spread_ratio=1.5, is_widening=True)
+
     assert snapshot.metrics == metrics
     assert snapshot.spread_ratio == 1.5
     assert snapshot.is_widening is True
@@ -143,11 +141,11 @@ def test_spread_event_creation():
         spread_pct=0.02,
         bid_volume_top5=1000.0,
         ask_volume_top5=950.0,
-        total_depth=1950.0
+        total_depth=1950.0,
     )
-    
+
     snapshot = SpreadSnapshot(metrics=metrics)
-    
+
     event = SpreadEvent(
         event_type="widening",
         symbol="BTCUSDT",
@@ -160,9 +158,8 @@ def test_spread_event_creation():
         persistence_above_threshold=True,
         confidence=0.85,
         reasoning="Rapid spread widening detected",
-        snapshot=snapshot
+        snapshot=snapshot,
     )
-    
+
     assert event.event_type == "widening"
     assert event.confidence == 0.85
-
