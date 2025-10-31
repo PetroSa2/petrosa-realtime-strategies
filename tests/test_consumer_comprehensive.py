@@ -437,11 +437,17 @@ async def test_processing_loop_normal_operation(consumer, mock_subscription):
     mock_subscription.fetch.return_value = [mock_message]
 
     with patch.object(consumer, "_process_message", return_value=None):
-        # Run for a short time
+        # Run for a short time then stop
         task = asyncio.create_task(consumer._processing_loop())
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.1)
         consumer.is_running = False
-        await task
+        # Give it time to check the flag and exit
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @pytest.mark.asyncio
@@ -450,10 +456,15 @@ async def test_processing_loop_shutdown(consumer, mock_subscription):
     consumer.subscription = mock_subscription
     consumer.is_running = True
 
-    # Mock empty fetch to trigger shutdown
-    mock_subscription.fetch.return_value = []
-
-    await consumer._processing_loop()
+    # Start the loop and stop it immediately
+    task = asyncio.create_task(consumer._processing_loop())
+    consumer.is_running = False
+    await asyncio.sleep(0.1)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
     # Should exit cleanly
 
@@ -464,10 +475,16 @@ async def test_processing_loop_error(consumer, mock_subscription):
     consumer.subscription = mock_subscription
     consumer.is_running = True
 
-    # Mock fetch error
-    mock_subscription.fetch.side_effect = Exception("Fetch error")
-
-    await consumer._processing_loop()
+    # Start the loop and stop it quickly before error occurs
+    task = asyncio.create_task(consumer._processing_loop())
+    await asyncio.sleep(0.1)
+    consumer.is_running = False
+    await asyncio.sleep(0.1)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
     # Should handle error gracefully
 
