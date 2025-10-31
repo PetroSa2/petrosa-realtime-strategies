@@ -44,7 +44,7 @@ def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
         ...     confidence=SignalConfidence.HIGH,
         ...     confidence_score=0.85,
         ...     price=50000.0,
-        ...     strategy_name="spread_liquidity"
+        ...     strategy_name="spread_liquidity",
         ... )
         >>> transformed = transform_signal_for_tradeengine(signal)
         >>> assert transformed["action"] == "buy"
@@ -86,9 +86,7 @@ def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
         "strength": _map_confidence_to_strength(signal.confidence_score),
         # Price and quantity information
         "price": signal.price,
-        "quantity": _calculate_default_quantity(
-            signal.price, signal.confidence_score
-        ),
+        "quantity": _calculate_default_quantity(signal.price, signal.confidence_score),
         "current_price": signal.price,
         "target_price": signal.price,
         # Source and metadata
@@ -204,4 +202,3 @@ def _calculate_default_take_profit(confidence_score: float) -> float:
         return TAKE_PROFIT_MEDIUM_CONFIDENCE
     else:
         return TAKE_PROFIT_LOW_CONFIDENCE
-

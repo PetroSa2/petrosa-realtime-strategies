@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from strategies.models.orderbook_tracker import OrderBookTracker, LevelHistory
+from strategies.models.orderbook_tracker import LevelHistory, OrderBookTracker
 
 
 def make_ts(dt: datetime) -> float:
@@ -115,7 +115,9 @@ def test_detect_icebergs_consistent_size_with_persistence():
     symbol = "ADAUSDT"
 
     # Seed a history with consistent volume
-    tracker.update_orderbook(symbol, bids=[(0.5, 100.0)], asks=[], timestamp=datetime.utcnow())
+    tracker.update_orderbook(
+        symbol, bids=[(0.5, 100.0)], asks=[], timestamp=datetime.utcnow()
+    )
     hist: LevelHistory = tracker.bid_levels[symbol][0.5]
 
     # Force consistent flag and long persistence without refills
@@ -134,7 +136,9 @@ def test_detect_icebergs_anchor_when_persistent_only():
     tracker = OrderBookTracker(min_refill_count=10)
     symbol = "SOLUSDT"
 
-    tracker.update_orderbook(symbol, bids=[(150.0, 50.0)], asks=[], timestamp=datetime.utcnow())
+    tracker.update_orderbook(
+        symbol, bids=[(150.0, 50.0)], asks=[], timestamp=datetime.utcnow()
+    )
     hist: LevelHistory = tracker.bid_levels[symbol][150.0]
 
     hist.consistent_volume = False
@@ -188,11 +192,15 @@ def test_detect_icebergs_respects_proximity_filter():
         )
 
     # Proximity 0.1% around 120.0 should exclude price 100.0
-    icebergs_far = tracker.detect_icebergs(symbol, current_price=120.0, proximity_pct=0.1)
+    icebergs_far = tracker.detect_icebergs(
+        symbol, current_price=120.0, proximity_pct=0.1
+    )
     assert icebergs_far == []
 
     # Proximity 25% should include 100.0 when current is 120.0
-    icebergs_near = tracker.detect_icebergs(symbol, current_price=120.0, proximity_pct=25.0)
+    icebergs_near = tracker.detect_icebergs(
+        symbol, current_price=120.0, proximity_pct=25.0
+    )
     assert len(icebergs_near) == 1
 
 
@@ -208,10 +216,3 @@ def test_get_statistics_returns_expected_keys():
         "total_icebergs_detected",
         "symbols_tracked",
     }.issubset(stats.keys())
-
-
-
-
-
-
-

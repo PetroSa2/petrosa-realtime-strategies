@@ -65,9 +65,10 @@ class TestBitcoinDominanceStrategy:
         analyzer = BitcoinDominanceStrategy()
 
         # Mock increasing dominance trend
-        with patch.object(
-            analyzer, "get_current_dominance"
-        ) as mock_dominance, patch.object(analyzer, "analyze_trend") as mock_trend:
+        with (
+            patch.object(analyzer, "get_current_dominance") as mock_dominance,
+            patch.object(analyzer, "analyze_trend") as mock_trend,
+        ):
             mock_dominance.return_value = 0.68
             mock_trend.return_value = {
                 "direction": "increasing",
@@ -87,9 +88,10 @@ class TestBitcoinDominanceStrategy:
         analyzer = BitcoinDominanceStrategy()
 
         # Mock decreasing dominance trend
-        with patch.object(
-            analyzer, "get_current_dominance"
-        ) as mock_dominance, patch.object(analyzer, "analyze_trend") as mock_trend:
+        with (
+            patch.object(analyzer, "get_current_dominance") as mock_dominance,
+            patch.object(analyzer, "analyze_trend") as mock_trend,
+        ):
             mock_dominance.return_value = 0.55
             mock_trend.return_value = {
                 "direction": "decreasing",
@@ -108,9 +110,10 @@ class TestBitcoinDominanceStrategy:
         """Test no signal generation when dominance is flat."""
         analyzer = BitcoinDominanceStrategy()
 
-        with patch.object(
-            analyzer, "get_current_dominance"
-        ) as mock_dominance, patch.object(analyzer, "analyze_trend") as mock_trend:
+        with (
+            patch.object(analyzer, "get_current_dominance") as mock_dominance,
+            patch.object(analyzer, "analyze_trend") as mock_trend,
+        ):
             mock_dominance.return_value = 0.62
             mock_trend.return_value = {
                 "direction": "flat",

@@ -232,12 +232,12 @@ class StrategyConfigManager:
             "version": doc.get("version", 1),
             "source": source,
             "is_override": is_override,
-            "created_at": doc.get("created_at").isoformat()
-            if doc.get("created_at")
-            else None,
-            "updated_at": doc.get("updated_at").isoformat()
-            if doc.get("updated_at")
-            else None,
+            "created_at": (
+                doc.get("created_at").isoformat() if doc.get("created_at") else None
+            ),
+            "updated_at": (
+                doc.get("updated_at").isoformat() if doc.get("updated_at") else None
+            ),
         }
 
     def _get_from_environment(self, strategy_id: str) -> dict[str, Any]:
@@ -351,9 +351,9 @@ class StrategyConfigManager:
                 symbol=symbol,
                 parameters=parameters,
                 version=version,
-                created_at=existing_config.get("created_at", now)
-                if existing_config
-                else now,
+                created_at=(
+                    existing_config.get("created_at", now) if existing_config else now
+                ),
                 updated_at=now,
                 created_by=changed_by,
                 metadata={"reason": reason} if reason else {},
@@ -382,9 +382,9 @@ class StrategyConfigManager:
                 strategy_id=strategy_id,
                 symbol=symbol,
                 action="UPDATE" if existing_config else "CREATE",
-                old_parameters=existing_config.get("parameters")
-                if existing_config
-                else None,
+                old_parameters=(
+                    existing_config.get("parameters") if existing_config else None
+                ),
                 new_parameters=parameters,
                 changed_by=changed_by,
                 changed_at=now,

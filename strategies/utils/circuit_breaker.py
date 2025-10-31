@@ -211,9 +211,11 @@ class CircuitBreaker:
             "total_requests": self.total_requests,
             "total_failures": self.total_failures,
             "total_successes": self.total_successes,
-            "success_rate": (self.total_successes / self.total_requests * 100)
-            if self.total_requests > 0
-            else 0,
+            "success_rate": (
+                (self.total_successes / self.total_requests * 100)
+                if self.total_requests > 0
+                else 0
+            ),
             "last_failure_time": self.last_failure_time,
             "last_success_time": self.last_success_time,
         }

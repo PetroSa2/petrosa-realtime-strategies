@@ -5,14 +5,16 @@ Current coverage: 73.44% → Target: 90%+
 Focus on validator error paths and edge cases.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from strategies.models.orders import (
-    TradeOrder,
-    OrderType,
     OrderSide,
-    TimeInForce,
+    OrderType,
     PositionType,
+    TimeInForce,
+    TradeOrder,
 )
 
 
@@ -58,7 +60,7 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
     def test_validate_order_id_too_short(self):
@@ -73,12 +75,14 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
     def test_validate_signal_id_too_short(self):
         """Test signal_id validator rejects short IDs - covers line 99."""
-        with pytest.raises(ValueError, match="Signal ID must be at least 10 characters"):
+        with pytest.raises(
+            ValueError, match="Signal ID must be at least 10 characters"
+        ):
             TradeOrder(
                 order_id="order123456",
                 symbol="BTCUSDT",
@@ -88,7 +92,7 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="short",  # Too short
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
     def test_validate_limit_order_requires_price(self):
@@ -104,7 +108,7 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
     def test_validate_stop_limit_order_requires_price(self):
@@ -121,7 +125,7 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
     def test_validate_stop_market_order_requires_stop_price(self):
@@ -137,7 +141,7 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
     def test_validate_stop_limit_order_requires_stop_price(self):
@@ -154,7 +158,7 @@ class TestTradeOrderValidators:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
 
 
@@ -172,9 +176,9 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test_strategy",
             signal_id="signal_001_123",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
-        
+
         assert order.order_type == OrderType.MARKET
         assert order.side == OrderSide.BUY
         assert order.position_type == PositionType.LONG
@@ -191,9 +195,9 @@ class TestTradeOrderCreation:
             position_type=PositionType.SHORT,
             strategy_name="test_strategy",
             signal_id="signal_002_123",
-            confidence_score=0.75
+            confidence_score=0.75,
         )
-        
+
         assert order.order_type == OrderType.MARKET
         assert order.side == OrderSide.SELL
         assert order.position_type == PositionType.SHORT
@@ -210,9 +214,9 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test_strategy",
             signal_id="signal_003_123",
-            confidence_score=0.80
+            confidence_score=0.80,
         )
-        
+
         assert order.order_type == OrderType.LIMIT
         assert order.price == 48000.0
 
@@ -228,9 +232,9 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test_strategy",
             signal_id="signal_004_123",
-            confidence_score=0.70
+            confidence_score=0.70,
         )
-        
+
         assert order.order_type == OrderType.STOP_MARKET
         assert order.stop_price == 51000.0
 
@@ -247,9 +251,9 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test_strategy",
             signal_id="signal_005_123",
-            confidence_score=0.90
+            confidence_score=0.90,
         )
-        
+
         assert order.order_type == OrderType.STOP_LIMIT
         assert order.price == 48500.0
         assert order.stop_price == 49000.0
@@ -266,9 +270,9 @@ class TestTradeOrderCreation:
             leverage=10,  # 10x leverage
             strategy_name="test_strategy",
             signal_id="signal_006_123",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
-        
+
         assert order.leverage == 10
 
     def test_order_with_reduce_only(self):
@@ -283,18 +287,14 @@ class TestTradeOrderCreation:
             reduce_only=True,  # Close only
             strategy_name="test_strategy",
             signal_id="signal_007_123",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
-        
+
         assert order.reduce_only is True
 
     def test_order_with_metadata(self):
         """Test order with custom metadata."""
-        metadata = {
-            "indicator": "RSI",
-            "value": 75.0,
-            "reason": "overbought"
-        }
+        metadata = {"indicator": "RSI", "value": 75.0, "reason": "overbought"}
         order = TradeOrder(
             order_id="order_meta_001",
             symbol="BTCUSDT",
@@ -305,9 +305,9 @@ class TestTradeOrderCreation:
             strategy_name="test_strategy",
             signal_id="signal_008_123",
             confidence_score=0.85,
-            metadata=metadata
+            metadata=metadata,
         )
-        
+
         assert order.metadata == metadata
         assert order.metadata["indicator"] == "RSI"
 
@@ -325,7 +325,7 @@ class TestTradeOrderCreation:
                 time_in_force=tif,
                 strategy_name="test_strategy",
                 signal_id=f"signal_tif_{tif.value}",
-                confidence_score=0.85
+                confidence_score=0.85,
             )
             assert order.time_in_force == tif
 
@@ -340,7 +340,7 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.symbol == "BTCUSD"
 
@@ -355,7 +355,7 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert len(order.order_id) == 10
 
@@ -371,10 +371,10 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.0
+            confidence_score=0.0,
         )
         assert order1.confidence_score == 0.0
-        
+
         # Test 1.0
         order2 = TradeOrder(
             order_id="order123457",
@@ -385,7 +385,7 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=1.0
+            confidence_score=1.0,
         )
         assert order2.confidence_score == 1.0
 
@@ -401,7 +401,7 @@ class TestTradeOrderCreation:
             leverage=1,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.leverage == 1
 
@@ -417,7 +417,7 @@ class TestTradeOrderCreation:
             leverage=125,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.leverage == 125
 
@@ -434,7 +434,7 @@ class TestTradeOrderCreation:
             strategy_name="test",
             signal_id="signal123456",
             confidence_score=0.85,
-            timestamp=custom_time
+            timestamp=custom_time,
         )
         assert order.timestamp == custom_time
 
@@ -450,10 +450,10 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         after = datetime.utcnow()
-        
+
         assert before <= order.timestamp <= after
 
     def test_order_close_on_trigger_flag(self):
@@ -469,7 +469,7 @@ class TestTradeOrderCreation:
             close_on_trigger=True,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.close_on_trigger is True
 
@@ -484,7 +484,7 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.symbol == "BTCUSDT"
 
@@ -500,10 +500,10 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order1.quantity == 0.00001
-        
+
         # Large quantity
         order2 = TradeOrder(
             order_id="order123457",
@@ -514,7 +514,7 @@ class TestTradeOrderCreation:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123457",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order2.quantity == 100000.0
 
@@ -533,7 +533,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.is_market_order is True
 
@@ -549,7 +549,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.is_limit_order is True
 
@@ -565,10 +565,10 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order1.is_stop_order is True
-        
+
         order2 = TradeOrder(
             order_id="order123457",
             symbol="BTCUSDT",
@@ -580,7 +580,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123457",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order2.is_stop_order is True
 
@@ -595,7 +595,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.SHORT,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.is_sell_order is True
 
@@ -610,7 +610,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.SHORT,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.is_short_position is True
 
@@ -626,7 +626,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.estimated_value == 24000.0  # 0.5 * 48000
 
@@ -641,7 +641,7 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
         assert order.estimated_value == 0.0  # No price
 
@@ -658,11 +658,11 @@ class TestTradeOrderProperties:
             position_type=PositionType.LONG,
             strategy_name="test",
             signal_id="signal123456",
-            confidence_score=0.85
+            confidence_score=0.85,
         )
-        
+
         order_dict = order.to_dict()
-        
+
         assert order_dict["price"] == 48500.0
         assert order_dict["stop_price"] == 49000.0
         assert order_dict["symbol"] == "BTCUSDT"
@@ -670,7 +670,7 @@ class TestTradeOrderProperties:
     def test_validate_confidence_score_out_of_range(self):
         """Test confidence_score validator - covers line 126."""
         from pydantic import ValidationError
-        
+
         with pytest.raises(ValidationError):
             TradeOrder(
                 order_id="order123456",
@@ -681,6 +681,5 @@ class TestTradeOrderProperties:
                 position_type=PositionType.LONG,
                 strategy_name="test",
                 signal_id="signal123456",
-                confidence_score=1.5  # Invalid
+                confidence_score=1.5,  # Invalid
             )
-

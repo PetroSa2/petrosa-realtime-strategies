@@ -2,14 +2,16 @@
 Edge-case tests for market_data models to raise coverage.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from strategies.models.market_data import (
     DepthLevel,
     DepthUpdate,
-    TradeData,
-    TickerData,
     MarketDataMessage,
+    TickerData,
+    TradeData,
 )
 
 
@@ -154,8 +156,3 @@ def test_market_data_message_stream_validation_and_props():
     assert msg.is_depth is True
     assert msg.is_trade is False
     assert msg.is_ticker is False
-
-
-
-
-

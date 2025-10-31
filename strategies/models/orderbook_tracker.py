@@ -335,10 +335,11 @@ class OrderBookTracker:
                 side=history.side,
                 refill_count=history.refill_count,
                 avg_refill_speed_seconds=history.avg_refill_speed_seconds,
-                volume_consistency_score=1.0
-                - (history.volume_std_dev / history.avg_volume)
-                if history.avg_volume > 0
-                else 0.0,
+                volume_consistency_score=(
+                    1.0 - (history.volume_std_dev / history.avg_volume)
+                    if history.avg_volume > 0
+                    else 0.0
+                ),
                 persistence_seconds=persistence,
                 confidence=confidence,
                 pattern_type="refill",
@@ -359,10 +360,11 @@ class OrderBookTracker:
                 side=history.side,
                 refill_count=history.refill_count,
                 avg_refill_speed_seconds=history.avg_refill_speed_seconds,
-                volume_consistency_score=1.0
-                - (history.volume_std_dev / history.avg_volume)
-                if history.avg_volume > 0
-                else 0.0,
+                volume_consistency_score=(
+                    1.0 - (history.volume_std_dev / history.avg_volume)
+                    if history.avg_volume > 0
+                    else 0.0
+                ),
                 persistence_seconds=persistence,
                 confidence=confidence,
                 pattern_type="consistent_size",
@@ -383,10 +385,11 @@ class OrderBookTracker:
                 side=history.side,
                 refill_count=history.refill_count,
                 avg_refill_speed_seconds=history.avg_refill_speed_seconds,
-                volume_consistency_score=1.0
-                - (history.volume_std_dev / history.avg_volume)
-                if history.avg_volume > 0
-                else 0.0,
+                volume_consistency_score=(
+                    1.0 - (history.volume_std_dev / history.avg_volume)
+                    if history.avg_volume > 0
+                    else 0.0
+                ),
                 persistence_seconds=persistence,
                 confidence=confidence,
                 pattern_type="anchor",

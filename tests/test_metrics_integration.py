@@ -199,8 +199,13 @@ class TestConsumerMetricsIntegration:
 
         # Mock a strategy that returns a signal
         # Use a proper Signal object instead of Mock to work with adapter
-        from strategies.models.signals import Signal, SignalType, SignalAction, SignalConfidence
-        
+        from strategies.models.signals import (
+            Signal,
+            SignalAction,
+            SignalConfidence,
+            SignalType,
+        )
+
         mock_signal = Signal(
             symbol="BTCUSDT",
             signal_type=SignalType.BUY,
@@ -208,9 +213,9 @@ class TestConsumerMetricsIntegration:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test_strategy"
+            strategy_name="test_strategy",
         )
-        
+
         mock_strategy = Mock()
         mock_strategy.analyze = Mock(return_value=mock_signal)
 

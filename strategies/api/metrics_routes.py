@@ -123,18 +123,22 @@ async def get_depth_metrics(
                 "total_levels": metrics.total_levels,
             },
             "strongest_levels": {
-                "bid": {
-                    "price": metrics.strongest_bid_level[0],
-                    "volume": round(metrics.strongest_bid_level[1], 4),
-                }
-                if metrics.strongest_bid_level
-                else None,
-                "ask": {
-                    "price": metrics.strongest_ask_level[0],
-                    "volume": round(metrics.strongest_ask_level[1], 4),
-                }
-                if metrics.strongest_ask_level
-                else None,
+                "bid": (
+                    {
+                        "price": metrics.strongest_bid_level[0],
+                        "volume": round(metrics.strongest_bid_level[1], 4),
+                    }
+                    if metrics.strongest_bid_level
+                    else None
+                ),
+                "ask": (
+                    {
+                        "price": metrics.strongest_ask_level[0],
+                        "volume": round(metrics.strongest_ask_level[1], 4),
+                    }
+                    if metrics.strongest_ask_level
+                    else None
+                ),
             },
         }
 

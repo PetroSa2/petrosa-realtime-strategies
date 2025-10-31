@@ -7,6 +7,7 @@ Tests verify that:
 3. Publisher injects trace context into outgoing NATS messages
 4. Trace IDs are preserved across the pipeline
 """
+
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 

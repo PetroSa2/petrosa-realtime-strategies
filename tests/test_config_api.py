@@ -9,7 +9,6 @@ Tests the configuration management system including:
 - Audit trail
 """
 
-
 import pytest
 
 from strategies.market_logic.defaults import get_strategy_defaults, validate_parameters
@@ -107,7 +106,7 @@ class TestConfigManager:
         invalid_params = {
             "some_bool_param": "not_a_bool",  # Would be bool if schema has one
         }
-        
+
         # This covers the bool type check code path
         # Result depends on whether schema has bool params
         is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
@@ -121,7 +120,7 @@ class TestConfigManager:
         invalid_params = {
             "some_string_param": 123,  # Would be string if schema has one
         }
-        
+
         is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
         # Either unknown param or type error
         assert not is_valid or is_valid  # Code path exercised
@@ -187,10 +186,10 @@ class TestConfigManager:
     async def test_get_strategy_metadata_unknown_strategy(self):
         """Test get_strategy_metadata with unknown strategy - covers line 629."""
         from strategies.market_logic.defaults import get_strategy_metadata
-        
+
         # Unknown strategy should return default metadata
         metadata = get_strategy_metadata("unknown_strategy_xyz")
-        
+
         assert metadata is not None
         assert metadata["name"] == "Unknown Strategy Xyz"  # Titlecased
         assert metadata["description"] == "No description available"
