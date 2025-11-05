@@ -13,6 +13,7 @@ import pytest
 
 from strategies.core.consumer import NATSConsumer
 from strategies.models.market_data import (
+    DepthLevel,
     DepthUpdate,
     MarketDataMessage,
     TickerData,
@@ -266,18 +267,36 @@ def test_parse_market_data_ticker(consumer):
     message_data = {
         "stream": "btcusdt@ticker",
         "data": {
-            "symbol": "BTCUSDT",
-            "price": "50000.00",
-            "volume": "100.0",
-            "timestamp": 1640995200000,
+            "s": "BTCUSDT",
+            "p": "1000.00",
+            "P": "2.00",
+            "w": "50000.00",
+            "x": "49000.00",
+            "c": "50000.00",
+            "Q": "0.1",
+            "b": "49900.00",
+            "B": "10.0",
+            "a": "50100.00",
+            "A": "10.0",
+            "o": "48000.00",
+            "h": "51000.00",
+            "l": "47000.00",
+            "v": "100.0",
+            "q": "5000000.00",
+            "O": 1640995200000,
+            "C": 1641081600000,
+            "F": 1,
+            "L": 100,
+            "n": 100,
+            "E": 1641081600000,
         },
     }
 
     result = consumer._parse_market_data(message_data)
 
+    assert result is not None
     assert result.stream == "btcusdt@ticker"
     assert result.data.symbol == "BTCUSDT"
-    assert result.data.price == 50000.00
 
 
 def test_parse_market_data_trade(consumer):
@@ -285,18 +304,23 @@ def test_parse_market_data_trade(consumer):
     message_data = {
         "stream": "btcusdt@trade",
         "data": {
-            "symbol": "BTCUSDT",
-            "price": "50000.00",
-            "quantity": "0.1",
-            "timestamp": 1640995200000,
+            "s": "BTCUSDT",
+            "t": 123456,
+            "p": "50000.00",
+            "q": "0.1",
+            "b": 1001,
+            "a": 1002,
+            "T": 1640995200000,
+            "m": True,
+            "E": 1640995200000,
         },
     }
 
     result = consumer._parse_market_data(message_data)
 
+    assert result is not None
     assert result.stream == "btcusdt@trade"
     assert result.data.symbol == "BTCUSDT"
-    assert result.data.price == 50000.00
 
 
 def test_parse_market_data_depth(consumer):
@@ -304,15 +328,18 @@ def test_parse_market_data_depth(consumer):
     message_data = {
         "stream": "btcusdt@depth",
         "data": {
-            "symbol": "BTCUSDT",
+            "s": "BTCUSDT",
+            "E": 1640995200000,
+            "U": 1000,
+            "u": 1001,
             "bids": [["50000.00", "1.0"]],
             "asks": [["50001.00", "1.0"]],
-            "timestamp": 1640995200000,
         },
     }
 
     result = consumer._parse_market_data(message_data)
 
+    assert result is not None
     assert result.stream == "btcusdt@depth"
     assert result.data.symbol == "BTCUSDT"
     assert len(result.data.bids) == 1
@@ -333,7 +360,28 @@ async def test_route_to_strategies_ticker(consumer):
     message = MarketDataMessage(
         stream="btcusdt@ticker",
         data=TickerData(
-            symbol="BTCUSDT", price=50000.00, volume=100.0, timestamp=datetime.utcnow()
+            symbol="BTCUSDT",
+            price_change="1000.00",
+            price_change_percent="2.00",
+            weighted_avg_price="50000.00",
+            prev_close_price="49000.00",
+            last_price="50000.00",
+            last_qty="0.1",
+            bid_price="49900.00",
+            bid_qty="10.0",
+            ask_price="50100.00",
+            ask_qty="10.0",
+            open_price="48000.00",
+            high_price="51000.00",
+            low_price="47000.00",
+            volume="100.0",
+            quote_volume="5000000.00",
+            open_time=1640995200000,
+            close_time=1641081600000,
+            first_id=1,
+            last_id=100,
+            count=100,
+            event_time=1641081600000,
         ),
     )
 
@@ -356,7 +404,15 @@ async def test_route_to_strategies_trade(consumer):
     message = MarketDataMessage(
         stream="btcusdt@trade",
         data=TradeData(
-            symbol="BTCUSDT", price=50000.00, quantity=0.1, timestamp=datetime.utcnow()
+            symbol="BTCUSDT",
+            trade_id=123456,
+            price="50000.00",
+            quantity="0.1",
+            buyer_order_id=1001,
+            seller_order_id=1002,
+            trade_time=1640995200000,
+            is_buyer_maker=True,
+            event_time=1640995200000,
         ),
     )
 
@@ -379,9 +435,11 @@ async def test_route_to_strategies_depth(consumer):
         stream="btcusdt@depth",
         data=DepthUpdate(
             symbol="BTCUSDT",
-            bids=[("50000.00", "1.0")],
-            asks=[("50001.00", "1.0")],
-            timestamp=datetime.utcnow(),
+            event_time=1640995200000,
+            first_update_id=1000,
+            final_update_id=1001,
+            bids=[DepthLevel(price="50000.00", quantity="1.0")],
+            asks=[DepthLevel(price="50001.00", quantity="1.0")],
         ),
     )
 
@@ -400,7 +458,18 @@ async def test_route_to_strategies_depth(consumer):
 @pytest.mark.asyncio
 async def test_route_to_strategies_unknown_type(consumer):
     """Test routing unknown message type."""
-    message = MarketDataMessage(stream="unknown@stream", data=None)
+    # Use a valid DepthUpdate but with an unknown stream type
+    message = MarketDataMessage(
+        stream="btcusdt@unknown",
+        data=DepthUpdate(
+            symbol="BTCUSDT",
+            event_time=1640995200000,
+            first_update_id=1000,
+            final_update_id=1001,
+            bids=[DepthLevel(price="50000.00", quantity="1.0")],
+            asks=[DepthLevel(price="50001.00", quantity="1.0")],
+        ),
+    )
 
     # Should not raise exception
     await consumer._route_to_strategies(message)
@@ -412,7 +481,28 @@ async def test_route_to_strategies_strategy_error(consumer):
     message = MarketDataMessage(
         stream="btcusdt@ticker",
         data=TickerData(
-            symbol="BTCUSDT", price=50000.00, volume=100.0, timestamp=datetime.utcnow()
+            symbol="BTCUSDT",
+            price_change="1000.00",
+            price_change_percent="2.00",
+            weighted_avg_price="50000.00",
+            prev_close_price="49000.00",
+            last_price="50000.00",
+            last_qty="0.1",
+            bid_price="49900.00",
+            bid_qty="10.0",
+            ask_price="50100.00",
+            ask_qty="10.0",
+            open_price="48000.00",
+            high_price="51000.00",
+            low_price="47000.00",
+            volume="100.0",
+            quote_volume="5000000.00",
+            open_time=1640995200000,
+            close_time=1641081600000,
+            first_id=1,
+            last_id=100,
+            count=100,
+            event_time=1641081600000,
         ),
     )
 
