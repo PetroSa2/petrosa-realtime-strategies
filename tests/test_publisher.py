@@ -6,7 +6,7 @@ Tests the publisher's ability to publish trade orders and trading signals to NAT
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -33,11 +33,11 @@ def publisher(mock_nats_client):
         nats_url="nats://test:4222",
         topic="signals.trading",
     )
-    
+
     # Replace the NATS client with mock
     publisher.nats_client = mock_nats_client
     publisher.is_running = True
-    
+
     return publisher
 
 
@@ -52,7 +52,7 @@ async def test_publish_signal_success(publisher, mock_nats_client):
         confidence=SignalConfidence.HIGH,
         confidence_score=0.85,
         price=50000.0,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         strategy_name="iceberg_detector",
         metadata={"test": "data"},
     )
@@ -72,7 +72,9 @@ async def test_publish_signal_success(publisher, mock_nats_client):
     payload_dict = json.loads(payload)
 
     assert payload_dict["symbol"] == "BTCUSDT"
-    assert payload_dict["signal_type"] == "BUY"  # Not transformed - publisher sends raw signal
+    assert (
+        payload_dict["signal_type"] == "BUY"
+    )  # Not transformed - publisher sends raw signal
     assert payload_dict["signal_action"] == "OPEN_LONG"  # Actual field name
     assert payload_dict["confidence"] == "HIGH"  # Enum value
     assert payload_dict["confidence_score"] == 0.85  # Numeric confidence
@@ -109,7 +111,9 @@ async def test_publish_signal_with_dict_method(publisher, mock_nats_client):
     payload_dict = json.loads(payload)
 
     assert payload_dict["symbol"] == "ETHUSDT"
-    assert payload_dict["signal_type"] == "SELL"  # Not transformed - publisher sends raw signal
+    assert (
+        payload_dict["signal_type"] == "SELL"
+    )  # Not transformed - publisher sends raw signal
     assert payload_dict["signal_action"] == "OPEN_SHORT"  # Actual field name
 
 
@@ -170,7 +174,7 @@ async def test_publish_signal_updates_metrics(publisher, mock_nats_client):
     """Test that publishing updates metrics correctly."""
     initial_signal_count = publisher.signal_count
     initial_error_count = publisher.error_count
-    
+
     signal = Signal(
         symbol="BTCUSDT",
         signal_type=SignalType.BUY,
@@ -180,10 +184,10 @@ async def test_publish_signal_updates_metrics(publisher, mock_nats_client):
         price=50000.0,
         strategy_name="test_strategy",
     )
-    
+
     # Publish signal
     await publisher.publish_signal(signal)
-    
+
     # Check metrics updated
     assert publisher.signal_count == initial_signal_count + 1
     assert publisher.error_count == initial_error_count

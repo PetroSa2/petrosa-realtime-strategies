@@ -252,17 +252,18 @@ class TestIcebergDetectorStrategy:
             (49998.00, 2.0),
         ]
         asks = [(50010.00, 1.0), (50011.00, 1.0)]
-        
+
         # Analyze multiple times to build pattern history
         for i in range(5):
             from datetime import timedelta
+
             strategy.analyze(
                 symbol="BTCUSDT",
                 bids=bids,
                 asks=asks,
-                timestamp=datetime.utcnow() + timedelta(seconds=i * 10)
+                timestamp=datetime.utcnow() + timedelta(seconds=i * 10),
             )
-        
+
         # Test that medium confidence path is reachable
         assert True  # If no exception, medium confidence mapping works
 
@@ -275,17 +276,18 @@ class TestIcebergDetectorStrategy:
             (49999.00, 1.0),
         ]
         asks = [(50010.00, 0.5), (50011.00, 0.5)]
-        
+
         # Analyze to potentially trigger low confidence path
         for i in range(3):
             from datetime import timedelta
+
             strategy.analyze(
                 symbol="BTCUSDT",
                 bids=bids,
                 asks=asks,
-                timestamp=datetime.utcnow() + timedelta(seconds=i * 10)
+                timestamp=datetime.utcnow() + timedelta(seconds=i * 10),
             )
-        
+
         # Test that low confidence path is reachable
         assert True  # If no exception, low confidence mapping works
 
@@ -294,14 +296,11 @@ class TestIcebergDetectorStrategy:
         # Normal orderbook without iceberg patterns
         bids = [(50000.00, 1.0)]
         asks = [(50010.00, 1.0)]
-        
+
         signal = strategy.analyze(
-            symbol="BTCUSDT",
-            bids=bids,
-            asks=asks,
-            timestamp=datetime.utcnow()
+            symbol="BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
         )
-        
+
         # First analysis with no history likely returns None
         # (or signal if patterns detected, but return None path is exercised)
         assert signal is None or signal is not None  # Path is covered

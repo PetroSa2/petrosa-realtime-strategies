@@ -7,6 +7,7 @@ Tests the market depth analysis system including:
 - Market summary aggregation
 """
 
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -210,47 +211,48 @@ class TestDepthAnalyzer:
     def test_cleanup_triggered_after_100_analyses(self):
         """Test cleanup is triggered every 100 analyses - covers line 246."""
         from strategies.services.depth_analyzer import DepthAnalyzer
-        
+
         analyzer = DepthAnalyzer()
-        
+
         # Analyze 100 times to trigger cleanup
         bids = [[50000.0, 1.0]]
         asks = [[50010.0, 1.0]]
-        
+
         for i in range(100):
             analyzer.analyze_depth(
-                symbol=f"SYM{i % 10}USDT",  # Cycle through symbols
+                symbol=f"SYM{i % 10}USDT",
                 bids=bids,
-                asks=asks
+                asks=asks,  # Cycle through symbols
             )
-        
+
         # If no exception, cleanup logic was executed
         assert True
 
     def test_cleanup_expired_metrics(self):
         """Test _cleanup_expired_metrics removes old data - covers lines 397-409."""
-        from strategies.services.depth_analyzer import DepthAnalyzer
         import time
-        
+
+        from strategies.services.depth_analyzer import DepthAnalyzer
+
         analyzer = DepthAnalyzer()
-        
+
         # Add metrics for a symbol
         bids = [[50000.0, 1.0]]
         asks = [[50010.0, 1.0]]
         analyzer.analyze_depth(symbol="BTCUSDT", bids=bids, asks=asks)
-        
+
         # Modify the analyzer's TTL to be very short for testing
-        if hasattr(analyzer, 'metrics_ttl'):
+        if hasattr(analyzer, "metrics_ttl"):
             analyzer.metrics_ttl = 1  # 1 second
-        
+
         # If we can modify last_update timestamp, do it
-        if hasattr(analyzer, '_last_update'):
+        if hasattr(analyzer, "_last_update"):
             analyzer._last_update["BTCUSDT"] = time.time() - 100  # Make it old
-        
+
         # Trigger cleanup by analyzing 100 times
         for i in range(100):
             analyzer.analyze_depth(symbol="ETHUSDT", bids=bids, asks=asks)
-        
+
         # Cleanup logic should have executed
         assert True
 
@@ -283,6 +285,88 @@ class TestDepthAnalyzer:
         assert metrics.total_liquidity == 0.0
         assert metrics.strongest_bid_level is None
         assert metrics.strongest_ask_level is None
+
+    def test_periodic_cleanup_trigger(self):
+        """Test that processing 100+ updates triggers cleanup."""
+        analyzer = DepthAnalyzer(max_symbols=200, metrics_ttl_seconds=3600)
+
+        # Process updates for different symbols to grow the cache
+        symbols = [f"SYM{i:03d}USDT" for i in range(150)]
+        bids = [(100.0, 1.0)]
+        asks = [(100.5, 1.0)]
+
+        # Process enough to trigger cleanup (line 246)
+        for symbol in symbols:
+            metrics = analyzer.analyze_depth(symbol, bids, asks)
+            assert metrics is not None
+
+        # Cleanup should have been triggered at count % 100 == 0
+        assert len(analyzer._current_metrics) <= 150
+
+    def test_get_current_metrics(self):
+        """Test getting current metrics for a symbol."""
+        analyzer = DepthAnalyzer()
+
+        bids = [(100.0, 1.0)]
+        asks = [(100.5, 1.0)]
+
+        analyzer.analyze_depth("BTCUSDT", bids, asks)
+
+        metrics = analyzer.get_current_metrics("BTCUSDT")
+
+        assert metrics is not None
+        assert metrics.symbol == "BTCUSDT"
+
+    def test_get_all_metrics(self):
+        """Test getting all current metrics."""
+        analyzer = DepthAnalyzer()
+
+        bids = [(100.0, 1.0)]
+        asks = [(100.5, 1.0)]
+
+        analyzer.analyze_depth("BTCUSDT", bids, asks)
+        analyzer.analyze_depth("ETHUSDT", bids, asks)
+
+        all_metrics = analyzer.get_all_metrics()
+
+        assert len(all_metrics) == 2
+        assert "BTCUSDT" in all_metrics
+        assert "ETHUSDT" in all_metrics
+
+    def test_get_pressure_history(self):
+        """Test getting pressure history for a symbol."""
+        analyzer = DepthAnalyzer()
+
+        bids = [(100.0, 1.0)]
+        asks = [(100.5, 1.0)]
+
+        # Build some history
+        for i in range(5):
+            analyzer.analyze_depth(
+                "BTCUSDT",
+                bids,
+                asks,
+                timestamp=datetime.utcnow() + timedelta(seconds=i),
+            )
+
+        history = analyzer.get_pressure_history("BTCUSDT", timeframe="1m")
+
+        assert history is not None
+
+    def test_get_market_summary(self):
+        """Test getting market summary for multiple symbols."""
+        analyzer = DepthAnalyzer()
+
+        bids = [(100.0, 1.0)]
+        asks = [(100.5, 1.0)]
+
+        analyzer.analyze_depth("BTCUSDT", bids, asks)
+        analyzer.analyze_depth("ETHUSDT", bids, asks)
+
+        summary = analyzer.get_market_summary()
+
+        assert "symbols_tracked" in summary
+        assert summary["symbols_tracked"] == 2
 
 
 if __name__ == "__main__":

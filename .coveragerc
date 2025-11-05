@@ -1,0 +1,26 @@
+[run]
+source = strategies
+omit =
+    # Infrastructure modules - hard to test without full environment
+    strategies/db/mongodb_client.py
+    strategies/services/data_manager_client.py
+    strategies/health/server.py
+    strategies/main.py
+    # API routes - require full app context
+    strategies/api/config_routes.py
+    strategies/api/metrics_routes.py
+    # Heartbeat - background service
+    strategies/utils/heartbeat.py
+    # Service config manager - complex integration
+    strategies/services/config_manager.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+

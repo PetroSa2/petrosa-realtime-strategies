@@ -642,7 +642,9 @@ class NATSConsumer:
 
                         if signal:
                             # Record signal in metrics
-                            ctx.record_signal(signal.signal_action.value, signal.confidence_score)
+                            ctx.record_signal(
+                                signal.signal_action.value, signal.confidence_score
+                            )
 
                             # Publish signal
                             await self.publisher.publish_signal(signal)
@@ -877,9 +879,9 @@ class NATSConsumer:
         return {
             "healthy": is_healthy,
             "is_running": self.is_running,
-            "nats_connected": self.nats_client.is_connected
-            if self.nats_client
-            else False,
+            "nats_connected": (
+                self.nats_client.is_connected if self.nats_client else False
+            ),
             "subscription_active": self.subscription is not None,
             "message_count": self.message_count,
             "error_count": self.error_count,
