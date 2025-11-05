@@ -248,3 +248,169 @@ class TestMarketDataTransformation:
         result = consumer_for_transform._parse_market_data(message_data)
 
         assert result is None
+
+
+class TestConsumerAsyncProcessing:
+    """Test consumer async processing methods."""
+
+    @pytest.fixture
+    def async_consumer(self):
+        """Create minimal consumer for async tests."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from strategies.core.consumer import NATSConsumer
+
+        mock_publisher = AsyncMock()
+        consumer = object.__new__(NATSConsumer)
+        consumer.logger = MagicMock()
+        consumer.depth_analyzer = MagicMock()
+        consumer.microstructure_strategies = {}
+        consumer.market_logic_strategies = {}
+        consumer.publisher = mock_publisher
+        return consumer
+
+    @pytest.mark.asyncio
+    async def test_process_market_data_depth(self, async_consumer):
+        """Test processing depth market data."""
+        message = MarketDataMessage(
+            stream="btcusdt@depth",
+            data=DepthUpdate(
+                symbol="BTCUSDT",
+                event_time=1640995200000,
+                first_update_id=1000,
+                final_update_id=1001,
+                bids=[DepthLevel(price="50000.00", quantity="1.0")],
+                asks=[DepthLevel(price="50001.00", quantity="1.0")],
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_market_data(message)
+
+    @pytest.mark.asyncio
+    async def test_process_market_data_trade(self, async_consumer):
+        """Test processing trade market data."""
+        message = MarketDataMessage(
+            stream="btcusdt@trade",
+            data=TradeData(
+                symbol="BTCUSDT",
+                trade_id=123456,
+                price="50000.00",
+                quantity="0.1",
+                buyer_order_id=1001,
+                seller_order_id=1002,
+                trade_time=1640995200000,
+                is_buyer_maker=True,
+                event_time=1640995200000,
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_market_data(message)
+
+    @pytest.mark.asyncio
+    async def test_process_market_data_ticker(self, async_consumer):
+        """Test processing ticker market data."""
+        message = MarketDataMessage(
+            stream="btcusdt@ticker",
+            data=TickerData(
+                symbol="BTCUSDT",
+                price_change="1000.00",
+                price_change_percent="2.00",
+                weighted_avg_price="50000.00",
+                prev_close_price="49000.00",
+                last_price="50000.00",
+                last_qty="0.1",
+                bid_price="49900.00",
+                bid_qty="10.0",
+                ask_price="50100.00",
+                ask_qty="10.0",
+                open_price="48000.00",
+                high_price="51000.00",
+                low_price="47000.00",
+                volume="100.0",
+                quote_volume="5000000.00",
+                open_time=1640995200000,
+                close_time=1641081600000,
+                first_id=1,
+                last_id=100,
+                count=100,
+                event_time=1641081600000,
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_market_data(message)
+
+    @pytest.mark.asyncio
+    async def test_process_depth_data_directly(self, async_consumer):
+        """Test _process_depth_data method."""
+        message = MarketDataMessage(
+            stream="btcusdt@depth",
+            data=DepthUpdate(
+                symbol="BTCUSDT",
+                event_time=1640995200000,
+                first_update_id=1000,
+                final_update_id=1001,
+                bids=[DepthLevel(price="50000.00", quantity="1.0")],
+                asks=[DepthLevel(price="50001.00", quantity="1.0")],
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_depth_data(message)
+
+    @pytest.mark.asyncio
+    async def test_process_trade_data_directly(self, async_consumer):
+        """Test _process_trade_data method."""
+        message = MarketDataMessage(
+            stream="btcusdt@trade",
+            data=TradeData(
+                symbol="BTCUSDT",
+                trade_id=123456,
+                price="50000.00",
+                quantity="0.1",
+                buyer_order_id=1001,
+                seller_order_id=1002,
+                trade_time=1640995200000,
+                is_buyer_maker=True,
+                event_time=1640995200000,
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_trade_data(message)
+
+    @pytest.mark.asyncio
+    async def test_process_ticker_data_directly(self, async_consumer):
+        """Test _process_ticker_data method."""
+        message = MarketDataMessage(
+            stream="btcusdt@ticker",
+            data=TickerData(
+                symbol="BTCUSDT",
+                price_change="1000.00",
+                price_change_percent="2.00",
+                weighted_avg_price="50000.00",
+                prev_close_price="49000.00",
+                last_price="50000.00",
+                last_qty="0.1",
+                bid_price="49900.00",
+                bid_qty="10.0",
+                ask_price="50100.00",
+                ask_qty="10.0",
+                open_price="48000.00",
+                high_price="51000.00",
+                low_price="47000.00",
+                volume="100.0",
+                quote_volume="5000000.00",
+                open_time=1640995200000,
+                close_time=1641081600000,
+                first_id=1,
+                last_id=100,
+                count=100,
+                event_time=1641081600000,
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_ticker_data(message)
