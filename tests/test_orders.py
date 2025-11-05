@@ -288,3 +288,186 @@ class TestTradeOrder:
 
         assert order.metadata == {}
 
+    def test_is_market_order_property(self):
+        """Test is_market_order property."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.is_market_order is True
+
+    def test_is_limit_order_property(self):
+        """Test is_limit_order property."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            price=50000.0,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.is_limit_order is True
+
+    def test_is_stop_order_property(self):
+        """Test is_stop_order property."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.SELL,
+            order_type=OrderType.STOP_MARKET,
+            stop_price=49000.0,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.is_stop_order is True
+
+    def test_is_buy_order_property(self):
+        """Test is_buy_order property."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.is_buy_order is True
+        assert order.is_sell_order is False
+
+    def test_is_long_position_property(self):
+        """Test is_long_position property."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.is_long_position is True
+        assert order.is_short_position is False
+
+    def test_estimated_value_with_price(self):
+        """Test estimated_value calculation with price."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            price=50000.0,
+            quantity=0.01,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.estimated_value == 500.0
+
+    def test_estimated_value_without_price(self):
+        """Test estimated_value returns 0 without price."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.01,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        assert order.estimated_value == 0.0
+
+    def test_to_dict_market_order(self):
+        """Test to_dict for market order."""
+        order_id = str(uuid4())
+        signal_id = str(uuid4())
+
+        order = TradeOrder(
+            order_id=order_id,
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=signal_id,
+            confidence_score=0.85,
+        )
+
+        order_dict = order.to_dict()
+
+        assert order_dict["order_id"] == order_id
+        assert order_dict["symbol"] == "BTCUSDT"
+        assert order_dict["side"] == "BUY"
+        assert order_dict["order_type"] == "MARKET"
+        assert order_dict["quantity"] == 0.001
+        assert "price" not in order_dict  # Market order has no price
+        assert "stop_price" not in order_dict
+
+    def test_to_dict_limit_order_with_price(self):
+        """Test to_dict for limit order includes price."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            price=50000.0,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        order_dict = order.to_dict()
+
+        assert order_dict["price"] == 50000.0
+
+    def test_to_dict_stop_order_with_stop_price(self):
+        """Test to_dict for stop order includes stop_price."""
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.SELL,
+            order_type=OrderType.STOP_MARKET,
+            stop_price=49000.0,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        order_dict = order.to_dict()
+
+        assert order_dict["stop_price"] == 49000.0
+
+
