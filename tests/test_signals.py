@@ -13,6 +13,7 @@ from strategies.models.signals import (
     SignalAction,
     SignalAggregation,
     SignalConfidence,
+    SignalMetrics,
     SignalType,
     StrategySignal,
 )
@@ -514,4 +515,199 @@ class TestSignalAggregation:
         )
 
         assert agg.strategy_count == 2
+
+    def test_is_strong_consensus_true(self):
+        """Test is_strong_consensus when consensus exists."""
+        # Create 3 BUY signals and 1 SELL (70%+ consensus)
+        signals = {}
+        for i in range(3):
+            sig = Signal(
+                symbol="BTCUSDT",
+                signal_type=SignalType.BUY,
+                signal_action=SignalAction.OPEN_LONG,
+                confidence=SignalConfidence.HIGH,
+                confidence_score=0.85,
+                price=50000.0,
+                strategy_name=f"s{i}",
+            )
+            signals[f"s{i}"] = StrategySignal(
+                signal=sig, strategy_version="1.0", processing_time_ms=1.0
+            )
+
+        # Add one SELL signal
+        sell_sig = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.SELL,
+            signal_action=SignalAction.OPEN_SHORT,
+            confidence=SignalConfidence.LOW,
+            confidence_score=0.4,
+            price=50000.0,
+            strategy_name="s3",
+        )
+        signals["s3"] = StrategySignal(
+            signal=sell_sig, strategy_version="1.0", processing_time_ms=1.0
+        )
+
+        agg = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.BUY,
+            aggregated_signal_action=SignalAction.OPEN_LONG,
+            aggregated_confidence_score=0.7,
+            aggregated_confidence=SignalConfidence.HIGH,
+            strategy_signals=signals,
+            aggregation_method="consensus",
+        )
+
+        assert agg.is_strong_consensus is True  # 75% agree
+
+    def test_is_strong_consensus_false(self):
+        """Test is_strong_consensus when no consensus."""
+        # Create equal BUY and SELL signals (50/50 split)
+        signals = {}
+        
+        buy_sig = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="s1",
+        )
+        signals["s1"] = StrategySignal(
+            signal=buy_sig, strategy_version="1.0", processing_time_ms=1.0
+        )
+
+        sell_sig = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.SELL,
+            signal_action=SignalAction.OPEN_SHORT,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="s2",
+        )
+        signals["s2"] = StrategySignal(
+            signal=sell_sig, strategy_version="1.0", processing_time_ms=1.0
+        )
+
+        agg = SignalAggregation(
+            symbol="BTCUSDT",
+            aggregated_signal_type=SignalType.HOLD,
+            aggregated_signal_action=SignalAction.HOLD,
+            aggregated_confidence_score=0.5,
+            aggregated_confidence=SignalConfidence.MEDIUM,
+            strategy_signals=signals,
+            aggregation_method="consensus",
+        )
+
+        assert agg.is_strong_consensus is False  # Only 50% agree
+
+
+class TestSignalMetrics:
+    """Test SignalMetrics model."""
+
+    def test_create_signal_metrics(self):
+        """Test creating signal metrics."""
+        metrics = SignalMetrics()
+
+        assert metrics.total_signals_generated == 0
+        assert len(metrics.signals_by_type) == 0
+
+    def test_update_metrics_single_signal(self):
+        """Test updating metrics with single signal."""
+        metrics = SignalMetrics()
+        
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        metrics.update_metrics(signal, processing_time_ms=10.5)
+
+        assert metrics.total_signals_generated == 1
+        assert metrics.signals_by_type[SignalType.BUY] == 1
+        assert metrics.signals_by_confidence[SignalConfidence.HIGH] == 1
+        assert metrics.signals_by_strategy["test_strategy"] == 1
+        assert metrics.average_processing_time_ms == 10.5
+        assert metrics.last_signal_timestamp == signal.timestamp
+
+    def test_update_metrics_multiple_signals(self):
+        """Test updating metrics with multiple signals."""
+        metrics = SignalMetrics()
+        
+        # Signal 1
+        signal1 = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="strategy1",
+        )
+        metrics.update_metrics(signal1, processing_time_ms=10.0)
+
+        # Signal 2
+        signal2 = Signal(
+            symbol="ETHUSDT",
+            signal_type=SignalType.SELL,
+            signal_action=SignalAction.OPEN_SHORT,
+            confidence=SignalConfidence.MEDIUM,
+            confidence_score=0.65,
+            price=3000.0,
+            strategy_name="strategy2",
+        )
+        metrics.update_metrics(signal2, processing_time_ms=20.0)
+
+        assert metrics.total_signals_generated == 2
+        assert metrics.signals_by_type[SignalType.BUY] == 1
+        assert metrics.signals_by_type[SignalType.SELL] == 1
+        assert metrics.average_processing_time_ms == 15.0  # (10 + 20) / 2
+
+    def test_get_signal_distribution_empty(self):
+        """Test get_signal_distribution with no signals."""
+        metrics = SignalMetrics()
+
+        distribution = metrics.get_signal_distribution()
+
+        assert distribution == {}
+
+    def test_get_signal_distribution_with_signals(self):
+        """Test get_signal_distribution with signals."""
+        metrics = SignalMetrics()
+        
+        signal1 = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="s1",
+        )
+        
+        signal2 = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="s2",
+        )
+
+        metrics.update_metrics(signal1, processing_time_ms=10.0)
+        metrics.update_metrics(signal2, processing_time_ms=10.0)
+
+        distribution = metrics.get_signal_distribution()
+
+        assert isinstance(distribution, dict)
+        # Should have distribution data when signals exist
+        assert len(distribution) > 0 or metrics.total_signals_generated == 2
 

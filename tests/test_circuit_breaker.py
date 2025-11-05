@@ -7,7 +7,11 @@ import time
 
 import pytest
 
-from strategies.utils.circuit_breaker import CircuitBreaker, CircuitState
+from strategies.utils.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerOpenException,
+    CircuitState,
+)
 
 
 class TestCircuitBreakerBasics:
@@ -209,4 +213,5 @@ class TestCircuitBreakerEdgeCases:
         result = func(should_fail=False)
         assert result == "success"
         assert cb.failure_count == 0
+
 

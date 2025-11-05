@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from strategies.models.orders import (
+    OrderMetrics,
     OrderResponse,
     OrderSide,
     OrderStatus,
@@ -749,5 +750,129 @@ class TestOrderStatus:
         )
 
         assert status.remaining_quantity == 0.7
+
+
+class TestOrderMetrics:
+    """Test OrderMetrics model."""
+
+    def test_create_order_metrics(self):
+        """Test creating order metrics."""
+        metrics = OrderMetrics()
+
+        assert metrics.total_orders_submitted == 0
+        assert metrics.success_rate == 0.0
+
+    def test_update_metrics_single_order(self):
+        """Test updating metrics with single order."""
+        metrics = OrderMetrics()
+
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+
+        response = OrderResponse(
+            order_id=order.order_id, status="success", message="Order submitted"
+        )
+
+        metrics.update_metrics(order, response, processing_time_ms=15.5)
+
+        assert metrics.total_orders_submitted == 1
+        assert metrics.orders_by_status["success"] == 1
+        assert metrics.orders_by_strategy["test_strategy"] == 1
+        assert metrics.orders_by_symbol["BTCUSDT"] == 1
+        assert metrics.average_processing_time_ms == 15.5
+        assert metrics.last_order_timestamp == order.timestamp
+        assert metrics.success_rate == 100.0
+
+    def test_update_metrics_multiple_orders(self):
+        """Test updating metrics with multiple orders."""
+        metrics = OrderMetrics()
+
+        # Order 1 - Success
+        order1 = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="strategy1",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+        response1 = OrderResponse(
+            order_id=order1.order_id, status="success", message="Order 1 submitted"
+        )
+        metrics.update_metrics(order1, response1, processing_time_ms=10.0)
+
+        # Order 2 - Failed
+        order2 = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="ETHUSDT",
+            side=OrderSide.SELL,
+            order_type=OrderType.LIMIT,
+            price=3000.0,
+            quantity=0.01,
+            position_type=PositionType.SHORT,
+            strategy_name="strategy2",
+            signal_id=str(uuid4()),
+            confidence_score=0.75,
+        )
+        response2 = OrderResponse(
+            order_id=order2.order_id, status="failed", message="Insufficient funds"
+        )
+        metrics.update_metrics(order2, response2, processing_time_ms=20.0)
+
+        assert metrics.total_orders_submitted == 2
+        assert metrics.orders_by_status["success"] == 1
+        assert metrics.orders_by_status["failed"] == 1
+        assert metrics.average_processing_time_ms == 15.0  # (10 + 20) / 2
+        assert metrics.success_rate == 50.0  # 1/2 * 100
+
+    def test_get_order_distribution_empty(self):
+        """Test get_order_distribution with no orders."""
+        metrics = OrderMetrics()
+
+        distribution = metrics.get_order_distribution()
+
+        assert distribution == {}
+
+    def test_get_order_distribution_with_orders(self):
+        """Test get_order_distribution with orders."""
+        metrics = OrderMetrics()
+
+        order = TradeOrder(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            position_type=PositionType.LONG,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+        )
+        response = OrderResponse(
+            order_id=order.order_id, status="success", message="Order submitted"
+        )
+        metrics.update_metrics(order, response, processing_time_ms=10.0)
+
+        distribution = metrics.get_order_distribution()
+
+        assert isinstance(distribution, dict)
+        assert "status_success" in distribution
+        assert distribution["status_success"] == 1.0
+        assert "strategy_test_strategy" in distribution
+        assert distribution["strategy_test_strategy"] == 1.0
+        assert "symbol_BTCUSDT" in distribution
+        assert distribution["symbol_BTCUSDT"] == 1.0
 
 
