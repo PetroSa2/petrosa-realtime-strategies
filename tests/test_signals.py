@@ -220,3 +220,99 @@ class TestSignal:
         assert SignalConfidence.MEDIUM == SignalConfidence.MEDIUM
         assert SignalConfidence.HIGH == SignalConfidence.HIGH
 
+    def test_is_buy_signal_property(self):
+        """Test is_buy_signal property."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        assert signal.is_buy_signal is True
+        assert signal.is_sell_signal is False
+        assert signal.is_hold_signal is False
+
+    def test_is_sell_signal_property(self):
+        """Test is_sell_signal property."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.SELL,
+            signal_action=SignalAction.OPEN_SHORT,
+            confidence=SignalConfidence.MEDIUM,
+            confidence_score=0.65,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        assert signal.is_sell_signal is True
+        assert signal.is_buy_signal is False
+        assert signal.is_hold_signal is False
+
+    def test_is_hold_signal_property(self):
+        """Test is_hold_signal property."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.HOLD,
+            signal_action=SignalAction.HOLD,
+            confidence=SignalConfidence.LOW,
+            confidence_score=0.45,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        assert signal.is_hold_signal is True
+        assert signal.is_buy_signal is False
+        assert signal.is_sell_signal is False
+
+    def test_is_high_confidence_property(self):
+        """Test is_high_confidence property."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        assert signal.is_high_confidence is True
+        assert signal.is_medium_confidence is False
+        assert signal.is_low_confidence is False
+
+    def test_is_medium_confidence_property(self):
+        """Test is_medium_confidence property."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.MEDIUM,
+            confidence_score=0.65,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        assert signal.is_medium_confidence is True
+        assert signal.is_high_confidence is False
+        assert signal.is_low_confidence is False
+
+    def test_is_low_confidence_property(self):
+        """Test is_low_confidence property."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.LOW,
+            confidence_score=0.45,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        assert signal.is_low_confidence is True
+        assert signal.is_high_confidence is False
+        assert signal.is_medium_confidence is False
+
