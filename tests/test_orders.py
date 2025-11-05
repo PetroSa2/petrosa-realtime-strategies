@@ -9,7 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from strategies.models.orders import (
+    OrderResponse,
     OrderSide,
+    OrderStatus,
     OrderType,
     PositionType,
     TimeInForce,
@@ -469,5 +471,283 @@ class TestTradeOrder:
         order_dict = order.to_dict()
 
         assert order_dict["stop_price"] == 49000.0
+
+
+class TestOrderResponse:
+    """Test OrderResponse model."""
+
+    def test_create_order_response(self):
+        """Test creating an order response."""
+        response = OrderResponse(
+            order_id=str(uuid4()),
+            status="success",
+            message="Order placed successfully",
+        )
+
+        assert response.order_id is not None
+        assert response.status == "success"
+        assert response.message == "Order placed successfully"
+
+    def test_order_response_is_success(self):
+        """Test is_success property."""
+        response = OrderResponse(
+            order_id=str(uuid4()),
+            status="success",
+            message="Order placed",
+        )
+
+        assert response.is_success is True
+
+    def test_order_response_is_error(self):
+        """Test is_error property."""
+        response = OrderResponse(
+            order_id=str(uuid4()),
+            status="error",
+            message="Order failed",
+        )
+
+        assert response.is_error is True
+
+
+class TestOrderStatus:
+    """Test OrderStatus model."""
+
+    def test_create_order_status(self):
+        """Test creating an order status."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="filled",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            filled_quantity=0.001,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.symbol == "BTCUSDT"
+        assert status.status == "filled"
+
+    def test_is_filled_property(self):
+        """Test is_filled property."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="filled",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            filled_quantity=0.001,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.is_filled is True
+
+    def test_is_partially_filled_property(self):
+        """Test is_partially_filled property."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="partially_filled",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=1.0,
+            filled_quantity=0.5,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.is_partially_filled is True
+
+    def test_is_pending_property(self):
+        """Test is_pending property."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="pending",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.is_pending is True
+
+    def test_is_cancelled_property(self):
+        """Test is_cancelled property."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="cancelled",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=0.001,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.is_cancelled is True
+
+    def test_is_rejected_property(self):
+        """Test is_rejected property."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="rejected",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.001,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.is_rejected is True
+
+    def test_fill_percentage_full(self):
+        """Test fill_percentage when fully filled."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="filled",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=1.0,
+            filled_quantity=1.0,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.fill_percentage == 100.0
+
+    def test_fill_percentage_partial(self):
+        """Test fill_percentage when partially filled."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="partial",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=2.0,
+            filled_quantity=0.5,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.fill_percentage == 25.0
+
+    def test_fill_percentage_zero_quantity(self):
+        """Test fill_percentage with zero quantity."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="new",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.0,
+            filled_quantity=0.0,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.fill_percentage == 0.0
+
+    def test_remaining_quantity(self):
+        """Test remaining_quantity calculation."""
+        status = OrderStatus(
+            order_id=str(uuid4()),
+            symbol="BTCUSDT",
+            status="partial",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=1.0,
+            filled_quantity=0.3,
+            time_in_force=TimeInForce.GTC,
+            position_type=PositionType.LONG,
+            leverage=1,
+            reduce_only=False,
+            close_on_trigger=False,
+            strategy_name="test_strategy",
+            signal_id=str(uuid4()),
+            confidence_score=0.85,
+            created_time=datetime.utcnow(),
+            updated_time=datetime.utcnow(),
+        )
+
+        assert status.remaining_quantity == 0.7
 
 
