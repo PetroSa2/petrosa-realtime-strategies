@@ -267,6 +267,7 @@ class TestConsumerAsyncProcessing:
         consumer.microstructure_strategies = {}
         consumer.market_logic_strategies = {}
         consumer.publisher = mock_publisher
+        consumer.metrics = MagicMock()
         return consumer
 
     @pytest.mark.asyncio
@@ -414,3 +415,67 @@ class TestConsumerAsyncProcessing:
 
         # Should not raise exception
         await async_consumer._process_ticker_data(message)
+
+    @pytest.mark.asyncio
+    async def test_process_microstructure_strategies(self, async_consumer):
+        """Test _process_microstructure_strategies method."""
+        from unittest.mock import AsyncMock
+
+        # Setup microstructure strategies
+        async_consumer.microstructure_strategies = {
+            "spread_liquidity": AsyncMock(),
+            "iceberg_detector": AsyncMock(),
+        }
+
+        bids = [(50000.0, 1.0), (49999.0, 1.5)]
+        asks = [(50001.0, 1.0), (50002.0, 1.5)]
+
+        # Should not raise exception
+        await async_consumer._process_microstructure_strategies(
+            symbol="BTCUSDT", bids=bids, asks=asks
+        )
+
+    @pytest.mark.asyncio
+    async def test_process_market_logic_strategies(self, async_consumer):
+        """Test _process_market_logic_strategies method."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        # Setup market logic strategies
+        async_consumer.market_logic_strategies = {
+            "btc_dominance": AsyncMock(),
+            "cross_exchange_spread": AsyncMock(),
+            "onchain_metrics": AsyncMock(),
+        }
+        async_consumer.metrics.start_operation = MagicMock()
+        async_consumer.metrics.record_error = MagicMock()
+
+        message = MarketDataMessage(
+            stream="btcusdt@ticker",
+            data=TickerData(
+                symbol="BTCUSDT",
+                price_change="1000.00",
+                price_change_percent="2.00",
+                weighted_avg_price="50000.00",
+                prev_close_price="49000.00",
+                last_price="50000.00",
+                last_qty="0.1",
+                bid_price="49900.00",
+                bid_qty="10.0",
+                ask_price="50100.00",
+                ask_qty="10.0",
+                open_price="48000.00",
+                high_price="51000.00",
+                low_price="47000.00",
+                volume="100.0",
+                quote_volume="5000000.00",
+                open_time=1640995200000,
+                close_time=1641081600000,
+                first_id=1,
+                last_id=100,
+                count=100,
+                event_time=1641081600000,
+            ),
+        )
+
+        # Should not raise exception
+        await async_consumer._process_market_logic_strategies(message)
