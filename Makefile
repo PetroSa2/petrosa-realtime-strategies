@@ -6,7 +6,7 @@
 
 # Variables (customize per service)
 PYTHON := python3
-COVERAGE_THRESHOLD := 73  # Updated: 73.84% achieved (working toward 90%)
+COVERAGE_THRESHOLD := 74  # Updated: 74.45% achieved (15.55% from 90% target)
 IMAGE_NAME := petrosa-realtime-strategies
 NAMESPACE := petrosa-apps
 
