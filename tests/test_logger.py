@@ -43,3 +43,29 @@ class TestLogger:
         assert logger1 is not None
         assert logger2 is not None
 
+    def test_get_logger_without_name(self):
+        """Test get_logger without name uses service name."""
+        logger = get_logger()
+
+        assert logger is not None
+
+    def test_add_correlation_id(self):
+        """Test adding correlation ID to logger."""
+        from strategies.utils.logger import add_correlation_id
+
+        logger = get_logger("test")
+        logger_with_id = add_correlation_id(logger, "test-correlation-123")
+
+        assert logger_with_id is not None
+
+    def test_add_request_context(self):
+        """Test adding request context to logger."""
+        from strategies.utils.logger import add_request_context
+
+        logger = get_logger("test")
+        logger_with_context = add_request_context(
+            logger, request_id="req-123", user_id="user-456"
+        )
+
+        assert logger_with_context is not None
+
