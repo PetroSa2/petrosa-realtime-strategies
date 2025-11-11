@@ -244,7 +244,7 @@ def signal_handler(signum, frame):
     """Handle shutdown signals."""
     print(f"\nReceived signal {signum}, shutting down gracefully...")
     if hasattr(signal_handler, "service"):
-        asyncio.create_task(signal_handler.service.shutdown_event.set())
+        signal_handler.service.shutdown_event.set()
 
 
 @app.command()

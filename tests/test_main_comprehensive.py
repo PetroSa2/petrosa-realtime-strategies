@@ -125,7 +125,7 @@ async def test_start_success(service, mock_components):
 @pytest.mark.asyncio
 async def test_start_error_handling(service):
     """Test service start error handling."""
-    with patch("strategies.main.MongoDBClient", side_effect=Exception("MongoDB error")):
+    with patch("strategies.db.mongodb_client.MongoDBClient", side_effect=Exception("MongoDB error")):
         with pytest.raises(Exception, match="MongoDB error"):
             await service.start()
 
@@ -158,7 +158,8 @@ async def test_stop_with_none_components(service):
     # Should not raise any errors
 
 
-def test_signal_handler():
+@pytest.mark.asyncio
+async def test_signal_handler():
     """Test signal handler function."""
     # Create a mock service
     mock_service = MagicMock()
@@ -169,6 +170,9 @@ def test_signal_handler():
 
     # Test signal handling
     signal_handler(signal.SIGTERM, None)
+    
+    # Give the event loop a chance to process
+    await asyncio.sleep(0.1)
 
     # Verify shutdown event was set
     assert mock_service.shutdown_event.is_set()
