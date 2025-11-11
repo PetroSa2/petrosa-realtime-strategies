@@ -189,6 +189,7 @@ async def test_create_indexes_success(mock_database):
     """Test successful index creation."""
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     await client._create_indexes()
 
@@ -211,6 +212,7 @@ async def test_create_indexes_failure(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     # Should not raise exception
     await client._create_indexes()
@@ -290,6 +292,7 @@ async def test_get_global_config_direct_mode(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.get_global_config("test_strategy")
 
@@ -324,6 +327,7 @@ async def test_set_global_config_direct_mode_success(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.set_global_config(config_data)
 
@@ -341,6 +345,7 @@ async def test_set_global_config_direct_mode_duplicate_key_error(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.set_global_config(config_data)
 
@@ -372,6 +377,7 @@ async def test_delete_global_config_direct_mode(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.delete_global_config("test_strategy")
 
@@ -416,6 +422,7 @@ async def test_get_symbol_config_direct_mode(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.get_symbol_config("test_strategy", "BTCUSDT")
 
@@ -458,6 +465,7 @@ async def test_set_symbol_config_direct_mode_success(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.set_symbol_config(config_data)
 
@@ -490,6 +498,7 @@ async def test_delete_symbol_config_direct_mode(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.delete_symbol_config("test_strategy", "BTCUSDT")
 
@@ -528,6 +537,7 @@ async def test_get_audit_trail_direct_mode(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     result = await client.get_audit_trail("test_strategy", "BTCUSDT", 10)
 
@@ -551,6 +561,7 @@ async def test_add_audit_record_direct_mode(mock_database):
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
+    client._connected = True
 
     await client.add_audit_record(audit_data)
 
