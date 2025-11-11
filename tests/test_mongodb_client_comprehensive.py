@@ -324,7 +324,16 @@ async def test_set_global_config_data_manager_mode(mock_data_manager_client):
 async def test_set_global_config_direct_mode_success(mock_database):
     """Test successful set global config in direct mode."""
     config_data = {"strategy_id": "test", "parameters": {"param1": "value1"}}
-    mock_database.strategy_configs_global.replace_one.return_value.matched_count = 1
+    
+    # Mock get_global_config to return None (new config)
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
+    mock_database.strategy_configs_global.find_one = AsyncMock(return_value=None)
+    
+    # Mock update_one for upsert
+    mock_result = MagicMock()
+    mock_result.upserted_id = "new_id_123"
+    mock_database.strategy_configs_global.update_one = AsyncMock(return_value=mock_result)
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
@@ -332,16 +341,21 @@ async def test_set_global_config_direct_mode_success(mock_database):
 
     result = await client.upsert_global_config("test_strategy", config_data, {"changed_by": "test"})
 
-    assert result is True
-    mock_database.strategy_configs_global.replace_one.assert_called_once()
+    assert result == "new_id_123"
+    mock_database.strategy_configs_global.update_one.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_set_global_config_direct_mode_duplicate_key_error(mock_database):
     """Test set global config with duplicate key error in direct mode."""
     config_data = {"strategy_id": "test", "parameters": {"param1": "value1"}}
-    mock_database.strategy_configs_global.replace_one.side_effect = DuplicateKeyError(
-        "Duplicate key"
+    
+    # Mock get_global_config to return None
+    mock_database.strategy_configs_global.find_one = AsyncMock(return_value=None)
+    
+    # Mock update_one to raise DuplicateKeyError
+    mock_database.strategy_configs_global.update_one = AsyncMock(
+        side_effect=DuplicateKeyError("Duplicate key")
     )
 
     client = MongoDBClient(use_data_manager=False)
@@ -350,7 +364,7 @@ async def test_set_global_config_direct_mode_duplicate_key_error(mock_database):
 
     result = await client.upsert_global_config("test_strategy", config_data, {"changed_by": "test"})
 
-    assert result is False
+    assert result is None  # Returns None on error, not False
 
 
 @pytest.mark.asyncio
@@ -462,7 +476,16 @@ async def test_set_symbol_config_direct_mode_success(mock_database):
         "symbol": "BTCUSDT",
         "parameters": {"param1": "value1"},
     }
-    mock_database.strategy_configs_symbol.replace_one.return_value.matched_count = 1
+    
+    # Mock get_symbol_config to return None (new config)
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
+    mock_database.strategy_configs_symbol.find_one = AsyncMock(return_value=None)
+    
+    # Mock update_one for upsert
+    mock_result = MagicMock()
+    mock_result.upserted_id = "new_id_456"
+    mock_database.strategy_configs_symbol.update_one = AsyncMock(return_value=mock_result)
 
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
@@ -470,8 +493,8 @@ async def test_set_symbol_config_direct_mode_success(mock_database):
 
     result = await client.upsert_symbol_config("test_strategy", "BTCUSDT", config_data, {"changed_by": "test"})
 
-    assert result is True
-    mock_database.strategy_configs_symbol.replace_one.assert_called_once()
+    assert result == "new_id_456"
+    mock_database.strategy_configs_symbol.update_one.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -532,8 +555,18 @@ async def test_get_audit_trail_data_manager_mode(mock_data_manager_client):
 async def test_get_audit_trail_direct_mode(mock_database):
     """Test get audit trail in direct mode."""
     mock_audit = [{"id": "1", "strategy_id": "test", "action": "update"}]
+    
+    # Create properly chained cursor mock
+    mock_to_list = AsyncMock(return_value=mock_audit)
+    mock_limit = MagicMock()
+    mock_limit.to_list = mock_to_list
+    mock_sort = MagicMock()
+    mock_sort.limit.return_value = mock_limit
     mock_cursor = MagicMock()
-    mock_cursor.sort.return_value.limit.return_value.to_list = AsyncMock(return_value=mock_audit)
+    mock_cursor.sort.return_value = mock_sort
+    
+    # Replace strategy_config_audit with MagicMock to avoid AsyncMock issues
+    mock_database.strategy_config_audit = MagicMock()
     mock_database.strategy_config_audit.find.return_value = mock_cursor
 
     client = MongoDBClient(use_data_manager=False)
