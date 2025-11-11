@@ -42,43 +42,50 @@ def mock_components():
 
 
 @pytest.fixture
-def health_server(mock_components):
-    """Create health server with mock components."""
-    with patch("strategies.health.server.constants") as mock_constants:
-        mock_constants.SERVICE_VERSION = "1.0.0"
-        mock_constants.SERVICE_NAME = "test-service"
-        mock_constants.ENVIRONMENT = "test"
-        mock_constants.get_enabled_strategies.return_value = ["strategy1", "strategy2"]
-        mock_constants.TRADING_SYMBOLS = ["BTCUSDT", "ETHUSDT"]
-        mock_constants.TRADING_ENABLE_SHORTS = True
-        mock_constants.HEARTBEAT_ENABLED = True
-        mock_constants.HEARTBEAT_INTERVAL_SECONDS = 30
-        mock_constants.LOG_LEVEL = "INFO"
-        mock_constants.ENABLE_OTEL = True
-        mock_constants.NATS_URL = "nats://localhost:4222"
-        mock_constants.NATS_CONSUMER_TOPIC = "market_data"
-        mock_constants.NATS_PUBLISHER_TOPIC = "signals"
-        mock_constants.HEALTH_CHECK_PORT = 8080
-        mock_constants.get_strategy_config.return_value = {
+def mock_constants():
+    """Create mock constants that persist across fixtures."""
+    with patch("strategies.health.server.constants") as mock_const:
+        mock_const.SERVICE_VERSION = "1.0.0"
+        mock_const.SERVICE_NAME = "test-service"
+        mock_const.ENVIRONMENT = "test"
+        mock_const.get_enabled_strategies.return_value = ["strategy1", "strategy2"]
+        mock_const.TRADING_SYMBOLS = ["BTCUSDT", "ETHUSDT"]
+        mock_const.TRADING_ENABLE_SHORTS = True
+        mock_const.HEARTBEAT_ENABLED = True
+        mock_const.HEARTBEAT_INTERVAL_SECONDS = 30
+        mock_const.LOG_LEVEL = "INFO"
+        mock_const.ENABLE_OTEL = True
+        mock_const.NATS_URL = "nats://localhost:4222"
+        mock_const.NATS_CONSUMER_TOPIC = "market_data"
+        mock_const.NATS_PUBLISHER_TOPIC = "signals"
+        mock_const.HEALTH_CHECK_PORT = 8080
+        mock_const.get_strategy_config.return_value = {
             "strategy1": {"param": "value"}
         }
-        mock_constants.get_trading_config.return_value = {"leverage": 1.0}
-        mock_constants.get_risk_config.return_value = {"max_position": 1000}
+        mock_const.get_trading_config.return_value = {"leverage": 1.0}
+        mock_const.get_risk_config.return_value = {"max_position": 1000}
+        yield mock_const
 
-        server = HealthServer(
-            port=8080,
-            consumer=mock_components["consumer"],
-            publisher=mock_components["publisher"],
-            heartbeat_manager=mock_components["heartbeat_manager"],
-            config_manager=mock_components["config_manager"],
-            depth_analyzer=mock_components["depth_analyzer"],
-        )
-        return server
+
+@pytest.fixture
+def health_server(mock_components, mock_constants):
+    """Create health server with mock components."""
+    server = HealthServer(
+        port=8080,
+        consumer=mock_components["consumer"],
+        publisher=mock_components["publisher"],
+        heartbeat_manager=mock_components["heartbeat_manager"],
+        config_manager=mock_components["config_manager"],
+        depth_analyzer=mock_components["depth_analyzer"],
+    )
+    return server
 
 
 @pytest.fixture
 def client(health_server):
     """Create test client for health server."""
+    # Store health_server in app.state so tests can access it
+    health_server.app.state.health_server = health_server
     return TestClient(health_server.app)
 
 
@@ -168,28 +175,31 @@ def test_ready_endpoint_not_ready(client):
     assert response.status_code == 503
 
 
-@patch("strategies.health.server.psutil")
-def test_metrics_endpoint(mock_psutil, client):
+def test_metrics_endpoint(client):
     """Test metrics endpoint."""
+    import sys
+    
     # Mock psutil
+    mock_psutil = MagicMock()
     mock_process = MagicMock()
     mock_process.memory_info.return_value.rss = 100 * 1024 * 1024  # 100MB
     mock_process.cpu_percent.return_value = 25.0
     mock_psutil.Process.return_value = mock_process
 
-    health_server = (
-        client.app.state.health_server if hasattr(client.app, "state") else None
-    )
-    if health_server:
-        health_server.is_running = True
-        health_server.start_time = time.time() - 10
+    with patch.dict(sys.modules, {"psutil": mock_psutil}):
+        health_server = (
+            client.app.state.health_server if hasattr(client.app, "state") else None
+        )
+        if health_server:
+            health_server.is_running = True
+            health_server.start_time = time.time() - 10
 
-    response = client.get("/metrics")
-    assert response.status_code == 200
-    assert "text/plain" in response.headers["content-type"]
-    content = response.text
-    assert "memory_usage_bytes" in content
-    assert "cpu_usage_percent" in content
+        response = client.get("/metrics")
+        assert response.status_code == 200
+        assert "text/plain" in response.headers["content-type"]
+        content = response.text
+        assert "memory_usage_bytes" in content
+        assert "cpu_usage_percent" in content
 
 
 def test_metrics_endpoint_error(client):
@@ -227,11 +237,14 @@ def test_info_endpoint_error(client):
 
 def test_memory_usage_with_psutil():
     """Test memory usage calculation with psutil."""
-    with patch("strategies.health.server.psutil") as mock_psutil:
-        mock_process = MagicMock()
-        mock_process.memory_info.return_value.rss = 200 * 1024 * 1024  # 200MB
-        mock_psutil.Process.return_value = mock_process
-
+    import sys
+    
+    mock_psutil = MagicMock()
+    mock_process = MagicMock()
+    mock_process.memory_info.return_value.rss = 200 * 1024 * 1024  # 200MB
+    mock_psutil.Process.return_value = mock_process
+    
+    with patch.dict(sys.modules, {"psutil": mock_psutil}):
         server = HealthServer()
         memory_mb = server._get_memory_usage()
         assert memory_mb == 200.0
@@ -239,7 +252,10 @@ def test_memory_usage_with_psutil():
 
 def test_memory_usage_without_psutil():
     """Test memory usage calculation without psutil."""
-    with patch("strategies.health.server.psutil", None):
+    import sys
+    
+    # Simulate psutil not being available
+    with patch.dict(sys.modules, {"psutil": None}):
         server = HealthServer()
         memory_mb = server._get_memory_usage()
         assert memory_mb == 0.0
@@ -247,11 +263,14 @@ def test_memory_usage_without_psutil():
 
 def test_cpu_usage_with_psutil():
     """Test CPU usage calculation with psutil."""
-    with patch("strategies.health.server.psutil") as mock_psutil:
-        mock_process = MagicMock()
-        mock_process.cpu_percent.return_value = 50.0
-        mock_psutil.Process.return_value = mock_process
-
+    import sys
+    
+    mock_psutil = MagicMock()
+    mock_process = MagicMock()
+    mock_process.cpu_percent.return_value = 50.0
+    mock_psutil.Process.return_value = mock_process
+    
+    with patch.dict(sys.modules, {"psutil": mock_psutil}):
         server = HealthServer()
         cpu_percent = server._get_cpu_usage()
         assert cpu_percent == 50.0
@@ -259,7 +278,10 @@ def test_cpu_usage_with_psutil():
 
 def test_cpu_usage_without_psutil():
     """Test CPU usage calculation without psutil."""
-    with patch("strategies.health.server.psutil", None):
+    import sys
+    
+    # Simulate psutil not being available  
+    with patch.dict(sys.modules, {"psutil": None}):
         server = HealthServer()
         cpu_percent = server._get_cpu_usage()
         assert cpu_percent == 0.0
