@@ -46,10 +46,12 @@ def setup_depth_analyzer(mock_depth_analyzer):
 
 def test_get_depth_analyzer_not_initialized():
     """Test get_depth_analyzer raises 503 when not initialized."""
+    from fastapi import HTTPException
+    
     set_depth_analyzer(None)
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(HTTPException) as exc_info:
         get_depth_analyzer()
-    assert "503" in str(exc_info.value)
+    assert exc_info.value.status_code == 503
 
 
 def test_set_depth_analyzer():

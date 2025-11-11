@@ -46,10 +46,12 @@ def setup_config_manager(mock_config_manager):
 
 def test_get_config_manager_not_initialized():
     """Test get_config_manager raises 503 when not initialized."""
+    from fastapi import HTTPException
+    
     set_config_manager(None)
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(HTTPException) as exc_info:
         get_config_manager()
-    assert "503" in str(exc_info.value)
+    assert exc_info.value.status_code == 503
 
 
 def test_set_config_manager():
