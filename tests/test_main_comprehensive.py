@@ -91,9 +91,9 @@ def test_service_initialization(service):
 @pytest.mark.asyncio
 async def test_start_success(service, mock_components):
     """Test successful service start."""
-    with patch("strategies.main.MongoDBClient") as mock_mongo, patch(
-        "strategies.main.StrategyConfigManager"
-    ) as mock_config_mgr, patch("strategies.main.DepthAnalyzer") as mock_depth, patch(
+    with patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo, patch(
+        "strategies.services.config_manager.StrategyConfigManager"
+    ) as mock_config_mgr, patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth, patch(
         "strategies.main.HealthServer"
     ) as mock_health, patch(
         "strategies.main.TradeOrderPublisher"
@@ -478,9 +478,9 @@ def test_project_root_path_addition():
 @pytest.mark.asyncio
 async def test_service_startup_sequence(service, mock_components):
     """Test the complete service startup sequence."""
-    with patch("strategies.main.MongoDBClient") as mock_mongo, patch(
-        "strategies.main.StrategyConfigManager"
-    ) as mock_config_mgr, patch("strategies.main.DepthAnalyzer") as mock_depth, patch(
+    with patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo, patch(
+        "strategies.services.config_manager.StrategyConfigManager"
+    ) as mock_config_mgr, patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth, patch(
         "strategies.main.HealthServer"
     ) as mock_health, patch(
         "strategies.main.TradeOrderPublisher"
