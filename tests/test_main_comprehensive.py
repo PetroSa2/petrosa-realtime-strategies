@@ -318,7 +318,7 @@ def test_cli_version_command():
     """Test CLI version command."""
     runner = CliRunner()
 
-    with patch("strategies.main.__version__", "1.0.0"):
+    with patch("strategies.__version__", "1.0.0"):
         result = runner.invoke(app, ["version"])
 
         assert result.exit_code == 0
