@@ -4,12 +4,13 @@ Comprehensive tests for config_routes.py FastAPI endpoints.
 Covers all endpoints with success/error paths, validation, and edge cases.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
-from fastapi import FastAPI
 
-from strategies.api.config_routes import router, set_config_manager, get_config_manager
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from strategies.api.config_routes import get_config_manager, router, set_config_manager
 from strategies.api.response_models import ConfigUpdateRequest
 from strategies.services.config_manager import StrategyConfigManager
 
@@ -97,14 +98,22 @@ async def test_list_strategies_error(client, setup_config_manager):
 @pytest.mark.asyncio
 async def test_get_strategy_schema_success(client):
     """Test successful schema retrieval."""
-    with patch("strategies.api.config_routes.get_parameter_schema") as mock_schema, \
-         patch("strategies.api.config_routes.get_strategy_defaults") as mock_defaults, \
-         patch("strategies.api.config_routes.get_strategy_metadata") as mock_metadata:
-        
+    with patch(
+        "strategies.api.config_routes.get_parameter_schema"
+    ) as mock_schema, patch(
+        "strategies.api.config_routes.get_strategy_defaults"
+    ) as mock_defaults, patch(
+        "strategies.api.config_routes.get_strategy_metadata"
+    ) as mock_metadata:
         mock_defaults.return_value = {"param1": 10, "param2": "test"}
         mock_schema.return_value = {
-            "param1": {"type": "int", "min": 1, "max": 100, "description": "Test param"},
-            "param2": {"type": "str", "description": "String param"}
+            "param1": {
+                "type": "int",
+                "min": 1,
+                "max": 100,
+                "description": "Test param",
+            },
+            "param2": {"type": "str", "description": "String param"},
         }
         mock_metadata.return_value = {"name": "Test Strategy"}
 
@@ -146,9 +155,11 @@ async def test_get_strategy_schema_error(client):
 @pytest.mark.asyncio
 async def test_get_strategy_defaults_success(client):
     """Test successful defaults retrieval."""
-    with patch("strategies.api.config_routes.get_strategy_defaults") as mock_defaults, \
-         patch("strategies.api.config_routes.get_strategy_metadata") as mock_metadata:
-        
+    with patch(
+        "strategies.api.config_routes.get_strategy_defaults"
+    ) as mock_defaults, patch(
+        "strategies.api.config_routes.get_strategy_metadata"
+    ) as mock_metadata:
         mock_defaults.return_value = {"param1": 10, "param2": "test"}
         mock_metadata.return_value = {"name": "Test Strategy"}
 
@@ -183,7 +194,7 @@ async def test_get_global_config_success(client, setup_config_manager):
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-02T00:00:00Z",
         "cache_hit": True,
-        "load_time_ms": 5
+        "load_time_ms": 5,
     }
     setup_config_manager.get_config.return_value = mock_config
 
@@ -205,7 +216,7 @@ async def test_get_symbol_config_success(client, setup_config_manager):
         "source": "mongodb",
         "is_override": True,
         "created_at": "2024-01-01T00:00:00Z",
-        "updated_at": "2024-01-02T00:00:00Z"
+        "updated_at": "2024-01-02T00:00:00Z",
     }
     setup_config_manager.get_config.return_value = mock_config
 
@@ -238,14 +249,14 @@ async def test_update_global_config_success(client, setup_config_manager):
     mock_config.version = 2
     mock_config.created_at.isoformat.return_value = "2024-01-01T00:00:00Z"
     mock_config.updated_at.isoformat.return_value = "2024-01-02T00:00:00Z"
-    
+
     setup_config_manager.set_config.return_value = (True, mock_config, [])
 
     request_data = {
         "parameters": {"param1": 20},
         "changed_by": "admin",
         "reason": "Test update",
-        "validate_only": False
+        "validate_only": False,
     }
 
     response = client.post("/api/v1/strategies/test_strategy/config", json=request_data)
@@ -264,7 +275,7 @@ async def test_update_global_config_validation_error(client, setup_config_manage
     request_data = {
         "parameters": {"invalid_param": "bad_value"},
         "changed_by": "admin",
-        "validate_only": False
+        "validate_only": False,
     }
 
     response = client.post("/api/v1/strategies/test_strategy/config", json=request_data)
@@ -282,7 +293,7 @@ async def test_update_global_config_validate_only(client, setup_config_manager):
     request_data = {
         "parameters": {"param1": 20},
         "changed_by": "admin",
-        "validate_only": True
+        "validate_only": True,
     }
 
     response = client.post("/api/v1/strategies/test_strategy/config", json=request_data)
@@ -301,16 +312,18 @@ async def test_update_symbol_config_success(client, setup_config_manager):
     mock_config.version = 1
     mock_config.created_at.isoformat.return_value = "2024-01-01T00:00:00Z"
     mock_config.updated_at.isoformat.return_value = "2024-01-02T00:00:00Z"
-    
+
     setup_config_manager.set_config.return_value = (True, mock_config, [])
 
     request_data = {
         "parameters": {"param1": 25},
         "changed_by": "admin",
-        "reason": "Symbol-specific update"
+        "reason": "Symbol-specific update",
     }
 
-    response = client.post("/api/v1/strategies/test_strategy/config/BTCUSDT", json=request_data)
+    response = client.post(
+        "/api/v1/strategies/test_strategy/config/BTCUSDT", json=request_data
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
@@ -323,7 +336,9 @@ async def test_delete_global_config_success(client, setup_config_manager):
     """Test successful global config deletion."""
     setup_config_manager.delete_config.return_value = (True, [])
 
-    response = client.delete("/api/v1/strategies/test_strategy/config?changed_by=admin&reason=Cleanup")
+    response = client.delete(
+        "/api/v1/strategies/test_strategy/config?changed_by=admin&reason=Cleanup"
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
@@ -347,7 +362,9 @@ async def test_delete_symbol_config_success(client, setup_config_manager):
     """Test successful symbol config deletion."""
     setup_config_manager.delete_config.return_value = (True, [])
 
-    response = client.delete("/api/v1/strategies/test_strategy/config/BTCUSDT?changed_by=admin")
+    response = client.delete(
+        "/api/v1/strategies/test_strategy/config/BTCUSDT?changed_by=admin"
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
@@ -367,7 +384,7 @@ async def test_get_audit_trail_success(client, setup_config_manager):
     mock_record.changed_by = "admin"
     mock_record.changed_at.isoformat.return_value = "2024-01-01T00:00:00Z"
     mock_record.reason = "Test change"
-    
+
     setup_config_manager.get_audit_trail.return_value = [mock_record]
 
     response = client.get("/api/v1/strategies/test_strategy/audit?limit=50")
@@ -410,7 +427,7 @@ def test_config_update_request_model():
         parameters={"param1": 10},
         changed_by="admin",
         reason="Test",
-        validate_only=False
+        validate_only=False,
     )
     assert request.parameters == {"param1": 10}
     assert request.changed_by == "admin"
@@ -419,8 +436,7 @@ def test_config_update_request_model():
 
     # Request with defaults
     request_defaults = ConfigUpdateRequest(
-        parameters={"param1": 20},
-        changed_by="admin"
+        parameters={"param1": 20}, changed_by="admin"
     )
     assert request_defaults.reason is None
     assert request_defaults.validate_only is False

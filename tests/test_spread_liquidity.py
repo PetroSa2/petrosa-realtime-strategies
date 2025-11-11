@@ -285,28 +285,29 @@ class TestSpreadLiquidityStrategy:
         # First create a wide spread condition
         wide_bids = [(48000.00, 1.0)]
         wide_asks = [(52000.00, 1.0)]  # Very wide spread
-        
+
         # Analyze multiple times to establish wide spread history
         for i in range(25):
             from datetime import timedelta
+
             strategy.analyze(
                 symbol="BTCUSDT",
                 bids=wide_bids,
                 asks=wide_asks,
-                timestamp=datetime.utcnow() + timedelta(seconds=i * 10)
+                timestamp=datetime.utcnow() + timedelta(seconds=i * 10),
             )
-        
+
         # Now send normal spread (narrowing event)
         normal_bids = [(50000.00, 2.0)]
         normal_asks = [(50010.00, 2.0)]  # Normal spread
-        
+
         signal = strategy.analyze(
             symbol="BTCUSDT",
             bids=normal_bids,
             asks=normal_asks,
-            timestamp=datetime.utcnow() + timedelta(seconds=260)
+            timestamp=datetime.utcnow() + timedelta(seconds=260),
         )
-        
+
         # Code path for narrowing event logic is exercised
         assert signal is None or signal is not None
 
@@ -315,13 +316,13 @@ class TestSpreadLiquidityStrategy:
         # Send invalid data that might cause calculation errors
         invalid_bids = []
         invalid_asks = []
-        
+
         result = strategy.analyze(
             symbol="BTCUSDT",
             bids=invalid_bids,
             asks=invalid_asks,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
-        
+
         # Should handle gracefully (return None)
         assert result is None

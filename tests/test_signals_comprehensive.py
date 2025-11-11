@@ -9,15 +9,17 @@ Tests cover:
 - Metadata handling
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from strategies.models.signals import (
     Signal,
-    SignalType,
     SignalAction,
-    SignalConfidence,
-    StrategySignal,
     SignalAggregation,
+    SignalConfidence,
+    SignalType,
+    StrategySignal,
 )
 
 
@@ -58,7 +60,7 @@ class TestSignalValidators:
                 confidence=SignalConfidence.HIGH,
                 confidence_score=0.85,
                 price=50000.0,
-                strategy_name="test"
+                strategy_name="test",
             )
 
     def test_validate_symbol_empty(self):
@@ -71,7 +73,7 @@ class TestSignalValidators:
                 confidence=SignalConfidence.HIGH,
                 confidence_score=0.85,
                 price=50000.0,
-                strategy_name="test"
+                strategy_name="test",
             )
 
     def test_validate_symbol_uppercase_conversion(self):
@@ -83,7 +85,7 @@ class TestSignalValidators:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.symbol == "BTCUSDT"
 
@@ -97,7 +99,7 @@ class TestSignalValidators:
                 confidence=SignalConfidence.HIGH,
                 confidence_score=-0.1,  # Negative
                 price=50000.0,
-                strategy_name="test"
+                strategy_name="test",
             )
 
     def test_validate_confidence_score_above_one(self):
@@ -110,7 +112,7 @@ class TestSignalValidators:
                 confidence=SignalConfidence.HIGH,
                 confidence_score=1.5,  # Above 1.0
                 price=50000.0,
-                strategy_name="test"
+                strategy_name="test",
             )
 
     def test_validate_price_zero(self):
@@ -123,7 +125,7 @@ class TestSignalValidators:
                 confidence=SignalConfidence.HIGH,
                 confidence_score=0.85,
                 price=0.0,  # Zero price
-                strategy_name="test"
+                strategy_name="test",
             )
 
     def test_validate_price_negative(self):
@@ -136,7 +138,7 @@ class TestSignalValidators:
                 confidence=SignalConfidence.HIGH,
                 confidence_score=0.85,
                 price=-100.0,  # Negative price
-                strategy_name="test"
+                strategy_name="test",
             )
 
 
@@ -152,7 +154,7 @@ class TestSignalProperties:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.is_buy_signal is True
         assert signal.is_sell_signal is False
@@ -167,7 +169,7 @@ class TestSignalProperties:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.is_sell_signal is True
         assert signal.is_buy_signal is False
@@ -182,7 +184,7 @@ class TestSignalProperties:
             confidence=SignalConfidence.MEDIUM,
             confidence_score=0.5,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.is_hold_signal is True
         assert signal.is_buy_signal is False
@@ -197,7 +199,7 @@ class TestSignalProperties:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.is_high_confidence is True
         assert signal.is_medium_confidence is False
@@ -212,7 +214,7 @@ class TestSignalProperties:
             confidence=SignalConfidence.MEDIUM,
             confidence_score=0.65,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.is_medium_confidence is True
         assert signal.is_high_confidence is False
@@ -227,7 +229,7 @@ class TestSignalProperties:
             confidence=SignalConfidence.LOW,
             confidence_score=0.45,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.is_low_confidence is True
         assert signal.is_high_confidence is False
@@ -239,11 +241,7 @@ class TestSignalEdgeCases:
 
     def test_signal_with_metadata(self):
         """Test Signal with custom metadata."""
-        metadata = {
-            "indicator": "RSI",
-            "value": 75.3,
-            "timeframe": "1h"
-        }
+        metadata = {"indicator": "RSI", "value": 75.3, "timeframe": "1h"}
         signal = Signal(
             symbol="BTCUSDT",
             signal_type=SignalType.BUY,
@@ -252,7 +250,7 @@ class TestSignalEdgeCases:
             confidence_score=0.85,
             price=50000.0,
             strategy_name="test",
-            metadata=metadata
+            metadata=metadata,
         )
         assert signal.metadata == metadata
         assert signal.metadata["indicator"] == "RSI"
@@ -268,7 +266,7 @@ class TestSignalEdgeCases:
             confidence_score=0.85,
             price=50000.0,
             strategy_name="test",
-            timestamp=custom_time
+            timestamp=custom_time,
         )
         assert signal.timestamp == custom_time
 
@@ -281,7 +279,7 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.symbol == "BTCUSD"
 
@@ -294,7 +292,7 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.LOW,
             confidence_score=0.0,  # Minimum valid
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.confidence_score == 0.0
 
@@ -307,7 +305,7 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.HIGH,
             confidence_score=1.0,  # Maximum valid
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.confidence_score == 1.0
 
@@ -320,7 +318,7 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.MEDIUM,
             confidence_score=0.65,
             price=0.00001,  # Very small price
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.price == 0.00001
 
@@ -333,7 +331,7 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=1000000.0,  # Very large price
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.price == 1000000.0
 
@@ -344,18 +342,20 @@ class TestSignalEdgeCases:
             SignalAction.OPEN_SHORT,
             SignalAction.CLOSE_LONG,
             SignalAction.CLOSE_SHORT,
-            SignalAction.HOLD
+            SignalAction.HOLD,
         ]
-        
+
         for action in actions:
             signal = Signal(
                 symbol="BTCUSDT",
-                signal_type=SignalType.BUY if "LONG" in action.value or action == SignalAction.HOLD else SignalType.SELL,
+                signal_type=SignalType.BUY
+                if "LONG" in action.value or action == SignalAction.HOLD
+                else SignalType.SELL,
                 signal_action=action,
                 confidence=SignalConfidence.MEDIUM,
                 confidence_score=0.65,
                 price=50000.0,
-                strategy_name="test"
+                strategy_name="test",
             )
             assert signal.signal_action == action
 
@@ -368,7 +368,7 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         assert signal.metadata == {}
         assert isinstance(signal.metadata, dict)
@@ -383,10 +383,10 @@ class TestSignalEdgeCases:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
         after = datetime.utcnow()
-        
+
         assert before <= signal.timestamp <= after
 
 
@@ -402,18 +402,18 @@ class TestStrategySignal:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test_strategy"
+            strategy_name="test_strategy",
         )
-        
+
         strategy_signal = StrategySignal(
             signal=base_signal,
             strategy_version="1.0.0",
             processing_time_ms=15.5,
             strategy_parameters={"threshold": 1.5},
             input_data={"rsi": 75},
-            strategy_specific_metrics={"confidence_factor": 0.95}
+            strategy_specific_metrics={"confidence_factor": 0.95},
         )
-        
+
         assert strategy_signal.signal == base_signal
         assert strategy_signal.strategy_version == "1.0.0"
         assert strategy_signal.processing_time_ms == 15.5
@@ -427,15 +427,13 @@ class TestStrategySignal:
             confidence=SignalConfidence.MEDIUM,
             confidence_score=0.65,
             price=3000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
-        
+
         strategy_signal = StrategySignal(
-            signal=base_signal,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         assert strategy_signal.symbol == "ETHUSDT"
 
     def test_strategy_signal_signal_type_property(self):
@@ -447,15 +445,13 @@ class TestStrategySignal:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
-        
+
         strategy_signal = StrategySignal(
-            signal=base_signal,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         assert strategy_signal.signal_type == SignalType.BUY
 
     def test_strategy_signal_confidence_score_property(self):
@@ -467,15 +463,13 @@ class TestStrategySignal:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.90,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
-        
+
         strategy_signal = StrategySignal(
-            signal=base_signal,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         assert strategy_signal.confidence_score == 0.90
 
     def test_strategy_signal_timestamp_property(self):
@@ -489,15 +483,13 @@ class TestStrategySignal:
             confidence_score=0.85,
             price=50000.0,
             strategy_name="test",
-            timestamp=custom_time
+            timestamp=custom_time,
         )
-        
+
         strategy_signal = StrategySignal(
-            signal=base_signal,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         assert strategy_signal.timestamp == custom_time
 
 
@@ -513,15 +505,13 @@ class TestSignalAggregation:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="strategy1"
+            strategy_name="strategy1",
         )
-        
+
         strategy_signal1 = StrategySignal(
-            signal=base_signal1,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal1, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         aggregation = SignalAggregation(
             symbol="BTCUSDT",
             aggregated_signal_type=SignalType.BUY,
@@ -529,9 +519,9 @@ class TestSignalAggregation:
             aggregated_confidence_score=0.85,
             aggregated_confidence=SignalConfidence.HIGH,
             strategy_signals={"strategy1": strategy_signal1},
-            aggregation_method="weighted_average"
+            aggregation_method="weighted_average",
         )
-        
+
         assert aggregation.symbol == "BTCUSDT"
         assert aggregation.aggregation_method == "weighted_average"
 
@@ -544,15 +534,13 @@ class TestSignalAggregation:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
-        
+
         strategy_signal = StrategySignal(
-            signal=base_signal,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         with pytest.raises(ValueError, match="Invalid symbol format"):
             SignalAggregation(
                 symbol="BTC",  # Too short
@@ -561,13 +549,13 @@ class TestSignalAggregation:
                 aggregated_confidence_score=0.85,
                 aggregated_confidence=SignalConfidence.HIGH,
                 strategy_signals={"test": strategy_signal},
-                aggregation_method="test"
+                aggregation_method="test",
             )
 
     def test_signal_aggregation_confidence_score_validator_error(self):
         """Test SignalAggregation confidence validator - covers lines 184-186."""
         from pydantic import ValidationError
-        
+
         base_signal = Signal(
             symbol="BTCUSDT",
             signal_type=SignalType.BUY,
@@ -575,15 +563,13 @@ class TestSignalAggregation:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="test"
+            strategy_name="test",
         )
-        
+
         strategy_signal = StrategySignal(
-            signal=base_signal,
-            strategy_version="1.0.0",
-            processing_time_ms=10.0
+            signal=base_signal, strategy_version="1.0.0", processing_time_ms=10.0
         )
-        
+
         with pytest.raises(ValidationError):
             SignalAggregation(
                 symbol="BTCUSDT",
@@ -592,7 +578,7 @@ class TestSignalAggregation:
                 aggregated_confidence_score=1.5,  # Invalid - above 1.0
                 aggregated_confidence=SignalConfidence.HIGH,
                 strategy_signals={"test": strategy_signal},
-                aggregation_method="test"
+                aggregation_method="test",
             )
 
     def test_signal_aggregation_strategy_count_property(self):
@@ -604,9 +590,9 @@ class TestSignalAggregation:
             confidence=SignalConfidence.HIGH,
             confidence_score=0.85,
             price=50000.0,
-            strategy_name="strategy1"
+            strategy_name="strategy1",
         )
-        
+
         base_signal2 = Signal(
             symbol="BTCUSDT",
             signal_type=SignalType.BUY,
@@ -614,14 +600,18 @@ class TestSignalAggregation:
             confidence=SignalConfidence.MEDIUM,
             confidence_score=0.75,
             price=50000.0,
-            strategy_name="strategy2"
+            strategy_name="strategy2",
         )
-        
+
         strategy_signals = {
-            "strategy1": StrategySignal(signal=base_signal1, strategy_version="1.0.0", processing_time_ms=10.0),
-            "strategy2": StrategySignal(signal=base_signal2, strategy_version="1.0.0", processing_time_ms=12.0)
+            "strategy1": StrategySignal(
+                signal=base_signal1, strategy_version="1.0.0", processing_time_ms=10.0
+            ),
+            "strategy2": StrategySignal(
+                signal=base_signal2, strategy_version="1.0.0", processing_time_ms=12.0
+            ),
         }
-        
+
         aggregation = SignalAggregation(
             symbol="BTCUSDT",
             aggregated_signal_type=SignalType.BUY,
@@ -629,9 +619,9 @@ class TestSignalAggregation:
             aggregated_confidence_score=0.80,
             aggregated_confidence=SignalConfidence.HIGH,
             strategy_signals=strategy_signals,
-            aggregation_method="weighted"
+            aggregation_method="weighted",
         )
-        
+
         assert aggregation.strategy_count == 2
 
     def test_signal_aggregation_average_confidence_empty(self):
@@ -643,9 +633,9 @@ class TestSignalAggregation:
             aggregated_confidence_score=0.0,
             aggregated_confidence=SignalConfidence.LOW,
             strategy_signals={},  # Empty
-            aggregation_method="test"
+            aggregation_method="test",
         )
-        
+
         assert aggregation.average_confidence_score == 0.0
 
     def test_signal_aggregation_consensus_signal_type_empty(self):
@@ -657,9 +647,9 @@ class TestSignalAggregation:
             aggregated_confidence_score=0.0,
             aggregated_confidence=SignalConfidence.LOW,
             strategy_signals={},  # Empty
-            aggregation_method="test"
+            aggregation_method="test",
         )
-        
+
         assert aggregation.consensus_signal_type is None
 
     def test_signal_aggregation_is_strong_consensus_empty(self):
@@ -671,8 +661,7 @@ class TestSignalAggregation:
             aggregated_confidence_score=0.0,
             aggregated_confidence=SignalConfidence.LOW,
             strategy_signals={},  # Empty
-            aggregation_method="test"
+            aggregation_method="test",
         )
-        
-        assert aggregation.is_strong_consensus is False
 
+        assert aggregation.is_strong_consensus is False

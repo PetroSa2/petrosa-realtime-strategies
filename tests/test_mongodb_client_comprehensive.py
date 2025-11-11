@@ -4,12 +4,13 @@ Comprehensive tests for db/mongodb_client.py.
 Covers both direct MongoDB and Data Manager modes, CRUD operations, error handling, and health checks.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 from pymongo.errors import ConnectionFailure, DuplicateKeyError
 
-from strategies.db.mongodb_client import MongoDBClient, DATA_MANAGER_AVAILABLE
+from strategies.db.mongodb_client import DATA_MANAGER_AVAILABLE, MongoDBClient
 
 
 @pytest.fixture
@@ -56,9 +57,9 @@ def test_mongodb_client_init_direct_mode():
             max_pool_size=5,
             min_pool_size=1,
             timeout_ms=3000,
-            use_data_manager=False
+            use_data_manager=False,
         )
-        
+
         assert client.use_data_manager is False
         assert client.uri == "mongodb://localhost:27017"
         assert client.database_name == "test_db"
@@ -70,11 +71,12 @@ def test_mongodb_client_init_direct_mode():
 
 def test_mongodb_client_init_data_manager_mode(mock_data_manager_client):
     """Test MongoDB client initialization in Data Manager mode."""
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
-        
+
         assert client.use_data_manager is True
         assert client.data_manager_client == mock_data_manager_client
         assert client.client is None
@@ -85,20 +87,21 @@ def test_mongodb_client_init_data_manager_unavailable():
     """Test MongoDB client initialization when Data Manager is unavailable."""
     with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", False):
         client = MongoDBClient(use_data_manager=True)
-        
+
         assert client.use_data_manager is False
-        assert not hasattr(client, 'data_manager_client')
+        assert not hasattr(client, "data_manager_client")
 
 
 @pytest.mark.asyncio
 async def test_connect_data_manager_mode(mock_data_manager_client):
     """Test connection in Data Manager mode."""
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.connect()
-        
+
         assert result is True
         assert client._connected is True
         mock_data_manager_client.connect.assert_called_once()
@@ -107,12 +110,15 @@ async def test_connect_data_manager_mode(mock_data_manager_client):
 @pytest.mark.asyncio
 async def test_connect_direct_mode_success(mock_mongo_client, mock_database):
     """Test successful connection in direct mode."""
-    with patch("strategies.db.mongodb_client.AsyncIOMotorClient", return_value=mock_mongo_client):
+    with patch(
+        "strategies.db.mongodb_client.AsyncIOMotorClient",
+        return_value=mock_mongo_client,
+    ):
         mock_mongo_client.__getitem__.return_value = mock_database
-        
+
         client = MongoDBClient(use_data_manager=False)
         result = await client.connect()
-        
+
         assert result is True
         assert client._connected is True
         assert client.client == mock_mongo_client
@@ -127,10 +133,10 @@ async def test_connect_direct_mode_connection_failure():
         mock_client = AsyncMock()
         mock_client.admin.command.side_effect = ConnectionFailure("Connection failed")
         mock_client_class.return_value = mock_client
-        
+
         client = MongoDBClient(use_data_manager=False)
         result = await client.connect()
-        
+
         assert result is False
         assert client._connected is False
 
@@ -142,10 +148,10 @@ async def test_connect_direct_mode_unexpected_error():
         mock_client = AsyncMock()
         mock_client.admin.command.side_effect = Exception("Unexpected error")
         mock_client_class.return_value = mock_client
-        
+
         client = MongoDBClient(use_data_manager=False)
         result = await client.connect()
-        
+
         assert result is False
         assert client._connected is False
 
@@ -153,13 +159,14 @@ async def test_connect_direct_mode_unexpected_error():
 @pytest.mark.asyncio
 async def test_disconnect_data_manager_mode(mock_data_manager_client):
     """Test disconnection in Data Manager mode."""
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         client._connected = True
         await client.disconnect()
-        
+
         assert client._connected is False
         mock_data_manager_client.disconnect.assert_called_once()
 
@@ -170,9 +177,9 @@ async def test_disconnect_direct_mode(mock_mongo_client):
     client = MongoDBClient(use_data_manager=False)
     client.client = mock_mongo_client
     client._connected = True
-    
+
     await client.disconnect()
-    
+
     assert client._connected is False
     mock_mongo_client.close.assert_called_once()
 
@@ -182,23 +189,29 @@ async def test_create_indexes_success(mock_database):
     """Test successful index creation."""
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     await client._create_indexes()
-    
+
     # Verify indexes were created
-    mock_database.strategy_configs_global.create_index.assert_called_once_with("strategy_id", unique=True)
-    mock_database.strategy_configs_symbol.create_index.assert_called_once_with([("strategy_id", 1), ("symbol", 1)], unique=True)
+    mock_database.strategy_configs_global.create_index.assert_called_once_with(
+        "strategy_id", unique=True
+    )
+    mock_database.strategy_configs_symbol.create_index.assert_called_once_with(
+        [("strategy_id", 1), ("symbol", 1)], unique=True
+    )
     assert mock_database.strategy_config_audit.create_index.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_create_indexes_failure(mock_database):
     """Test index creation failure."""
-    mock_database.strategy_configs_global.create_index.side_effect = Exception("Index creation failed")
-    
+    mock_database.strategy_configs_global.create_index.side_effect = Exception(
+        "Index creation failed"
+    )
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     # Should not raise exception
     await client._create_indexes()
 
@@ -207,7 +220,7 @@ def test_is_connected_property():
     """Test is_connected property."""
     client = MongoDBClient()
     assert client.is_connected is False
-    
+
     client._connected = True
     assert client.is_connected is True
 
@@ -218,9 +231,9 @@ async def test_health_check_connected(mock_mongo_client):
     client = MongoDBClient(use_data_manager=False)
     client.client = mock_mongo_client
     client._connected = True
-    
+
     result = await client.health_check()
-    
+
     assert result is True
     mock_mongo_client.admin.command.assert_called_once_with("ping")
 
@@ -230,9 +243,9 @@ async def test_health_check_not_connected():
     """Test health check when not connected."""
     client = MongoDBClient()
     client._connected = False
-    
+
     result = await client.health_check()
-    
+
     assert result is False
 
 
@@ -240,13 +253,13 @@ async def test_health_check_not_connected():
 async def test_health_check_failure(mock_mongo_client):
     """Test health check failure."""
     mock_mongo_client.admin.command.side_effect = Exception("Health check failed")
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.client = mock_mongo_client
     client._connected = True
-    
+
     result = await client.health_check()
-    
+
     assert result is False
 
 
@@ -255,15 +268,18 @@ async def test_get_global_config_data_manager_mode(mock_data_manager_client):
     """Test get global config in Data Manager mode."""
     mock_config = {"strategy_id": "test", "parameters": {"param1": "value1"}}
     mock_data_manager_client.get_global_config.return_value = mock_config
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.get_global_config("test_strategy")
-        
+
         assert result == mock_config
-        mock_data_manager_client.get_global_config.assert_called_once_with("test_strategy")
+        mock_data_manager_client.get_global_config.assert_called_once_with(
+            "test_strategy"
+        )
 
 
 @pytest.mark.asyncio
@@ -271,14 +287,16 @@ async def test_get_global_config_direct_mode(mock_database):
     """Test get global config in direct mode."""
     mock_config = {"strategy_id": "test", "parameters": {"param1": "value1"}}
     mock_database.strategy_configs_global.find_one.return_value = mock_config
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.get_global_config("test_strategy")
-    
+
     assert result == mock_config
-    mock_database.strategy_configs_global.find_one.assert_called_once_with({"strategy_id": "test_strategy"})
+    mock_database.strategy_configs_global.find_one.assert_called_once_with(
+        {"strategy_id": "test_strategy"}
+    )
 
 
 @pytest.mark.asyncio
@@ -286,13 +304,14 @@ async def test_set_global_config_data_manager_mode(mock_data_manager_client):
     """Test set global config in Data Manager mode."""
     config_data = {"strategy_id": "test", "parameters": {"param1": "value1"}}
     mock_data_manager_client.set_global_config.return_value = True
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.set_global_config(config_data)
-        
+
         assert result is True
         mock_data_manager_client.set_global_config.assert_called_once_with(config_data)
 
@@ -302,12 +321,12 @@ async def test_set_global_config_direct_mode_success(mock_database):
     """Test successful set global config in direct mode."""
     config_data = {"strategy_id": "test", "parameters": {"param1": "value1"}}
     mock_database.strategy_configs_global.replace_one.return_value.matched_count = 1
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.set_global_config(config_data)
-    
+
     assert result is True
     mock_database.strategy_configs_global.replace_one.assert_called_once()
 
@@ -316,13 +335,15 @@ async def test_set_global_config_direct_mode_success(mock_database):
 async def test_set_global_config_direct_mode_duplicate_key_error(mock_database):
     """Test set global config with duplicate key error in direct mode."""
     config_data = {"strategy_id": "test", "parameters": {"param1": "value1"}}
-    mock_database.strategy_configs_global.replace_one.side_effect = DuplicateKeyError("Duplicate key")
-    
+    mock_database.strategy_configs_global.replace_one.side_effect = DuplicateKeyError(
+        "Duplicate key"
+    )
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.set_global_config(config_data)
-    
+
     assert result is False
 
 
@@ -330,77 +351,97 @@ async def test_set_global_config_direct_mode_duplicate_key_error(mock_database):
 async def test_delete_global_config_data_manager_mode(mock_data_manager_client):
     """Test delete global config in Data Manager mode."""
     mock_data_manager_client.delete_global_config.return_value = True
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.delete_global_config("test_strategy")
-        
+
         assert result is True
-        mock_data_manager_client.delete_global_config.assert_called_once_with("test_strategy")
+        mock_data_manager_client.delete_global_config.assert_called_once_with(
+            "test_strategy"
+        )
 
 
 @pytest.mark.asyncio
 async def test_delete_global_config_direct_mode(mock_database):
     """Test delete global config in direct mode."""
     mock_database.strategy_configs_global.delete_one.return_value.deleted_count = 1
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.delete_global_config("test_strategy")
-    
+
     assert result is True
-    mock_database.strategy_configs_global.delete_one.assert_called_once_with({"strategy_id": "test_strategy"})
+    mock_database.strategy_configs_global.delete_one.assert_called_once_with(
+        {"strategy_id": "test_strategy"}
+    )
 
 
 @pytest.mark.asyncio
 async def test_get_symbol_config_data_manager_mode(mock_data_manager_client):
     """Test get symbol config in Data Manager mode."""
-    mock_config = {"strategy_id": "test", "symbol": "BTCUSDT", "parameters": {"param1": "value1"}}
+    mock_config = {
+        "strategy_id": "test",
+        "symbol": "BTCUSDT",
+        "parameters": {"param1": "value1"},
+    }
     mock_data_manager_client.get_symbol_config.return_value = mock_config
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.get_symbol_config("test_strategy", "BTCUSDT")
-        
+
         assert result == mock_config
-        mock_data_manager_client.get_symbol_config.assert_called_once_with("test_strategy", "BTCUSDT")
+        mock_data_manager_client.get_symbol_config.assert_called_once_with(
+            "test_strategy", "BTCUSDT"
+        )
 
 
 @pytest.mark.asyncio
 async def test_get_symbol_config_direct_mode(mock_database):
     """Test get symbol config in direct mode."""
-    mock_config = {"strategy_id": "test", "symbol": "BTCUSDT", "parameters": {"param1": "value1"}}
+    mock_config = {
+        "strategy_id": "test",
+        "symbol": "BTCUSDT",
+        "parameters": {"param1": "value1"},
+    }
     mock_database.strategy_configs_symbol.find_one.return_value = mock_config
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.get_symbol_config("test_strategy", "BTCUSDT")
-    
+
     assert result == mock_config
-    mock_database.strategy_configs_symbol.find_one.assert_called_once_with({
-        "strategy_id": "test_strategy",
-        "symbol": "BTCUSDT"
-    })
+    mock_database.strategy_configs_symbol.find_one.assert_called_once_with(
+        {"strategy_id": "test_strategy", "symbol": "BTCUSDT"}
+    )
 
 
 @pytest.mark.asyncio
 async def test_set_symbol_config_data_manager_mode(mock_data_manager_client):
     """Test set symbol config in Data Manager mode."""
-    config_data = {"strategy_id": "test", "symbol": "BTCUSDT", "parameters": {"param1": "value1"}}
+    config_data = {
+        "strategy_id": "test",
+        "symbol": "BTCUSDT",
+        "parameters": {"param1": "value1"},
+    }
     mock_data_manager_client.set_symbol_config.return_value = True
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.set_symbol_config(config_data)
-        
+
         assert result is True
         mock_data_manager_client.set_symbol_config.assert_called_once_with(config_data)
 
@@ -408,14 +449,18 @@ async def test_set_symbol_config_data_manager_mode(mock_data_manager_client):
 @pytest.mark.asyncio
 async def test_set_symbol_config_direct_mode_success(mock_database):
     """Test successful set symbol config in direct mode."""
-    config_data = {"strategy_id": "test", "symbol": "BTCUSDT", "parameters": {"param1": "value1"}}
+    config_data = {
+        "strategy_id": "test",
+        "symbol": "BTCUSDT",
+        "parameters": {"param1": "value1"},
+    }
     mock_database.strategy_configs_symbol.replace_one.return_value.matched_count = 1
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.set_symbol_config(config_data)
-    
+
     assert result is True
     mock_database.strategy_configs_symbol.replace_one.assert_called_once()
 
@@ -424,32 +469,34 @@ async def test_set_symbol_config_direct_mode_success(mock_database):
 async def test_delete_symbol_config_data_manager_mode(mock_data_manager_client):
     """Test delete symbol config in Data Manager mode."""
     mock_data_manager_client.delete_symbol_config.return_value = True
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.delete_symbol_config("test_strategy", "BTCUSDT")
-        
+
         assert result is True
-        mock_data_manager_client.delete_symbol_config.assert_called_once_with("test_strategy", "BTCUSDT")
+        mock_data_manager_client.delete_symbol_config.assert_called_once_with(
+            "test_strategy", "BTCUSDT"
+        )
 
 
 @pytest.mark.asyncio
 async def test_delete_symbol_config_direct_mode(mock_database):
     """Test delete symbol config in direct mode."""
     mock_database.strategy_configs_symbol.delete_one.return_value.deleted_count = 1
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.delete_symbol_config("test_strategy", "BTCUSDT")
-    
+
     assert result is True
-    mock_database.strategy_configs_symbol.delete_one.assert_called_once_with({
-        "strategy_id": "test_strategy",
-        "symbol": "BTCUSDT"
-    })
+    mock_database.strategy_configs_symbol.delete_one.assert_called_once_with(
+        {"strategy_id": "test_strategy", "symbol": "BTCUSDT"}
+    )
 
 
 @pytest.mark.asyncio
@@ -457,28 +504,33 @@ async def test_get_audit_trail_data_manager_mode(mock_data_manager_client):
     """Test get audit trail in Data Manager mode."""
     mock_audit = [{"id": "1", "strategy_id": "test", "action": "update"}]
     mock_data_manager_client.get_audit_trail.return_value = mock_audit
-    
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), \
-         patch("strategies.db.mongodb_client.DataManagerClient", return_value=mock_data_manager_client):
-        
+
+    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
+        "strategies.db.mongodb_client.DataManagerClient",
+        return_value=mock_data_manager_client,
+    ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.get_audit_trail("test_strategy", "BTCUSDT", 10)
-        
+
         assert result == mock_audit
-        mock_data_manager_client.get_audit_trail.assert_called_once_with("test_strategy", "BTCUSDT", 10)
+        mock_data_manager_client.get_audit_trail.assert_called_once_with(
+            "test_strategy", "BTCUSDT", 10
+        )
 
 
 @pytest.mark.asyncio
 async def test_get_audit_trail_direct_mode(mock_database):
     """Test get audit trail in direct mode."""
     mock_audit = [{"id": "1", "strategy_id": "test", "action": "update"}]
-    mock_database.strategy_config_audit.find.return_value.to_list.return_value = mock_audit
-    
+    mock_database.strategy_config_audit.find.return_value.to_list.return_value = (
+        mock_audit
+    )
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     result = await client.get_audit_trail("test_strategy", "BTCUSDT", 10)
-    
+
     assert result == mock_audit
     mock_database.strategy_config_audit.find.assert_called_once()
 
@@ -494,14 +546,14 @@ async def test_add_audit_record_direct_mode(mock_database):
         "new_parameters": {"param1": "new"},
         "changed_by": "admin",
         "changed_at": datetime.utcnow(),
-        "reason": "Test update"
+        "reason": "Test update",
     }
-    
+
     client = MongoDBClient(use_data_manager=False)
     client.database = mock_database
-    
+
     await client.add_audit_record(audit_data)
-    
+
     mock_database.strategy_config_audit.insert_one.assert_called_once_with(audit_data)
 
 
@@ -518,10 +570,10 @@ async def test_connection_retry_logic():
         mock_client = AsyncMock()
         mock_client.admin.command.side_effect = ConnectionFailure("Connection failed")
         mock_client_class.return_value = mock_client
-        
+
         client = MongoDBClient(use_data_manager=False)
         result = await client.connect()
-        
+
         assert result is False
         assert client._connected is False
 
@@ -532,10 +584,10 @@ async def test_environment_variable_fallback():
     with patch("strategies.db.mongodb_client.os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default: {
             "MONGODB_URI": "mongodb://env:27017",
-            "MONGODB_DATABASE": "env_db"
+            "MONGODB_DATABASE": "env_db",
         }.get(key, default)
-        
+
         client = MongoDBClient(use_data_manager=False)
-        
+
         assert client.uri == "mongodb://env:27017"
         assert client.database_name == "env_db"

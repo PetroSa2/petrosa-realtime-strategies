@@ -4,13 +4,14 @@ Comprehensive tests for metrics_routes.py FastAPI endpoints.
 Covers all endpoints with success/error paths, validation, and edge cases.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
-from fastapi import FastAPI
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from strategies.api.metrics_routes import router, set_depth_analyzer, get_depth_analyzer
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from strategies.api.metrics_routes import get_depth_analyzer, router, set_depth_analyzer
 from strategies.services.depth_analyzer import DepthAnalyzer
 
 
@@ -88,7 +89,7 @@ async def test_get_depth_metrics_success(client, setup_depth_analyzer):
     mock_metrics.total_levels = 48
     mock_metrics.strongest_bid_level = (49990.0, 500.0)
     mock_metrics.strongest_ask_level = (50020.0, 450.0)
-    
+
     setup_depth_analyzer.get_current_metrics.return_value = mock_metrics
 
     response = client.get("/api/v1/metrics/depth/BTCUSDT")
@@ -140,7 +141,7 @@ async def test_get_pressure_history_success(client, setup_depth_analyzer):
         (datetime(2024, 1, 1, 12, 0, 0), 0.1),
         (datetime(2024, 1, 1, 12, 1, 0), 0.15),
     ]
-    
+
     setup_depth_analyzer.get_pressure_history.return_value = mock_history
 
     response = client.get("/api/v1/metrics/pressure/BTCUSDT?timeframe=5m")
@@ -195,7 +196,7 @@ async def test_get_market_summary_success(client, setup_depth_analyzer):
         "avg_spread_bps": 0.05,
         "total_liquidity": 50000.0,
         "top_buy_pressure": ["BTCUSDT", "ETHUSDT"],
-        "top_sell_pressure": ["ADAUSDT", "SOLUSDT"]
+        "top_sell_pressure": ["ADAUSDT", "SOLUSDT"],
     }
     setup_depth_analyzer.get_market_summary.return_value = mock_summary
 
@@ -225,7 +226,7 @@ async def test_get_all_metrics_success(client, setup_depth_analyzer):
     mock_metrics1.spread_bps = 0.05
     mock_metrics1.total_liquidity = 10000.0
     mock_metrics1.mid_price = 50000.0
-    
+
     mock_metrics2 = MagicMock()
     mock_metrics2.timestamp = datetime(2024, 1, 1, 12, 0, 0)
     mock_metrics2.net_pressure = -10.0
@@ -233,10 +234,10 @@ async def test_get_all_metrics_success(client, setup_depth_analyzer):
     mock_metrics2.spread_bps = 0.08
     mock_metrics2.total_liquidity = 8000.0
     mock_metrics2.mid_price = 3000.0
-    
+
     setup_depth_analyzer.get_all_metrics.return_value = {
         "BTCUSDT": mock_metrics1,
-        "ETHUSDT": mock_metrics2
+        "ETHUSDT": mock_metrics2,
     }
 
     response = client.get("/api/v1/metrics/all?limit=10")
@@ -258,7 +259,7 @@ async def test_get_all_metrics_with_filters(client, setup_depth_analyzer):
     mock_metrics.spread_bps = 0.05
     mock_metrics.total_liquidity = 10000.0
     mock_metrics.mid_price = 50000.0
-    
+
     setup_depth_analyzer.get_all_metrics.return_value = {"BTCUSDT": mock_metrics}
 
     # Test symbol filter
@@ -290,7 +291,7 @@ async def test_get_all_metrics_sorting(client, setup_depth_analyzer):
     mock_metrics1.spread_bps = 0.05
     mock_metrics1.total_liquidity = 10000.0
     mock_metrics1.mid_price = 50000.0
-    
+
     mock_metrics2 = MagicMock()
     mock_metrics2.timestamp = datetime(2024, 1, 1, 12, 0, 0)
     mock_metrics2.net_pressure = 10.0
@@ -298,10 +299,10 @@ async def test_get_all_metrics_sorting(client, setup_depth_analyzer):
     mock_metrics2.spread_bps = 0.08
     mock_metrics2.total_liquidity = 15000.0
     mock_metrics2.mid_price = 3000.0
-    
+
     setup_depth_analyzer.get_all_metrics.return_value = {
         "BTCUSDT": mock_metrics1,
-        "ETHUSDT": mock_metrics2
+        "ETHUSDT": mock_metrics2,
     }
 
     # Test sorting by pressure descending
@@ -333,7 +334,7 @@ async def test_get_all_metrics_pagination(client, setup_depth_analyzer):
         mock_metric.total_liquidity = 10000.0
         mock_metric.mid_price = 50000.0
         mock_metrics[f"SYMBOL{i}"] = mock_metric
-    
+
     setup_depth_analyzer.get_all_metrics.return_value = mock_metrics
 
     # Test pagination
@@ -360,9 +361,11 @@ def test_pressure_interpretation_logic():
     """Test pressure interpretation logic."""
     # Test bullish (> 20)
     assert "bullish" == ("bullish" if 25 > 20 else "bearish" if 25 < -20 else "neutral")
-    
+
     # Test bearish (< -20)
-    assert "bearish" == ("bullish" if -25 > 20 else "bearish" if -25 < -20 else "neutral")
-    
+    assert "bearish" == (
+        "bullish" if -25 > 20 else "bearish" if -25 < -20 else "neutral"
+    )
+
     # Test neutral (between -20 and 20)
     assert "neutral" == ("bullish" if 10 > 20 else "bearish" if 10 < -20 else "neutral")

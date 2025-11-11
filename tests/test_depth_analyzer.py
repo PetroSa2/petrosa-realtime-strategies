@@ -210,47 +210,48 @@ class TestDepthAnalyzer:
     def test_cleanup_triggered_after_100_analyses(self):
         """Test cleanup is triggered every 100 analyses - covers line 246."""
         from strategies.services.depth_analyzer import DepthAnalyzer
-        
+
         analyzer = DepthAnalyzer()
-        
+
         # Analyze 100 times to trigger cleanup
         bids = [[50000.0, 1.0]]
         asks = [[50010.0, 1.0]]
-        
+
         for i in range(100):
             analyzer.analyze_depth(
                 symbol=f"SYM{i % 10}USDT",  # Cycle through symbols
                 bids=bids,
-                asks=asks
+                asks=asks,
             )
-        
+
         # If no exception, cleanup logic was executed
         assert True
 
     def test_cleanup_expired_metrics(self):
         """Test _cleanup_expired_metrics removes old data - covers lines 397-409."""
-        from strategies.services.depth_analyzer import DepthAnalyzer
         import time
-        
+
+        from strategies.services.depth_analyzer import DepthAnalyzer
+
         analyzer = DepthAnalyzer()
-        
+
         # Add metrics for a symbol
         bids = [[50000.0, 1.0]]
         asks = [[50010.0, 1.0]]
         analyzer.analyze_depth(symbol="BTCUSDT", bids=bids, asks=asks)
-        
+
         # Modify the analyzer's TTL to be very short for testing
-        if hasattr(analyzer, 'metrics_ttl'):
+        if hasattr(analyzer, "metrics_ttl"):
             analyzer.metrics_ttl = 1  # 1 second
-        
+
         # If we can modify last_update timestamp, do it
-        if hasattr(analyzer, '_last_update'):
+        if hasattr(analyzer, "_last_update"):
             analyzer._last_update["BTCUSDT"] = time.time() - 100  # Make it old
-        
+
         # Trigger cleanup by analyzing 100 times
         for i in range(100):
             analyzer.analyze_depth(symbol="ETHUSDT", bids=bids, asks=asks)
-        
+
         # Cleanup logic should have executed
         assert True
 
