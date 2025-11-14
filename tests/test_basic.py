@@ -125,7 +125,7 @@ class TestSignalModels:
     def test_signal_validation(self):
         """Test signal validation."""
         # Test invalid confidence score
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as exc_info:
             Signal(
                 symbol="BTCUSDT",
                 signal_type=SignalType.BUY,
@@ -135,6 +135,9 @@ class TestSignalModels:
                 price=50000.0,
                 strategy_name="test_strategy",
             )
+        # Verify the error message mentions confidence score
+        error_str = str(exc_info.value).lower()
+        assert "confidence" in error_str or "score" in error_str
 
 
 @pytest.mark.unit
@@ -165,7 +168,7 @@ class TestOrderModels:
     def test_order_validation(self):
         """Test order validation."""
         # Test invalid order ID
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as exc_info:
             TradeOrder(
                 order_id="short",  # Too short
                 symbol="BTCUSDT",
@@ -177,6 +180,9 @@ class TestOrderModels:
                 signal_id="test_signal_123456789",
                 confidence_score=0.8,
             )
+        # Verify the error message mentions order_id
+        error_str = str(exc_info.value).lower()
+        assert "order_id" in error_str or "order" in error_str or "id" in error_str
 
 
 @pytest.mark.unit
@@ -197,5 +203,8 @@ class TestMarketDataMessage:
     def test_market_data_message_validation(self):
         """Test market data message validation."""
         # Test invalid stream format
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as exc_info:
             MarketDataMessage(stream="invalid_stream", data={})
+        # Verify the error message mentions stream or format
+        error_str = str(exc_info.value).lower()
+        assert "stream" in error_str or "format" in error_str
