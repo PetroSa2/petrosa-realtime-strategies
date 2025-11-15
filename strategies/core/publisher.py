@@ -23,6 +23,7 @@ except ImportError:
 
 
 import constants
+from strategies.adapters.signal_adapter import transform_signal_for_tradeengine
 from strategies.models.orders import OrderResponse, TradeOrder
 from strategies.utils.circuit_breaker import CircuitBreaker
 
@@ -376,22 +377,8 @@ class TradeOrderPublisher:
         start_time = time.time()
 
         try:
-            # Convert signal to dict
-            if hasattr(signal, "dict"):
-                # Pydantic v1 style
-                signal_dict = signal.dict()
-            elif hasattr(signal, "model_dump"):
-                # Pydantic v2 style
-                signal_dict = signal.model_dump()
-            else:
-                # Fallback to dict conversion
-                signal_dict = dict(signal)
-
-            # Convert datetime objects to ISO format strings for JSON serialization
-            if "timestamp" in signal_dict and hasattr(
-                signal_dict["timestamp"], "isoformat"
-            ):
-                signal_dict["timestamp"] = signal_dict["timestamp"].isoformat()
+            # Transform signal to tradeengine contract format
+            signal_dict = transform_signal_for_tradeengine(signal)
 
             # Inject trace context into signal for distributed tracing
             signal_dict_with_trace = inject_trace_context(signal_dict)
@@ -414,10 +401,10 @@ class TradeOrderPublisher:
             self.logger.info(
                 "Signal published successfully",
                 symbol=signal_dict.get("symbol"),
-                signal_type=signal_dict.get("signal_type"),
-                signal_action=signal_dict.get("signal_action"),
+                action=signal_dict.get("action"),
                 confidence=signal_dict.get("confidence"),
-                strategy_name=signal_dict.get("strategy_name"),
+                strategy=signal_dict.get("strategy"),
+                strategy_id=signal_dict.get("strategy_id"),
                 publishing_time_ms=publishing_time,
                 signal_count=self.signal_count,
                 topic=self.topic,

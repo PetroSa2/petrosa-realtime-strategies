@@ -653,7 +653,7 @@ class NATSConsumer:
                                 f"Microstructure signal: {strategy_name}",
                                 symbol=symbol,
                                 action=signal.signal_action,
-                                confidence=signal.confidence.value,
+                                confidence=signal.confidence_score,
                             )
                     except Exception as e:
                         self.logger.error(

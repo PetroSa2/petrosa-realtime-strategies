@@ -222,7 +222,7 @@ class TestDepthAnalyzer:
             analyzer.analyze_depth(
                 symbol=f"SYM{i % 10}USDT",
                 bids=bids,
-                asks=asks,  # Cycle through symbols
+                asks=asks,
             )
 
         # If no exception, cleanup logic was executed

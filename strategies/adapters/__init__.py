@@ -1,6 +1,4 @@
-"""
-Adapters for transforming internal models to external contracts.
-"""
+"""Signal adapters for transforming signals between services."""
 
 from .signal_adapter import transform_signal_for_tradeengine
 

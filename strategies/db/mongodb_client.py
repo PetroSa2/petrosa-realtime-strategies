@@ -264,6 +264,11 @@ class MongoDBClient:
         Returns:
             Configuration ID or None on failure
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.upsert_global_config(
+                strategy_id, parameters, metadata
+            )
+
         if not self._connected:
             return None
 
@@ -319,6 +324,11 @@ class MongoDBClient:
         Returns:
             Configuration ID or None on failure
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.upsert_symbol_config(
+                strategy_id, symbol, parameters, metadata
+            )
+
         if not self._connected:
             return None
 
@@ -370,6 +380,9 @@ class MongoDBClient:
         Returns:
             True if deleted, False otherwise
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.delete_global_config(strategy_id)
+
         if not self._connected:
             return False
 
@@ -396,6 +409,9 @@ class MongoDBClient:
         Returns:
             True if deleted, False otherwise
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.delete_symbol_config(strategy_id, symbol)
+
         if not self._connected:
             return False
 
@@ -452,6 +468,9 @@ class MongoDBClient:
         Returns:
             List of audit records (most recent first)
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.get_audit_trail(strategy_id, symbol, limit)
+
         if not self._connected:
             return []
 
