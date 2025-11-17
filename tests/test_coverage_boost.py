@@ -14,9 +14,9 @@ class TestBtcDominanceSmoke:
         assert hasattr(btc_dominance, 'BitcoinDominanceStrategy')
 
     def test_has_process_method(self):
-        """Test strategy has process method."""
+        """Test strategy has process_market_data method."""
         strategy = btc_dominance.BitcoinDominanceStrategy()
-        assert hasattr(strategy, 'process')
+        assert hasattr(strategy, 'process_market_data')
 
 
 class TestCrossExchangeSpreadSmoke:
@@ -27,9 +27,9 @@ class TestCrossExchangeSpreadSmoke:
         assert hasattr(cross_exchange_spread, 'CrossExchangeSpreadStrategy')
 
     def test_has_process_method(self):
-        """Test strategy has process method."""
+        """Test strategy has process_market_data method."""
         strategy = cross_exchange_spread.CrossExchangeSpreadStrategy()
-        assert hasattr(strategy, 'process')
+        assert hasattr(strategy, 'process_market_data')
 
 
 class TestOnChainMetricsSmoke:
@@ -40,9 +40,9 @@ class TestOnChainMetricsSmoke:
         assert hasattr(onchain_metrics, 'OnChainMetricsStrategy')
 
     def test_has_process_method(self):
-        """Test strategy has process method."""
+        """Test strategy has process_market_data method."""
         strategy = onchain_metrics.OnChainMetricsStrategy()
-        assert hasattr(strategy, 'process')
+        assert hasattr(strategy, 'process_market_data')
 
 
 class TestPublisherSmoke:

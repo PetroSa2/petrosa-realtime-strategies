@@ -73,13 +73,12 @@ async def test_publish_signal_success(publisher, mock_nats_client):
 
     assert payload_dict["symbol"] == "BTCUSDT"
     assert (
-        payload_dict["signal_type"] == "BUY"
-    )  # Not transformed - publisher sends raw signal
-    assert payload_dict["signal_action"] == "OPEN_LONG"  # Actual field name
-    assert payload_dict["confidence"] == "HIGH"  # Enum value
-    assert payload_dict["confidence_score"] == 0.85  # Numeric confidence
+        payload_dict["signal_type"] == "buy"
+    )  # Transformed by signal adapter to lowercase
+    assert payload_dict["action"] == "buy"  # Transformed by signal adapter
+    assert payload_dict["confidence"] == 0.85  # Numeric confidence score
     assert payload_dict["price"] == 50000.0
-    assert payload_dict["strategy_name"] == "iceberg_detector"
+    assert payload_dict["strategy"] == "iceberg_detector"  # Transformed field name
 
     # Verify metrics were updated
     assert publisher.signal_count == 1
@@ -112,9 +111,9 @@ async def test_publish_signal_with_dict_method(publisher, mock_nats_client):
 
     assert payload_dict["symbol"] == "ETHUSDT"
     assert (
-        payload_dict["signal_type"] == "SELL"
-    )  # Not transformed - publisher sends raw signal
-    assert payload_dict["signal_action"] == "OPEN_SHORT"  # Actual field name
+        payload_dict["signal_type"] == "sell"
+    )  # Transformed by signal adapter to lowercase
+    assert payload_dict["action"] == "sell"  # Transformed by signal adapter
 
 
 @pytest.mark.asyncio
@@ -291,12 +290,12 @@ async def test_publish_signal_trace_context_injection(publisher, mock_nats_clien
 
     # Note: inject_trace_context might add tracing fields
     # If petrosa_otel is available, check for trace fields
-    # Verify the basic signal fields are present (raw signal, no transformation)
+    # Verify the basic signal fields are present (transformed by signal adapter)
     assert "symbol" in payload_dict
     assert "signal_type" in payload_dict
-    assert "signal_action" in payload_dict  # Raw signal has 'signal_action' field
+    assert "action" in payload_dict  # Transformed signal has 'action' field
     assert "metadata" in payload_dict
-    # Note: Publisher sends raw signal, so no "original_*" fields in metadata
+    # Note: Publisher uses signal adapter, so metadata contains "original_*" fields
 
 
 @pytest.mark.asyncio

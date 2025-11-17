@@ -215,3 +215,342 @@ class TestCircuitBreakerEdgeCases:
         assert cb.failure_count == 0
 
 
+class TestCircuitBreakerStateTransitions:
+    """Test circuit breaker state transitions and edge cases."""
+
+    def test_circuit_opens_on_threshold(self):
+        """Test circuit opens when failure threshold is exceeded."""
+        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=1)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Trigger failures up to threshold
+        for i in range(3):
+            with pytest.raises(ValueError):
+                failing_func()
+            assert cb.failure_count == i + 1
+
+        # Circuit should be open after threshold is reached
+        # Next call should be blocked
+        with pytest.raises(CircuitBreakerOpenException):
+            failing_func()
+
+        assert cb.state == CircuitState.OPEN
+        assert cb.failure_count == 3
+
+    def test_circuit_blocks_execution_when_open(self):
+        """Test circuit blocks execution when open."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=1)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        # Circuit should be open now
+        with pytest.raises(CircuitBreakerOpenException):
+            failing_func()
+
+        # Even a successful function should be blocked
+        @cb
+        def successful_func():
+            return "success"
+
+        with pytest.raises(CircuitBreakerOpenException):
+            successful_func()
+
+    def test_half_open_state_transition(self):
+        """Test circuit transitions to half-open after recovery timeout."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit (2 failures opens it)
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        # Force state update to ensure circuit is open
+        cb._update_state()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # Update state (should transition to half-open)
+        cb._update_state()
+        assert cb.state == CircuitState.HALF_OPEN
+
+    def test_half_open_success_closes_circuit(self):
+        """Test successful call in half-open state closes circuit."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
+
+        @cb
+        def func(should_fail=False):
+            if should_fail:
+                raise ValueError("Error")
+            return "success"
+
+        # Open circuit (2 failures opens it)
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                func(should_fail=True)
+
+        # Verify circuit is open
+        cb._update_state()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # Manually transition to half-open state (check recovery timeout)
+        cb._update_state()
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Success in half-open should close circuit
+        result = func(should_fail=False)
+        assert result == "success"
+        assert cb.state == CircuitState.CLOSED
+        assert cb.failure_count == 0
+
+    def test_half_open_failure_reopens_circuit(self):
+        """Test failure in half-open state reopens circuit."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit (2 failures opens it)
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        # Verify circuit is open
+        cb._update_state()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # Manually transition to half-open state
+        cb._update_state()
+        assert cb.state == CircuitState.HALF_OPEN
+
+        # Failure in half-open should reopen circuit
+        with pytest.raises(ValueError):
+            failing_func()
+
+        assert cb.state == CircuitState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_async_circuit_opens_on_threshold(self):
+        """Test async circuit opens when threshold exceeded."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=1)
+
+        @cb
+        async def async_failing_func():
+            raise ValueError("Error")
+
+        # Open circuit
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                await async_failing_func()
+
+        # Should be blocked now
+        with pytest.raises(CircuitBreakerOpenException):
+            await async_failing_func()
+
+    def test_reset_method(self):
+        """Test reset method closes circuit."""
+        cb = CircuitBreaker(failure_threshold=2)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit (2 failures opens it)
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        # Verify circuit is open (check after state update)
+        cb._update_state()
+        assert cb.state == CircuitState.OPEN
+
+        # Reset should close circuit
+        cb.reset()
+        assert cb.state == CircuitState.CLOSED
+        assert cb.failure_count == 0
+        assert cb.last_failure_time is None
+
+    def test_force_open(self):
+        """Test force_open method."""
+        cb = CircuitBreaker()
+
+        assert cb.state == CircuitState.CLOSED
+
+        cb.force_open()
+        assert cb.state == CircuitState.OPEN
+        assert cb.last_failure_time is not None
+
+    def test_force_close(self):
+        """Test force_close method."""
+        cb = CircuitBreaker(failure_threshold=2)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit (2 failures opens it)
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        # Verify circuit is open (check after state update)
+        cb._update_state()
+        assert cb.state == CircuitState.OPEN
+
+        # Force close
+        cb.force_close()
+        assert cb.state == CircuitState.CLOSED
+        assert cb.failure_count == 0
+
+    def test_is_open_method(self):
+        """Test is_open method."""
+        cb = CircuitBreaker(failure_threshold=2)
+
+        assert not cb.is_open()
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        assert cb.is_open()
+
+    def test_is_closed_method(self):
+        """Test is_closed method."""
+        cb = CircuitBreaker()
+
+        assert cb.is_closed()
+
+        cb.force_open()
+        assert not cb.is_closed()
+
+        cb.force_close()
+        assert cb.is_closed()
+
+    def test_is_half_open_method(self):
+        """Test is_half_open method."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        assert not cb.is_half_open()
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+        assert cb.is_half_open()
+
+    def test_metrics_with_zero_requests(self):
+        """Test metrics when no requests have been made."""
+        cb = CircuitBreaker()
+
+        metrics = cb.get_metrics()
+        assert metrics["total_requests"] == 0
+        assert metrics["total_failures"] == 0
+        assert metrics["total_successes"] == 0
+        assert metrics["success_rate"] == 0
+
+    def test_metrics_success_rate_calculation(self):
+        """Test metrics success rate calculation."""
+        cb = CircuitBreaker()
+
+        @cb
+        def test_func(should_fail=False):
+            if should_fail:
+                raise ValueError("Error")
+            return "success"
+
+        # 3 successes, 1 failure
+        test_func()
+        test_func()
+        test_func()
+        try:
+            test_func(should_fail=True)
+        except ValueError:
+            pass
+
+        metrics = cb.get_metrics()
+        assert metrics["total_requests"] == 4
+        assert metrics["total_successes"] == 3
+        assert metrics["total_failures"] == 1
+        assert metrics["success_rate"] == 75.0
+
+    def test_can_execute_when_closed(self):
+        """Test _can_execute returns True when closed."""
+        cb = CircuitBreaker()
+
+        assert cb._can_execute()
+
+    def test_can_execute_when_open(self):
+        """Test _can_execute returns False when open."""
+        cb = CircuitBreaker(failure_threshold=2)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        assert not cb._can_execute()
+
+    def test_can_execute_when_half_open(self):
+        """Test _can_execute returns True when half-open."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.1)
+
+        @cb
+        def failing_func():
+            raise ValueError("Error")
+
+        # Open circuit (2 failures opens it)
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                failing_func()
+
+        # Verify circuit is open
+        cb._update_state()
+        assert cb.state == CircuitState.OPEN
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # _can_execute updates state automatically and should allow execution in half-open
+        can_execute = cb._can_execute()
+        assert can_execute
+        assert cb.state == CircuitState.HALF_OPEN
+
+
