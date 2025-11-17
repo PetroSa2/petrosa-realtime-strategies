@@ -414,9 +414,11 @@ class TradeOrderPublisher:
             self.logger.error(
                 "Error publishing signal",
                 error=str(e),
-                symbol=signal_dict.get("symbol")
-                if "signal_dict" in locals()
-                else "unknown",
+                symbol=(
+                    signal_dict.get("symbol")
+                    if "signal_dict" in locals()
+                    else "unknown"
+                ),
             )
             self.error_count += 1
             raise
@@ -465,9 +467,9 @@ class TradeOrderPublisher:
         return {
             "healthy": is_healthy,
             "is_running": self.is_running,
-            "nats_connected": self.nats_client.is_connected
-            if self.nats_client
-            else False,
+            "nats_connected": (
+                self.nats_client.is_connected if self.nats_client else False
+            ),
             "order_count": self.order_count,
             "error_count": self.error_count,
             "last_order_time": self.last_order_time,

@@ -9,7 +9,6 @@ Tests the configuration management system including:
 - Audit trail
 """
 
-
 import pytest
 
 from strategies.market_logic.defaults import get_strategy_defaults, validate_parameters

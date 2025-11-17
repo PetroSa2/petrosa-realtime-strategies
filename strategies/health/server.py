@@ -369,9 +369,9 @@ class HealthServer:
                     "name": constants.SERVICE_NAME,
                     "version": constants.SERVICE_VERSION,
                     "environment": constants.ENVIRONMENT,
-                    "uptime_seconds": time.time() - self.start_time
-                    if self.start_time
-                    else 0,
+                    "uptime_seconds": (
+                        time.time() - self.start_time if self.start_time else 0
+                    ),
                 },
                 "system": {
                     "memory_usage_mb": self._get_memory_usage(),
