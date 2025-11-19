@@ -4,7 +4,7 @@ Pydantic response models for API endpoints.
 Provides type-safe request/response models for configuration management.
 """
 
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -96,3 +96,120 @@ class AuditTrailItem(BaseModel):
     changed_by: str = Field(..., description="Who/what made the change")
     changed_at: str = Field(..., description="When the change occurred")
     reason: Optional[str] = Field(None, description="Reason for the change")
+
+
+# -------------------------------------------------------------------------
+# Configuration Validation Models
+# -------------------------------------------------------------------------
+
+
+class ValidationError(BaseModel):
+    """Standardized validation error format."""
+
+    field: str = Field(..., description="Parameter name that failed validation")
+    message: str = Field(..., description="Human-readable error message")
+    code: str = Field(
+        ...,
+        description="Error code (e.g., 'INVALID_TYPE', 'OUT_OF_RANGE', 'UNKNOWN_PARAMETER')",
+    )
+    suggested_value: Optional[Any] = Field(
+        None, description="Suggested correct value if applicable"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "field": "buy_threshold",
+                "message": "buy_threshold must be >= 1.0, got 0.5",
+                "code": "OUT_OF_RANGE",
+                "suggested_value": 1.2,
+            }
+        }
+
+
+class CrossServiceConflict(BaseModel):
+    """Cross-service configuration conflict."""
+
+    service: str = Field(..., description="Service name with conflicting configuration")
+    conflict_type: str = Field(
+        ..., description="Type of conflict (e.g., 'PARAMETER_CONFLICT')"
+    )
+    description: str = Field(..., description="Description of the conflict")
+    resolution: str = Field(..., description="Suggested resolution")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "service": "tradeengine",
+                "conflict_type": "PARAMETER_CONFLICT",
+                "description": "Conflicting threshold settings between services",
+                "resolution": "Use consistent threshold values across all services",
+            }
+        }
+
+
+class ValidationResponse(BaseModel):
+    """Standardized validation response across all services."""
+
+    validation_passed: bool = Field(
+        ..., description="Whether validation passed without errors"
+    )
+    errors: list[ValidationError] = Field(
+        default_factory=list, description="List of validation errors"
+    )
+    warnings: list[str] = Field(
+        default_factory=list, description="Non-blocking warnings"
+    )
+    suggested_fixes: list[str] = Field(
+        default_factory=list, description="Actionable suggestions to fix errors"
+    )
+    estimated_impact: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Estimated impact of configuration changes",
+    )
+    conflicts: list[CrossServiceConflict] = Field(
+        default_factory=list, description="Cross-service conflicts detected"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "validation_passed": True,
+                "errors": [],
+                "warnings": [],
+                "suggested_fixes": [],
+                "estimated_impact": {
+                    "risk_level": "low",
+                    "affected_scope": "strategy:orderbook_skew",
+                    "parameter_count": 2,
+                },
+                "conflicts": [],
+            }
+        }
+
+
+class ConfigValidationRequest(BaseModel):
+    """Request model for configuration validation."""
+
+    parameters: dict[str, Any] = Field(
+        ..., description="Configuration parameters to validate"
+    )
+    strategy_id: Optional[str] = Field(
+        None,
+        description="Strategy identifier (required for strategy config validation)",
+    )
+    symbol: Optional[str] = Field(
+        None, description="Trading symbol (optional, for symbol-specific validation)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "parameters": {
+                    "buy_threshold": 1.3,
+                    "sell_threshold": 0.75,
+                },
+                "strategy_id": "orderbook_skew",
+                "symbol": "BTCUSDT",
+            }
+        }

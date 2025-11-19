@@ -15,8 +15,12 @@ from strategies.api.response_models import (
     AuditTrailItem,
     ConfigResponse,
     ConfigUpdateRequest,
+    ConfigValidationRequest,
+    CrossServiceConflict,
     ParameterSchemaItem,
     StrategyListItem,
+    ValidationError,
+    ValidationResponse,
 )
 from strategies.market_logic.defaults import (
     get_parameter_schema,
@@ -115,6 +119,218 @@ async def list_strategies():
         )
 
 
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
 @router.get(
     "/strategies/{strategy_id}/schema",
     response_model=APIResponse,
@@ -194,6 +410,218 @@ async def get_strategy_schema(
         )
 
 
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
 @router.get(
     "/strategies/{strategy_id}/defaults",
     response_model=APIResponse,
@@ -235,6 +663,218 @@ async def get_strategy_defaults_endpoint(
         )
     except Exception as e:
         logger.error(f"Error getting defaults for {strategy_id}: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
@@ -294,6 +934,218 @@ async def get_global_config(
         )
 
 
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
 @router.get(
     "/strategies/{strategy_id}/config/{symbol}",
     response_model=APIResponse,
@@ -343,6 +1195,218 @@ async def get_symbol_config(
         )
     except Exception as e:
         logger.error(f"Error getting config for {strategy_id}/{symbol}: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
@@ -448,6 +1512,218 @@ async def update_global_config(
 
 
 @router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
     "/strategies/{strategy_id}/config/{symbol}",
     response_model=APIResponse,
     summary="Create or update symbol-specific configuration",
@@ -543,6 +1819,218 @@ async def update_symbol_config(
         )
 
 
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
 @router.delete(
     "/strategies/{strategy_id}/config",
     response_model=APIResponse,
@@ -586,6 +2074,218 @@ async def delete_global_config(
         )
     except Exception as e:
         logger.error(f"Error deleting config for {strategy_id}: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
@@ -637,6 +2337,218 @@ async def delete_symbol_config(
         )
     except Exception as e:
         logger.error(f"Error deleting config for {strategy_id}/{symbol}: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
@@ -705,6 +2617,218 @@ async def get_audit_trail(
 
 
 @router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
     "/strategies/cache/refresh",
     response_model=APIResponse,
     summary="Force refresh configuration cache",
@@ -737,6 +2861,218 @@ async def refresh_cache():
         )
     except Exception as e:
         logger.error(f"Error refreshing cache: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.post(
+    "/config/validate",
+    response_model=APIResponse,
+    summary="Validate configuration without applying changes",
+    description="""
+    **For LLM Agents**: Validate configuration parameters without persisting changes.
+
+    This endpoint performs comprehensive validation including:
+    - Parameter type and constraint validation
+    - Dependency validation
+    - Cross-service conflict detection (future)
+    - Impact assessment
+
+    **Example Request**:
+    ```json
+    {
+      "parameters": {
+        "buy_threshold": 1.3,
+        "sell_threshold": 0.75
+      },
+      "strategy_id": "orderbook_skew",
+      "symbol": "BTCUSDT"
+    }
+    ```
+
+    **Example Response**:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "validation_passed": true,
+        "errors": [],
+        "warnings": [],
+        "suggested_fixes": [],
+        "estimated_impact": {
+          "risk_level": "low",
+          "affected_scope": "strategy:orderbook_skew"
+        },
+        "conflicts": []
+      }
+    }
+    ```
+    """,
+    tags=["configuration"],
+)
+async def validate_config(request: ConfigValidationRequest):
+    """Validate configuration without applying changes."""
+    try:
+        # Validate that strategy_id is provided for strategy config validation
+        if not request.strategy_id:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required for configuration validation",
+                },
+            )
+
+        manager = get_config_manager()
+
+        # Perform validation using existing logic
+        success, config, errors = await manager.set_config(
+            strategy_id=request.strategy_id,
+            parameters=request.parameters,
+            changed_by="validation_api",
+            symbol=request.symbol.upper() if request.symbol else None,
+            reason="Validation only - no changes applied",
+            validate_only=True,
+        )
+
+        # Convert errors to standardized format
+        validation_errors = []
+        suggested_fixes = []
+
+        for error_msg in errors:
+            # Parse error message to extract field and details
+            if "Unknown parameter" in error_msg:
+                # Handle "Unknown parameter" errors
+                code = "UNKNOWN_PARAMETER"
+                # Extract parameter name from "Unknown parameter: param_name"
+                if "Unknown parameter:" in error_msg:
+                    param_name = error_msg.split("Unknown parameter:")[-1].strip()
+                    field = param_name
+                else:
+                    field = "unknown"
+                suggested_fixes.append(
+                    f"Remove {field} or check parameter name spelling"
+                )
+                validation_errors.append(
+                    ValidationError(
+                        field=field,
+                        message=error_msg,
+                        code=code,
+                        suggested_value=None,
+                    )
+                )
+            elif "must be" in error_msg:
+                # Extract field name (usually first word before "must")
+                parts = error_msg.split(" must be")
+                if parts:
+                    field = parts[0].strip()
+                    message = error_msg
+
+                    # Determine error code
+                    suggested_value = None  # Initialize before conditionals
+                    if "must be an integer" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to an integer value")
+                    elif "must be a number" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a numeric value")
+                    elif "must be a boolean" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a boolean value")
+                    elif "must be a string" in error_msg:
+                        code = "INVALID_TYPE"
+                        suggested_fixes.append(f"Change {field} to a string value")
+                    elif "must be >=" in error_msg or "must be <=" in error_msg:
+                        code = "OUT_OF_RANGE"
+                        # Extract suggested value from schema
+                        from strategies.market_logic.defaults import (
+                            get_parameter_schema,
+                        )
+
+                        schema = get_parameter_schema(request.strategy_id)
+                        if schema and field in schema:
+                            param_schema = schema[field]
+                            if "min" in param_schema and "max" in param_schema:
+                                suggested_value = (
+                                    param_schema["min"] + param_schema["max"]
+                                ) / 2
+                            elif "min" in param_schema:
+                                suggested_value = param_schema["min"]
+                            elif "max" in param_schema:
+                                suggested_value = param_schema["max"]
+                            else:
+                                suggested_value = param_schema.get("default")
+                        else:
+                            suggested_value = None
+                    else:
+                        code = "VALIDATION_ERROR"
+                        suggested_value = None
+
+                    validation_errors.append(
+                        ValidationError(
+                            field=field,
+                            message=message,
+                            code=code,
+                            suggested_value=suggested_value,
+                        )
+                    )
+            else:
+                # Generic error
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown",
+                        message=error_msg,
+                        code="VALIDATION_ERROR",
+                        suggested_value=None,
+                    )
+                )
+
+        # Estimate impact (simplified for now)
+        estimated_impact = {
+            "risk_level": "low",
+            "affected_scope": (
+                f"strategy:{request.strategy_id}"
+                if not request.symbol
+                else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+            ),
+            "parameter_count": len(request.parameters),
+        }
+
+        # Add risk assessment based on parameters
+        high_risk_params = ["threshold", "multiplier", "risk_factor"]
+        if any(param in request.parameters for param in high_risk_params):
+            estimated_impact["risk_level"] = "medium"
+
+        # Cross-service conflict detection (placeholder - to be implemented)
+        conflicts = []
+        # TODO: Implement cross-service conflict detection
+        # This would check against other services' configurations
+
+        validation_response = ValidationResponse(
+            validation_passed=success and len(validation_errors) == 0,
+            errors=validation_errors,
+            warnings=[],
+            suggested_fixes=suggested_fixes,
+            estimated_impact=estimated_impact,
+            conflicts=conflicts,
+        )
+
+        return APIResponse(
+            success=True,
+            data=validation_response,
+            metadata={
+                "validation_mode": "dry_run",
+                "scope": (
+                    f"strategy:{request.strategy_id}"
+                    if not request.symbol
+                    else f"strategy:{request.strategy_id}:symbol:{request.symbol}"
+                ),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating config: {e}")
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
