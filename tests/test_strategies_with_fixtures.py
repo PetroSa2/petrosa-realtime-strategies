@@ -10,6 +10,7 @@ from tests.fixtures.market_data_realistic import (
     BTCUSDT_DEPTH_SNAPSHOT,
     BTCUSDT_ICEBERG_TRADES,
     BTCUSDT_WIDENING_SPREAD,
+    generate_depth_updates,
 )
 
 
