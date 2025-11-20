@@ -208,7 +208,7 @@ class TestCircuitBreakerEdgeCases:
                 func(should_fail=True)
 
         assert cb.failure_count == 3
-        
+
         # Success resets
         result = func(should_fail=False)
         assert result == "success"
@@ -552,5 +552,3 @@ class TestCircuitBreakerStateTransitions:
         can_execute = cb._can_execute()
         assert can_execute
         assert cb.state == CircuitState.HALF_OPEN
-
-

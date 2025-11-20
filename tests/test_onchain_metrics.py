@@ -6,7 +6,7 @@ import pytest
 
 from strategies.market_logic.onchain_metrics import OnChainMetricsStrategy
 from strategies.models.market_data import MarketDataMessage, TickerData
-from strategies.models.signals import SignalType, SignalAction
+from strategies.models.signals import SignalAction, SignalType
 
 
 def make_ticker(symbol: str) -> TickerData:
@@ -111,7 +111,14 @@ async def test_onchain_rate_limiting_prevents_signal():
     # Seed minimal valid history/cache for BTC
     now = time.time()
     strategy.metrics_history["BTC"] = [
-        {"active_addresses": 1, "transaction_volume_btc": 1, "hash_rate_eh": 1, "exchange_inflow_btc": 0, "exchange_outflow_btc": 0, "timestamp": now - 25 * 3600}
+        {
+            "active_addresses": 1,
+            "transaction_volume_btc": 1,
+            "hash_rate_eh": 1,
+            "exchange_inflow_btc": 0,
+            "exchange_outflow_btc": 0,
+            "timestamp": now - 25 * 3600,
+        }
     ] * 24
     strategy.metrics_cache["BTC"] = strategy.metrics_history["BTC"][-1]
     # Mark last signal as just emitted -> enforce min interval
@@ -141,29 +148,31 @@ async def test_onchain_error_handling_in_process_market_data(monkeypatch):
 async def test_onchain_eth_ecosystem_growth_signal():
     """Test ETH signal generation with DeFi TVL growth - covers lines 337-371."""
     strategy = OnChainMetricsStrategy()
-    
+
     # Prepare 24+ hours of ETH history with strong growth
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": 800_000 + i * 15_000,  # > 10% growth
-            "transaction_volume_eth": 300_000 + i * 50_000,  # > 15% growth
-            "defi_tvl_usd": 50_000_000_000 + i * 1_000_000_000,  # > 5% growth
-            "exchange_inflow_eth": 50_000,
-            "exchange_outflow_eth": 60_000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 800_000 + i * 15_000,  # > 10% growth
+                "transaction_volume_eth": 300_000 + i * 50_000,  # > 15% growth
+                "defi_tvl_usd": 50_000_000_000 + i * 1_000_000_000,  # > 5% growth
+                "exchange_inflow_eth": 50_000,
+                "exchange_outflow_eth": 60_000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["ETH"] = history
     strategy.metrics_cache["ETH"] = history[-1]
-    
+
     # Allow signal generation (no recent signal)
     strategy.last_signal_times.clear()
-    
+
     mdm = make_mdm("ETHUSDT")
     # Set price in ticker data
     mdm.data.last_price = "3000.0"
-    
+
     signal = await strategy.process_market_data(mdm)
     if signal:
         assert signal.signal_type == SignalType.BUY
@@ -176,7 +185,7 @@ async def test_onchain_unsupported_symbol():
     """Test unsupported symbol returns None - covers line 214."""
     strategy = OnChainMetricsStrategy()
     strategy.metrics_cache["BTC"] = {"active_addresses": 1000000}
-    
+
     mdm = make_mdm("ADAUSDT")  # Not BTC or ETH
     signal = await strategy._analyze_onchain_metrics(mdm)
     assert signal is None
@@ -198,7 +207,7 @@ async def test_onchain_insufficient_history():
     strategy.metrics_cache["BTC"] = {"active_addresses": 1000000}
     # Less than 24 hours of history
     strategy.metrics_history["BTC"] = [{"active_addresses": 1000000}] * 10
-    
+
     mdm = make_mdm("BTCUSDT")
     signal = await strategy._analyze_onchain_metrics(mdm)
     assert signal is None
@@ -208,21 +217,23 @@ async def test_onchain_insufficient_history():
 async def test_onchain_calculate_growth_metrics_exception():
     """Test exception handling in calculate_growth_metrics - covers lines 304-306."""
     strategy = OnChainMetricsStrategy()
-    
+
     # Create history with invalid data that will cause exception
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": None,  # Invalid data
-            "transaction_volume_btc": None,
-            "hash_rate_eh": None,
-            "exchange_inflow_btc": None,
-            "exchange_outflow_btc": None,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": None,  # Invalid data
+                "transaction_volume_btc": None,
+                "hash_rate_eh": None,
+                "exchange_inflow_btc": None,
+                "exchange_outflow_btc": None,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["BTC"] = history
-    
+
     result = strategy._calculate_growth_metrics("BTC")
     assert result is None
 
@@ -240,25 +251,27 @@ async def test_onchain_signal_confidence_mapping():
     """Test confidence score mapping - covers lines 434, 436."""
     strategy = OnChainMetricsStrategy()
     strategy.metrics_cache["BTC"] = {"active_addresses": 1000000}
-    
+
     # Create history with strong growth
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": 1_000_000 + i * 15_000,
-            "transaction_volume_btc": 500_000 + i * 80_000,
-            "hash_rate_eh": 200 + i * 2,
-            "exchange_inflow_btc": 1_000,
-            "exchange_outflow_btc": 2_000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 1_000_000 + i * 15_000,
+                "transaction_volume_btc": 500_000 + i * 80_000,
+                "hash_rate_eh": 200 + i * 2,
+                "exchange_inflow_btc": 1_000,
+                "exchange_outflow_btc": 2_000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["BTC"] = history
     strategy.metrics_cache["BTC"] = history[-1]
-    
+
     mdm = make_mdm("BTCUSDT")
     mdm.data.last_price = "50000.0"
-    
+
     signal = await strategy.process_market_data(mdm)
     if signal:
         # High confidence should map correctly
@@ -269,25 +282,27 @@ async def test_onchain_signal_confidence_mapping():
 async def test_onchain_price_extraction_from_trade():
     """Test price extraction from trade data - covers line 445."""
     from strategies.models.market_data import TradeData
-    
+
     strategy = OnChainMetricsStrategy()
     strategy.metrics_cache["BTC"] = {"active_addresses": 1000000}
-    
+
     # Create history
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": 1_000_000 + i * 15_000,
-            "transaction_volume_btc": 500_000 + i * 80_000,
-            "hash_rate_eh": 200 + i * 2,
-            "exchange_inflow_btc": 1_000,
-            "exchange_outflow_btc": 2_000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 1_000_000 + i * 15_000,
+                "transaction_volume_btc": 500_000 + i * 80_000,
+                "hash_rate_eh": 200 + i * 2,
+                "exchange_inflow_btc": 1_000,
+                "exchange_outflow_btc": 2_000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["BTC"] = history
     strategy.metrics_cache["BTC"] = history[-1]
-    
+
     # Create market data with trade instead of ticker
     trade = TradeData(
         symbol="BTCUSDT",
@@ -305,7 +320,7 @@ async def test_onchain_price_extraction_from_trade():
         data=trade,
         timestamp=datetime.utcnow(),
     )
-    
+
     signal = await strategy.process_market_data(mdm)
     if signal:
         assert signal.price > 0
@@ -325,12 +340,12 @@ async def test_onchain_get_metrics():
 async def test_onchain_fetch_error_handling(monkeypatch):
     """Test error handling in _fetch_onchain_metrics - covers lines 135-136."""
     strategy = OnChainMetricsStrategy()
-    
+
     async def boom():
         raise Exception("Fetch error")
-    
+
     monkeypatch.setattr(strategy, "_simulate_btc_metrics", boom)
-    
+
     await strategy._fetch_onchain_metrics()
     # Should handle error gracefully
 
@@ -339,20 +354,22 @@ async def test_onchain_fetch_error_handling(monkeypatch):
 async def test_onchain_history_trimming():
     """Test history trimming when exceeding max entries - covers line 194."""
     strategy = OnChainMetricsStrategy()
-    
+
     # Create more than 7 days * 24 hours of history
     history = []
     base_time = time.time() - (10 * 24 * 3600)  # 10 days ago
     for i in range(10 * 24 + 1):  # More than max_entries
-        history.append({
-            "active_addresses": 1000000,
-            "timestamp": base_time + i * 3600,
-        })
-    
+        history.append(
+            {
+                "active_addresses": 1000000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
+
     strategy._update_metrics_history("BTC", history[-1])
-    strategy._update_metrics_history("BTC", {"active_addresses": 1000000, "timestamp": time.time()})
-    
+    strategy._update_metrics_history(
+        "BTC", {"active_addresses": 1000000, "timestamp": time.time()}
+    )
+
     # History should be trimmed to max_entries
     assert len(strategy.metrics_history["BTC"]) <= 7 * 24
-
-

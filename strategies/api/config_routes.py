@@ -6,8 +6,10 @@ All endpoints are LLM-compatible and include detailed documentation.
 """
 
 import logging
-from typing import Optional
+import os
+from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from strategies.api.response_models import (
@@ -297,10 +299,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -588,10 +590,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -846,10 +848,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1112,10 +1114,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1378,10 +1380,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1689,10 +1691,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1997,10 +1999,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -2257,10 +2259,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -2520,10 +2522,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -2794,10 +2796,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -3044,10 +3046,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,

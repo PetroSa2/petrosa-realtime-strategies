@@ -98,7 +98,10 @@ class TestOrderbookTracker:
         # Add more recent snapshots (within history_window)
         for i in range(5):
             tracker.update_orderbook(
-                "BTCUSDT", bids, asks, timestamp=datetime.utcnow() - timedelta(seconds=i)
+                "BTCUSDT",
+                bids,
+                asks,
+                timestamp=datetime.utcnow() - timedelta(seconds=i),
             )
 
         # Cleanup is called internally during update_orderbook
@@ -180,4 +183,3 @@ class TestOrderbookTracker:
         assert "active_bid_levels" in stats
         assert "active_ask_levels" in stats
         assert stats["symbols_tracked"] == 2
-

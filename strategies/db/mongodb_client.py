@@ -410,7 +410,9 @@ class MongoDBClient:
             True if deleted, False otherwise
         """
         if self.use_data_manager:
-            return await self.data_manager_client.delete_symbol_config(strategy_id, symbol)
+            return await self.data_manager_client.delete_symbol_config(
+                strategy_id, symbol
+            )
 
         if not self._connected:
             return False
@@ -469,7 +471,9 @@ class MongoDBClient:
             List of audit records (most recent first)
         """
         if self.use_data_manager:
-            return await self.data_manager_client.get_audit_trail(strategy_id, symbol, limit)
+            return await self.data_manager_client.get_audit_trail(
+                strategy_id, symbol, limit
+            )
 
         if not self._connected:
             return []

@@ -59,9 +59,7 @@ def mock_constants():
         mock_const.NATS_CONSUMER_TOPIC = "market_data"
         mock_const.NATS_PUBLISHER_TOPIC = "signals"
         mock_const.HEALTH_CHECK_PORT = 8080
-        mock_const.get_strategy_config.return_value = {
-            "strategy1": {"param": "value"}
-        }
+        mock_const.get_strategy_config.return_value = {"strategy1": {"param": "value"}}
         mock_const.get_trading_config.return_value = {"leverage": 1.0}
         mock_const.get_risk_config.return_value = {"max_position": 1000}
         yield mock_const
@@ -178,7 +176,7 @@ def test_ready_endpoint_not_ready(client):
 def test_metrics_endpoint(client):
     """Test metrics endpoint."""
     import sys
-    
+
     # Mock psutil
     mock_psutil = MagicMock()
     mock_process = MagicMock()
@@ -238,12 +236,12 @@ def test_info_endpoint_error(client):
 def test_memory_usage_with_psutil():
     """Test memory usage calculation with psutil."""
     import sys
-    
+
     mock_psutil = MagicMock()
     mock_process = MagicMock()
     mock_process.memory_info.return_value.rss = 200 * 1024 * 1024  # 200MB
     mock_psutil.Process.return_value = mock_process
-    
+
     with patch.dict(sys.modules, {"psutil": mock_psutil}):
         server = HealthServer()
         memory_mb = server._get_memory_usage()
@@ -253,7 +251,7 @@ def test_memory_usage_with_psutil():
 def test_memory_usage_without_psutil():
     """Test memory usage calculation without psutil."""
     import sys
-    
+
     # Simulate psutil not being available
     with patch.dict(sys.modules, {"psutil": None}):
         server = HealthServer()
@@ -264,12 +262,12 @@ def test_memory_usage_without_psutil():
 def test_cpu_usage_with_psutil():
     """Test CPU usage calculation with psutil."""
     import sys
-    
+
     mock_psutil = MagicMock()
     mock_process = MagicMock()
     mock_process.cpu_percent.return_value = 50.0
     mock_psutil.Process.return_value = mock_process
-    
+
     with patch.dict(sys.modules, {"psutil": mock_psutil}):
         server = HealthServer()
         cpu_percent = server._get_cpu_usage()
@@ -279,8 +277,8 @@ def test_cpu_usage_with_psutil():
 def test_cpu_usage_without_psutil():
     """Test CPU usage calculation without psutil."""
     import sys
-    
-    # Simulate psutil not being available  
+
+    # Simulate psutil not being available
     with patch.dict(sys.modules, {"psutil": None}):
         server = HealthServer()
         cpu_percent = server._get_cpu_usage()

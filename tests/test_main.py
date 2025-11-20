@@ -26,4 +26,3 @@ class TestMainModule:
 
         # Module should be importable and have basic structure
         assert main.__name__ == "strategies.main"
-

@@ -93,9 +93,9 @@ async def test_start_success(service, mock_components):
     """Test successful service start."""
     with patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo, patch(
         "strategies.services.config_manager.StrategyConfigManager"
-    ) as mock_config_mgr, patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth, patch(
-        "strategies.main.HealthServer"
-    ) as mock_health, patch(
+    ) as mock_config_mgr, patch(
+        "strategies.services.depth_analyzer.DepthAnalyzer"
+    ) as mock_depth, patch("strategies.main.HealthServer") as mock_health, patch(
         "strategies.main.TradeOrderPublisher"
     ) as mock_publisher, patch("strategies.main.NATSConsumer") as mock_consumer, patch(
         "strategies.main.HeartbeatManager"
@@ -125,7 +125,10 @@ async def test_start_success(service, mock_components):
 @pytest.mark.asyncio
 async def test_start_error_handling(service):
     """Test service start error handling."""
-    with patch("strategies.db.mongodb_client.MongoDBClient", side_effect=Exception("MongoDB error")):
+    with patch(
+        "strategies.db.mongodb_client.MongoDBClient",
+        side_effect=Exception("MongoDB error"),
+    ):
         with pytest.raises(Exception, match="MongoDB error"):
             await service.start()
 
@@ -170,7 +173,7 @@ async def test_signal_handler():
 
     # Test signal handling
     signal_handler(signal.SIGTERM, None)
-    
+
     # Give the event loop a chance to process
     await asyncio.sleep(0.1)
 
@@ -311,7 +314,11 @@ def test_cli_health_command_connection_error():
         result = runner.invoke(app, ["health"])
 
         # CliRunner may not capture all output when exceptions occur
-        assert result.exit_code != 0 or "failed" in result.output.lower() or result.exception is not None
+        assert (
+            result.exit_code != 0
+            or "failed" in result.output.lower()
+            or result.exception is not None
+        )
 
 
 def test_cli_version_command():
@@ -397,7 +404,11 @@ def test_cli_heartbeat_command_failure():
         result = runner.invoke(app, ["heartbeat"])
 
         # CliRunner may not capture all output when exceptions occur
-        assert result.exit_code != 0 or "failed" in result.output.lower() or result.exception is not None
+        assert (
+            result.exit_code != 0
+            or "failed" in result.output.lower()
+            or result.exception is not None
+        )
 
 
 @pytest.mark.skip(reason="Module-level OTEL setup makes reload testing fragile")
@@ -421,7 +432,9 @@ def test_otel_import_error():
     pass
 
 
-@pytest.mark.skip(reason="Module-level dotenv loading called at import, not testable via reload")
+@pytest.mark.skip(
+    reason="Module-level dotenv loading called at import, not testable via reload"
+)
 def test_dotenv_loading():
     """Test dotenv loading."""
     # Skipped: dotenv is loaded at module import time, reload doesn't re-call it
@@ -447,9 +460,9 @@ async def test_service_startup_sequence(service, mock_components):
     """Test the complete service startup sequence."""
     with patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo, patch(
         "strategies.services.config_manager.StrategyConfigManager"
-    ) as mock_config_mgr, patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth, patch(
-        "strategies.main.HealthServer"
-    ) as mock_health, patch(
+    ) as mock_config_mgr, patch(
+        "strategies.services.depth_analyzer.DepthAnalyzer"
+    ) as mock_depth, patch("strategies.main.HealthServer") as mock_health, patch(
         "strategies.main.TradeOrderPublisher"
     ) as mock_publisher, patch("strategies.main.NATSConsumer") as mock_consumer, patch(
         "strategies.main.HeartbeatManager"
@@ -484,7 +497,9 @@ async def test_service_startup_sequence(service, mock_components):
         assert service.heartbeat_manager == mock_components["heartbeat_manager"]
 
 
-@pytest.mark.skip(reason="__main__ execution not testable via patching after module import")
+@pytest.mark.skip(
+    reason="__main__ execution not testable via patching after module import"
+)
 def test_main_module_execution():
     """Test main module execution."""
     # Skipped: Module already imported, __main__ block only runs on direct execution
