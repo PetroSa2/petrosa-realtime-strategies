@@ -3,7 +3,6 @@ Tests for strategies/models/signals.py.
 """
 
 from datetime import datetime
-from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError

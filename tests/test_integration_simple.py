@@ -4,8 +4,6 @@ Simple integration tests to improve coverage by exercising code paths.
 These tests don't deeply validate behavior but ensure code executes without errors.
 """
 
-import pytest
-
 
 class TestModuleImports:
     """Test that all modules can be imported."""

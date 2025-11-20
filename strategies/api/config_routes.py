@@ -6,8 +6,10 @@ All endpoints are LLM-compatible and include detailed documentation.
 """
 
 import logging
-from typing import Optional
+import os
+from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from strategies.api.response_models import (
@@ -297,10 +299,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -588,10 +590,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -846,10 +848,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1112,10 +1114,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1378,10 +1380,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1689,10 +1691,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -1997,10 +1999,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -2257,10 +2259,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -2520,10 +2522,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -2794,10 +2796,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -3044,10 +3046,10 @@ async def validate_config(request: ConfigValidationRequest):
         if any(param in request.parameters for param in high_risk_params):
             estimated_impact["risk_level"] = "medium"
 
-        # Cross-service conflict detection (placeholder - to be implemented)
-        conflicts = []
-        # TODO: Implement cross-service conflict detection
-        # This would check against other services' configurations
+        # Cross-service conflict detection
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         validation_response = ValidationResponse(
             validation_passed=success and len(validation_errors) == 0,
@@ -3076,3 +3078,129 @@ async def validate_config(request: ConfigValidationRequest):
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
+
+# Service URLs for cross-service conflict detection
+SERVICE_URLS = {
+    "tradeengine": os.getenv("TRADEENGINE_URL", "http://petrosa-tradeengine:8080"),
+    "data-manager": os.getenv("DATA_MANAGER_URL", "http://petrosa-data-manager:8080"),
+    "ta-bot": os.getenv("TA_BOT_URL", "http://petrosa-ta-bot:8080"),
+}
+
+
+async def detect_cross_service_conflicts(
+    parameters: dict[str, Any],
+    strategy_id: Optional[str] = None,
+    symbol: Optional[str] = None,
+) -> list[CrossServiceConflict]:
+    """
+    Detect cross-service configuration conflicts.
+
+    Queries other services' /api/v1/config/validate endpoints to check for
+    conflicting configurations.
+
+    Args:
+        parameters: Configuration parameters to check
+        strategy_id: Strategy identifier
+        symbol: Trading symbol (optional)
+
+    Returns:
+        List of CrossServiceConflict objects
+    """
+    conflicts = []
+    timeout = httpx.Timeout(5.0)  # Short timeout for conflict checks
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        # Check ta-bot for strategy config conflicts (same strategy)
+        if strategy_id:
+            try:
+                validation_request = {
+                    "parameters": parameters,
+                    "strategy_id": strategy_id,
+                }
+                if symbol:
+                    validation_request["symbol"] = symbol
+
+                response = await client.post(
+                    f"{SERVICE_URLS['ta-bot']}/api/v1/config/validate",
+                    json=validation_request,
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and data.get("data"):
+                        validation_data = data["data"]
+                        # Check if the service reports conflicts or validation issues
+                        if not validation_data.get("validation_passed", True):
+                            errors = validation_data.get("errors", [])
+                            if errors:
+                                conflicts.append(
+                                    CrossServiceConflict(
+                                        service="ta-bot",
+                                        conflict_type="VALIDATION_CONFLICT",
+                                        description=(
+                                            f"ta-bot reports validation errors for "
+                                            f"strategy {strategy_id}: "
+                                            f"{', '.join([e.get('message', '') for e in errors[:2]])}"
+                                        ),
+                                        resolution=(
+                                            "Review ta-bot validation errors and "
+                                            "ensure parameter compatibility"
+                                        ),
+                                    )
+                                )
+
+            except httpx.TimeoutException:
+                logger.debug("Timeout checking ta-bot for conflicts")
+            except Exception as e:
+                logger.debug(f"Error checking ta-bot conflicts: {e}")
+
+        # Check tradeengine for trading parameter conflicts
+        if any(
+            param in parameters
+            for param in ["leverage", "stop_loss_pct", "take_profit_pct"]
+        ):
+            try:
+                validation_request = {
+                    "parameters": {
+                        k: v
+                        for k, v in parameters.items()
+                        if k in ["leverage", "stop_loss_pct", "take_profit_pct"]
+                    },
+                }
+                if symbol:
+                    validation_request["symbol"] = symbol
+
+                response = await client.post(
+                    f"{SERVICE_URLS['tradeengine']}/api/v1/config/validate",
+                    json=validation_request,
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and data.get("data"):
+                        validation_data = data["data"]
+                        if not validation_data.get("validation_passed", True):
+                            errors = validation_data.get("errors", [])
+                            if errors:
+                                conflicts.append(
+                                    CrossServiceConflict(
+                                        service="tradeengine",
+                                        conflict_type="VALIDATION_CONFLICT",
+                                        description=(
+                                            f"tradeengine reports validation errors for "
+                                            f"trading parameters: "
+                                            f"{', '.join([e.get('message', '') for e in errors[:2]])}"
+                                        ),
+                                        resolution=(
+                                            "Review tradeengine validation errors and "
+                                            "ensure parameter compatibility"
+                                        ),
+                                    )
+                                )
+
+            except httpx.TimeoutException:
+                logger.debug("Timeout checking tradeengine for conflicts")
+            except Exception as e:
+                logger.debug(f"Error checking tradeengine conflicts: {e}")
+
+    return conflicts

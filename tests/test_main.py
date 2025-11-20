@@ -2,8 +2,6 @@
 Basic tests for strategies/main.py startup module.
 """
 
-import pytest
-
 
 class TestMainModule:
     """Test main module functions."""

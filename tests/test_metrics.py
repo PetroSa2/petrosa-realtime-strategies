@@ -35,12 +35,12 @@ class TestRealtimeStrategyMetrics:
         # Verify metric counter exists and is callable
         assert metrics.messages_processed is not None
         assert callable(metrics.messages_processed.add)
-        
+
         # Record message - should not raise exception
         metrics.record_message_processed(
             symbol="BTCUSDT", message_type="depth", strategy="spread_liquidity"
         )
-        
+
         # Verify it was called successfully (counter exists and method is callable)
         assert metrics.messages_processed is not None
 
@@ -51,12 +51,12 @@ class TestRealtimeStrategyMetrics:
         # Verify message_types counter exists and is callable
         assert metrics.message_types is not None
         assert callable(metrics.message_types.add)
-        
+
         # Record different message types - should not raise exception
         metrics.record_message_type("depth")
         metrics.record_message_type("trade")
         metrics.record_message_type("ticker")
-        
+
         # Verify all calls completed successfully
         assert metrics.message_types is not None
 
@@ -67,12 +67,12 @@ class TestRealtimeStrategyMetrics:
         # Verify strategy_latency histogram exists and is callable
         assert metrics.strategy_latency is not None
         assert callable(metrics.strategy_latency.record)
-        
+
         # Record latency - should not raise exception
         metrics.record_strategy_latency(
             strategy="iceberg_detector", latency_ms=15.5, symbol="ETHUSDT"
         )
-        
+
         # Verify it was called successfully
         assert metrics.strategy_latency is not None
 
@@ -83,12 +83,12 @@ class TestRealtimeStrategyMetrics:
         # Verify strategy_executions counter exists and is callable
         assert metrics.strategy_executions is not None
         assert callable(metrics.strategy_executions.add)
-        
+
         # Test different execution results - should not raise exceptions
         metrics.record_strategy_execution("btc_dominance", "success", "BTCUSDT")
         metrics.record_strategy_execution("btc_dominance", "failure", "BTCUSDT")
         metrics.record_strategy_execution("btc_dominance", "no_signal", "BTCUSDT")
-        
+
         # Verify all calls completed successfully
         assert metrics.strategy_executions is not None
 
@@ -99,12 +99,12 @@ class TestRealtimeStrategyMetrics:
         # Verify signals_generated counter exists and is callable
         assert metrics.signals_generated is not None
         assert callable(metrics.signals_generated.add)
-        
+
         # Test different signal types and confidence levels - should not raise exceptions
         metrics.record_signal_generated("spread_liquidity", "buy", "BTCUSDT", 0.95)
         metrics.record_signal_generated("spread_liquidity", "sell", "ETHUSDT", 0.75)
         metrics.record_signal_generated("iceberg_detector", "hold", "BNBUSDT", 0.5)
-        
+
         # Verify all calls completed successfully
         assert metrics.signals_generated is not None
 
@@ -115,11 +115,11 @@ class TestRealtimeStrategyMetrics:
         # Verify errors_total counter exists and is callable
         assert metrics.errors_total is not None
         assert callable(metrics.errors_total.add)
-        
+
         # Test with and without strategy - should not raise exceptions
         metrics.record_error("invalid_message")
         metrics.record_error("strategy_execution", strategy="btc_dominance")
-        
+
         # Verify all calls completed successfully
         assert metrics.errors_total is not None
 
@@ -225,7 +225,7 @@ class TestMetricsContext:
 
         # Verify exception was raised
         assert "Test exception" in str(exc_info.value)
-        
+
         # Error should have been recorded in metrics - verify counter still exists
         assert metrics.errors_total is not None
 
@@ -373,7 +373,7 @@ class TestMetricsIntegration:
 
         # Verify signals were recorded
         assert signal_count > 0
-        
+
         # All metrics should be recorded without conflicts - verify they exist
         assert metrics.signals_generated is not None
         assert metrics.strategy_executions is not None
@@ -408,7 +408,7 @@ class TestMetricsIntegration:
 
         # Verify expected number of signals were recorded (100 signals for 1000 messages at 10% rate)
         assert signal_count == 100
-        
+
         # Should handle high volume without errors - verify metrics still exist
         assert metrics.message_types is not None
         assert metrics.messages_processed is not None

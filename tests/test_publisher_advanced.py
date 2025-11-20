@@ -12,7 +12,6 @@ import pytest
 
 from strategies.core.publisher import TradeOrderPublisher
 from strategies.models.orders import (
-    OrderResponse,
     OrderSide,
     OrderType,
     PositionType,
@@ -312,6 +311,7 @@ async def test_publisher_publishing_loop_with_orders(publisher):
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.1)
     except (asyncio.TimeoutError, Exception):
+        # Expected: timeout or exception stops the loop for testing
         pass
     
     # Give time for any pending tasks to complete
@@ -351,6 +351,7 @@ async def test_publisher_publishing_loop_batch_timeout(publisher):
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.5)
     except asyncio.TimeoutError:
+        # Expected: timeout is used to stop the loop for testing
         pass
 
 
@@ -383,6 +384,7 @@ async def test_publisher_publishing_loop_basic(publisher):
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.5)
     except asyncio.TimeoutError:
+        # Expected: timeout is used to stop the loop for testing
         pass
 
 
@@ -414,6 +416,7 @@ async def test_publisher_publishing_loop_exception_handling(publisher):
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.5)
     except (asyncio.TimeoutError, Exception):
+        # Expected: timeout or exception stops the loop for testing
         pass
 
 
