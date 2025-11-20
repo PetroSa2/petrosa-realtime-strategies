@@ -219,13 +219,12 @@ async def test_publisher_logger_initialization(publisher_config):
 @pytest.mark.asyncio
 async def test_publisher_start_exception_handling(publisher):
     """Test start() exception handling - covers lines 86-90."""
-
     # Mock _connect_to_nats to raise exception
     async def mock_connect():
         raise Exception("Connection failed")
-
+    
     publisher._connect_to_nats = mock_connect
-
+    
     with pytest.raises(Exception):
         await publisher.start()
 
@@ -237,7 +236,7 @@ async def test_publisher_stop_exception_handling(publisher):
     publisher.nats_client = AsyncMock()
     publisher.nats_client.is_connected = True
     publisher.nats_client.close = AsyncMock(side_effect=Exception("Close failed"))
-
+    
     # Should handle exception gracefully
     await publisher.stop()
     assert publisher.is_running is False
@@ -249,7 +248,7 @@ async def test_publisher_connect_success_logging(publisher):
     mock_nats = AsyncMock()
     mock_nats.is_connected = True
     mock_nats.connect = AsyncMock()
-
+    
     with patch("strategies.core.publisher.nats.NATS", return_value=mock_nats):
         # Connection success path is exercised (line 147)
         await publisher._connect_to_nats()
@@ -260,7 +259,7 @@ async def test_publisher_connect_success_logging(publisher):
 async def test_publisher_import_fallback():
     """Test import fallback for petrosa_otel - covers lines 19-22."""
     from strategies.core.publisher import inject_trace_context
-
+    
     # When petrosa_otel is not available, fallback returns data as-is
     # When it is available, it might transform the data
     result = inject_trace_context({"test": "data"})
@@ -274,7 +273,7 @@ async def test_publisher_start_success(publisher):
     mock_nats = AsyncMock()
     mock_nats.is_connected = True
     mock_nats.connect = AsyncMock()
-
+    
     with patch("strategies.core.publisher.nats.NATS", return_value=mock_nats):
         await publisher.start()
         assert publisher.is_running is True
@@ -288,10 +287,9 @@ async def test_publisher_publishing_loop_with_orders(publisher):
     publisher.nats_client = AsyncMock()
     publisher.nats_client.is_connected = True
     publisher.nats_client.publish = AsyncMock()
-
+    
     # Add multiple orders to queue
     import uuid
-
     for i in range(3):
         order = TradeOrder(
             order_id=str(uuid.uuid4()),
@@ -306,19 +304,19 @@ async def test_publisher_publishing_loop_with_orders(publisher):
             confidence_score=0.85,
         )
         await publisher.order_queue.put(order)
-
+    
     # Start loop briefly then stop - set shutdown before starting
     publisher.shutdown_event.set()
     publisher.is_running = False  # Stop immediately
-
+    
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.1)
     except (asyncio.TimeoutError, Exception):
         pass
-
+    
     # Give time for any pending tasks to complete
     await asyncio.sleep(0.1)
-
+    
     # Verify orders were processed or loop stopped
     assert publisher.shutdown_event.is_set()
 
@@ -331,10 +329,9 @@ async def test_publisher_publishing_loop_batch_timeout(publisher):
     publisher.nats_client.is_connected = True
     publisher.nats_client.publish = AsyncMock()
     publisher.batch_timeout = 0.1  # Short timeout
-
+    
     # Add one order
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -348,7 +345,7 @@ async def test_publisher_publishing_loop_batch_timeout(publisher):
         confidence_score=0.85,
     )
     await publisher.order_queue.put(order)
-
+    
     # Start loop briefly then stop
     publisher.shutdown_event.set()
     try:
@@ -364,10 +361,9 @@ async def test_publisher_publishing_loop_basic(publisher):
     publisher.nats_client = AsyncMock()
     publisher.nats_client.is_connected = True
     publisher.nats_client.publish = AsyncMock()
-
+    
     # Add an order to queue
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -381,7 +377,7 @@ async def test_publisher_publishing_loop_basic(publisher):
         confidence_score=0.85,
     )
     await publisher.order_queue.put(order)
-
+    
     # Start loop briefly then stop
     publisher.shutdown_event.set()
     try:
@@ -396,10 +392,9 @@ async def test_publisher_publishing_loop_exception_handling(publisher):
     publisher.is_running = True
     publisher.nats_client = AsyncMock()
     publisher.nats_client.publish = AsyncMock(side_effect=Exception("Publish failed"))
-
+    
     # Add order to trigger batch publish
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -413,7 +408,7 @@ async def test_publisher_publishing_loop_exception_handling(publisher):
         confidence_score=0.85,
     )
     await publisher.order_queue.put(order)
-
+    
     # Start loop briefly
     publisher.shutdown_event.set()
     try:
@@ -427,9 +422,8 @@ async def test_publish_orders_batch_exception_handling(publisher, mock_nats_clie
     """Test _publish_orders_batch exception handling - covers lines 240-246."""
     publisher.nats_client = mock_nats_client
     publisher.nats_client.publish = AsyncMock(side_effect=Exception("Publish error"))
-
+    
     import uuid
-
     orders = [
         TradeOrder(
             order_id=str(uuid.uuid4()),
@@ -444,7 +438,7 @@ async def test_publish_orders_batch_exception_handling(publisher, mock_nats_clie
             confidence_score=0.85,
         )
     ]
-
+    
     # Should handle exception and increment error_count
     initial_errors = publisher.error_count
     await publisher._publish_orders_batch(orders)
@@ -456,9 +450,8 @@ async def test_publish_order_success(publisher, mock_nats_client):
     """Test publish_order success path - covers lines 250-280."""
     publisher.nats_client = mock_nats_client
     publisher.is_running = True
-
+    
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -471,7 +464,7 @@ async def test_publish_order_success(publisher, mock_nats_client):
         signal_id="test-12345",
         confidence_score=0.85,
     )
-
+    
     response = await publisher.publish_order(order)
     assert response.status == "submitted"
 
@@ -481,9 +474,8 @@ async def test_publish_order_exception_handling(publisher):
     """Test publish_order exception handling - covers lines 282-299."""
     publisher.order_queue = AsyncMock()
     publisher.order_queue.put = AsyncMock(side_effect=Exception("Queue full"))
-
+    
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -496,7 +488,7 @@ async def test_publish_order_exception_handling(publisher):
         signal_id="test-12345",
         confidence_score=0.85,
     )
-
+    
     response = await publisher.publish_order(order)
     assert response.status == "error"
     assert publisher.error_count > 0
@@ -508,9 +500,8 @@ async def test_publish_order_sync_success(publisher, mock_nats_client):
     publisher.nats_client = mock_nats_client
     publisher.nats_client.publish = AsyncMock()  # Ensure it's AsyncMock
     publisher.is_running = True
-
+    
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -523,7 +514,7 @@ async def test_publish_order_sync_success(publisher, mock_nats_client):
         signal_id="test-12345",
         confidence_score=0.85,
     )
-
+    
     response = await publisher.publish_order_sync(order)
     assert response.status == "published"
     assert publisher.order_count == 1
@@ -534,9 +525,8 @@ async def test_publish_order_sync_exception_handling(publisher, mock_nats_client
     """Test publish_order_sync exception handling - covers lines 349-365."""
     publisher.nats_client = mock_nats_client
     publisher.nats_client.publish = AsyncMock(side_effect=Exception("Publish failed"))
-
+    
     import uuid
-
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -549,7 +539,7 @@ async def test_publish_order_sync_exception_handling(publisher, mock_nats_client
         signal_id="test-12345",
         confidence_score=0.85,
     )
-
+    
     response = await publisher.publish_order_sync(order)
     assert response.status == "error"
     assert publisher.error_count > 0
@@ -560,7 +550,7 @@ async def test_update_publishing_metrics_cleanup(publisher):
     """Test _update_publishing_metrics cleanup - covers line 432."""
     # Add more than 1000 publishing times
     publisher.publishing_times = [0.1] * 1500
-
+    
     # Update metrics - should trim to last 1000
     publisher._update_publishing_metrics(0.2)
     assert len(publisher.publishing_times) <= 1000
@@ -573,7 +563,7 @@ async def test_get_health_status(publisher):
     publisher.nats_client = AsyncMock()
     publisher.nats_client.is_connected = True
     publisher.error_count = 5
-
+    
     status = publisher.get_health_status()
     assert "healthy" in status
     assert "is_running" in status
@@ -586,7 +576,7 @@ async def test_get_health_status_unhealthy(publisher):
     """Test get_health_status when unhealthy."""
     publisher.is_running = False
     publisher.error_count = 150  # > 100
-
+    
     status = publisher.get_health_status()
     assert status["healthy"] is False
 
@@ -596,7 +586,6 @@ async def test_get_queue_status(publisher):
     """Test get_queue_status method - covers line 481."""
     # Add some orders to queue
     import uuid
-
     for i in range(5):
         order = TradeOrder(
             order_id=str(uuid.uuid4()),
@@ -611,7 +600,7 @@ async def test_get_queue_status(publisher):
             confidence_score=0.85,
         )
         await publisher.order_queue.put(order)
-
+    
     status = await publisher.get_queue_status()
     assert "queue_size" in status
     assert "queue_maxsize" in status

@@ -373,10 +373,9 @@ class TestSpreadLiquidityStrategy:
         )
 
         # Event should be tracked
-        assert (
-            "WIDESPREAD" in strategy.wide_spread_events
-            or len(strategy.wide_spread_events) >= 0
-        )
+        assert "WIDESPREAD" in strategy.wide_spread_events or len(
+            strategy.wide_spread_events
+        ) >= 0
 
     def test_strategy_state_tracking(self, strategy):
         """Test strategy tracks internal state."""
@@ -390,18 +389,14 @@ class TestSpreadLiquidityStrategy:
         """Test exception handling in _calculate_metrics - covers lines 204-206."""
         # Test through analyze method with empty orderbook
         # This will trigger exception handling in _calculate_metrics
-        result = strategy.analyze(
-            "BTCUSDT", bids=[], asks=[], timestamp=datetime.utcnow()
-        )
+        result = strategy.analyze("BTCUSDT", bids=[], asks=[], timestamp=datetime.utcnow())
         # Should handle gracefully (return None on exception, line 206)
         assert result is None
 
-    def test_spread_narrowing_event_detection(
-        self, strategy, normal_orderbook, wide_orderbook
-    ):
+    def test_spread_narrowing_event_detection(self, strategy, normal_orderbook, wide_orderbook):
         """Test spread narrowing event detection - covers lines 279-301."""
         base_time = datetime.utcnow()
-
+        
         # First create a wide spread event
         for i in range(10):
             strategy.analyze(
@@ -410,16 +405,16 @@ class TestSpreadLiquidityStrategy:
                 asks=wide_orderbook["asks"],
                 timestamp=base_time + timedelta(seconds=i * 2),
             )
-
+        
         # Wait to ensure persistence > threshold
         time.sleep(0.1)
-
+        
         # Now narrow the spread (liquidity returning)
         narrow_orderbook = {
             "bids": [(50000.0, 1.0), (49999.0, 1.5)],
             "asks": [(50001.0, 1.0), (50002.0, 1.5)],  # Tight spread
         }
-
+        
         # This should trigger narrowing event (lines 279-301)
         signal = strategy.analyze(
             symbol="BTCUSDT",
@@ -427,21 +422,16 @@ class TestSpreadLiquidityStrategy:
             asks=narrow_orderbook["asks"],
             timestamp=base_time + timedelta(seconds=35),  # After persistence threshold
         )
-
+        
         # May generate signal if conditions are met
         if signal:
             assert signal.signal_type.value in ["BUY", "SELL", "HOLD"]
 
     def test_confidence_mapping_low(self, strategy):
         """Test confidence mapping for LOW confidence - covers lines 391-394."""
+        from strategies.models.spread_metrics import SpreadEvent, SpreadSnapshot, SpreadMetrics
         from datetime import datetime
-
-        from strategies.models.spread_metrics import (
-            SpreadEvent,
-            SpreadMetrics,
-            SpreadSnapshot,
-        )
-
+        
         # Create event with low confidence (< 0.6)
         metrics = SpreadMetrics(
             symbol="BTCUSDT",
@@ -480,15 +470,13 @@ class TestSpreadLiquidityStrategy:
             reasoning="Test",
             snapshot=snapshot,
         )
-
+        
         # Generate signal - should map to LOW confidence (lines 391-394)
         signal = strategy._generate_signal(event, snapshot)
         if signal:
             assert signal.confidence.value == "LOW"
 
-    def test_signal_generation_widening_event(
-        self, strategy, normal_orderbook, wide_orderbook
-    ):
+    def test_signal_generation_widening_event(self, strategy, normal_orderbook, wide_orderbook):
         """Test signal generation for widening event - covers lines 379-380, 400-401."""
         # Build history with normal spreads
         base_time = datetime.utcnow()
@@ -510,20 +498,14 @@ class TestSpreadLiquidityStrategy:
 
         # May or may not generate signal depending on thresholds
         if signal:
-            from strategies.models.signals import SignalAction, SignalType
-
+            from strategies.models.signals import SignalType, SignalAction
             assert signal.signal_type == SignalType.SELL
             assert signal.signal_action == SignalAction.OPEN_SHORT
 
     def test_signal_generation_unknown_event_type(self, strategy):
         """Test signal generation with unknown event type - covers line 385."""
+        from strategies.models.spread_metrics import SpreadEvent, SpreadSnapshot, SpreadMetrics
         from datetime import datetime
-
-        from strategies.models.spread_metrics import (
-            SpreadEvent,
-            SpreadMetrics,
-            SpreadSnapshot,
-        )
 
         # Create event with unknown type
         metrics = SpreadMetrics(
@@ -568,12 +550,10 @@ class TestSpreadLiquidityStrategy:
         signal = strategy._generate_signal(event, snapshot)
         assert signal is None
 
-    def test_signal_rate_limiting_edge_case(
-        self, strategy, normal_orderbook, wide_orderbook
-    ):
+    def test_signal_rate_limiting_edge_case(self, strategy, normal_orderbook, wide_orderbook):
         """Test signal rate limiting edge cases - covers lines 366-373."""
         base_time = datetime.utcnow()
-
+        
         # Build history
         for i in range(25):
             strategy.analyze(
@@ -604,13 +584,8 @@ class TestSpreadLiquidityStrategy:
 
     def test_confidence_mapping_edge_cases(self, strategy):
         """Test confidence level mapping - covers lines 391-394."""
+        from strategies.models.spread_metrics import SpreadEvent, SpreadSnapshot, SpreadMetrics
         from datetime import datetime
-
-        from strategies.models.spread_metrics import (
-            SpreadEvent,
-            SpreadMetrics,
-            SpreadSnapshot,
-        )
 
         # Test HIGH confidence (>= 0.8)
         metrics_high = SpreadMetrics(
@@ -691,13 +666,10 @@ class TestSpreadLiquidityStrategy:
         # Verify confidence levels are set correctly
         if signal_high:
             from strategies.models.signals import SignalConfidence
-
             assert signal_high.confidence == SignalConfidence.HIGH
         if signal_medium:
             from strategies.models.signals import SignalConfidence
-
             assert signal_medium.confidence == SignalConfidence.MEDIUM
         if signal_low:
             from strategies.models.signals import SignalConfidence
-
             assert signal_low.confidence == SignalConfidence.LOW

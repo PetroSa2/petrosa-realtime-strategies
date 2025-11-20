@@ -375,9 +375,7 @@ class TestDepthAnalyzer:
         # Try to get history for symbol that was never analyzed
         history = analyzer.get_pressure_history("UNKNOWNUSDT", "1m")
 
-        assert (
-            history is None
-        )  # Line 272: return None when symbol not in _pressure_history
+        assert history is None  # Line 272: return None when symbol not in _pressure_history
 
     def test_get_pressure_history_empty_data(self):
         """Test get_pressure_history when pressure_data is empty - covers line 282."""

@@ -874,3 +874,5 @@ class TestOrderMetrics:
         assert distribution["strategy_test_strategy"] == 1.0
         assert "symbol_BTCUSDT" in distribution
         assert distribution["symbol_BTCUSDT"] == 1.0
+
+

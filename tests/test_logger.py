@@ -68,3 +68,4 @@ class TestLogger:
         )
 
         assert logger_with_context is not None
+
