@@ -3123,7 +3123,6 @@ async def detect_cross_service_conflicts(
                 response = await client.post(
                     f"{SERVICE_URLS['ta-bot']}/api/v1/config/validate",
                     json=validation_request,
-                    timeout=5.0,
                 )
 
                 if response.status_code == 200:
@@ -3174,7 +3173,6 @@ async def detect_cross_service_conflicts(
                 response = await client.post(
                     f"{SERVICE_URLS['tradeengine']}/api/v1/config/validate",
                     json=validation_request,
-                    timeout=5.0,
                 )
 
                 if response.status_code == 200:
