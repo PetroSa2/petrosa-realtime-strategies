@@ -14,9 +14,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from strategies.models.orderbook_tracker import (
-    IcebergPattern,
     LevelHistory,
-    LevelSnapshot,
     OrderBookTracker,
 )
 

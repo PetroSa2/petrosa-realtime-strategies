@@ -12,19 +12,13 @@ Covers:
 import asyncio
 import json
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from strategies.core.consumer import NATSConsumer
 from strategies.core.publisher import TradeOrderPublisher
-from strategies.models.market_data import (
-    DepthLevel,
-    DepthUpdate,
-    MarketDataMessage,
-    TickerData,
-    TradeData,
-)
+from strategies.models.market_data import MarketDataMessage
 
 
 @pytest.fixture
@@ -271,6 +265,7 @@ async def test_consumer_processing_loop_basic(consumer):
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
     except asyncio.TimeoutError:
+        # Expected: timeout is used to stop the loop for testing
         pass
 
 
@@ -286,6 +281,7 @@ async def test_consumer_processing_loop_exception(consumer):
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
     except (asyncio.TimeoutError, Exception):
+        # Expected: timeout or exception stops the loop for testing
         pass
 
 
@@ -399,6 +395,7 @@ async def test_consumer_processing_loop_with_messages(consumer):
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
     except asyncio.TimeoutError:
+        # Expected: timeout is used to stop the loop for testing
         pass
 
 
@@ -414,6 +411,7 @@ async def test_consumer_processing_loop_timeout(consumer):
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
     except asyncio.TimeoutError:
+        # Expected: timeout is used to stop the loop for testing
         pass
 
 

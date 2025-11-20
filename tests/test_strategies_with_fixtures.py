@@ -7,14 +7,9 @@ from tests.fixtures.market_data_realistic import (
     BTCUSDT_DEPTH_SNAPSHOT,
     BTCUSDT_ICEBERG_TRADES,
     BTCUSDT_WIDENING_SPREAD,
-    BTC_DOMINANCE_SCENARIO,
-    CROSS_EXCHANGE_ARBITRAGE,
-    generate_depth_updates,
-    generate_realistic_klines,
 )
 from strategies.market_logic.spread_liquidity import SpreadLiquidityStrategy
 from strategies.market_logic.iceberg_detector import IcebergDetectorStrategy
-from strategies.models.market_data import DepthLevel, DepthUpdate, TradeData
 
 
 class TestSpreadLiquidityWithFixtures:

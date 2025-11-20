@@ -7,19 +7,13 @@ Covers remaining uncovered lines in consumer.py.
 import asyncio
 import json
 from datetime import datetime
-from unittest.mock import AsyncMock, Mock, patch, PropertyMock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from strategies.core.consumer import NATSConsumer
 from strategies.core.publisher import TradeOrderPublisher
-from strategies.models.market_data import (
-    DepthLevel,
-    DepthUpdate,
-    MarketDataMessage,
-    TickerData,
-    TradeData,
-)
+from strategies.models.market_data import MarketDataMessage
 
 
 @pytest.fixture

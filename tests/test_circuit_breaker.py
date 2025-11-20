@@ -160,6 +160,7 @@ class TestCircuitBreakerBasics:
         try:
             test_func(should_fail=True)
         except ValueError:
+            # Expected: test_func raises ValueError when should_fail=True
             pass
 
         assert cb.total_requests == 3
@@ -499,6 +500,7 @@ class TestCircuitBreakerStateTransitions:
         try:
             test_func(should_fail=True)
         except ValueError:
+            # Expected: test_func raises ValueError when should_fail=True
             pass
 
         metrics = cb.get_metrics()
