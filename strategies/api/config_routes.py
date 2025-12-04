@@ -3204,3 +3204,84 @@ async def detect_cross_service_conflicts(
                 logger.debug(f"Error checking tradeengine conflicts: {e}")
 
     return conflicts
+
+
+# ============================================================================
+# Configuration Rollback Endpoints
+# ============================================================================
+
+
+@router.post(
+    "/strategies/{strategy_id}/rollback",
+    response_model=APIResponse[StrategyConfigResponse],
+    summary="Rollback strategy configuration",
+    description="""
+    **For LLM Agents**: Quickly revert configuration changes.
+    
+    Use when config changes cause issues.
+    """,
+)
+async def rollback_strategy_config(
+    strategy_id: str = Path(...),
+    version: str = Query("previous", description="'previous' or version number"),
+    symbol: str | None = Query(None),
+    reason: str = Query(..., description="Reason for rollback"),
+    changed_by: str = Query("llm-agent"),
+):
+    """Rollback strategy configuration to previous version."""
+    try:
+        manager = get_config_manager()
+
+        success, restored_config, errors = await manager.rollback_config(
+            version_spec=version,
+            strategy_id=strategy_id,
+            symbol=symbol,
+            reason=reason,
+            changed_by=changed_by,
+        )
+
+        if not success:
+            return APIResponse(
+                success=False,
+                error={"code": "ROLLBACK_FAILED", "message": ", ".join(errors)},
+            )
+
+        return APIResponse(
+            success=True,
+            data=StrategyConfigResponse(
+                strategy_id=strategy_id,
+                symbol=symbol,
+                parameters=restored_config["parameters"] if restored_config else {},
+                metadata={"action": "rollback", "target_version": version},
+            ),
+        )
+
+    except Exception as e:
+        logger.error(f"Rollback error: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
+
+
+@router.get(
+    "/strategies/{strategy_id}/history",
+    response_model=APIResponse[list[dict[str, Any]]],
+    summary="Get configuration history",
+)
+async def get_strategy_config_history(
+    strategy_id: str = Path(...),
+    symbol: str | None = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """Get strategy configuration version history."""
+    try:
+        manager = get_config_manager()
+        history = await manager.get_config_history(strategy_id, symbol, limit)
+
+        return APIResponse(success=True, data=history)
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )

@@ -585,3 +585,111 @@ class StrategyConfigManager:
         """Force immediate cache invalidation."""
         self._cache.clear()
         logger.info("Configuration cache cleared")
+
+    async def get_config_history(
+        self, strategy_id: str, symbol: Optional[str] = None, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """
+        Get configuration version history.
+
+        Args:
+            strategy_id: Strategy identifier
+            symbol: Optional symbol filter
+            limit: Number of historical versions to return
+
+        Returns:
+            List of previous configurations with metadata
+        """
+        try:
+            audit_records = await self.get_audit_trail(strategy_id, symbol, limit)
+
+            history = []
+            for record in audit_records:
+                if record.new_parameters:
+                    history.append({
+                        "id": record.id,
+                        "strategy_id": strategy_id,
+                        "symbol": symbol,
+                        "parameters": record.new_parameters,
+                        "changed_by": record.changed_by,
+                        "changed_at": record.changed_at,
+                        "reason": record.reason or "",
+                    })
+
+            return history
+
+        except Exception as e:
+            logger.error(f"Failed to get config history: {e}")
+            return []
+
+    async def get_previous_config(
+        self, strategy_id: str, symbol: Optional[str] = None
+    ) -> dict[str, Any] | None:
+        """Get the immediately previous configuration."""
+        try:
+            history = await self.get_config_history(strategy_id, symbol, limit=2)
+            if len(history) >= 2:
+                return history[1]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get previous config: {e}")
+            return None
+
+    async def get_config_by_id(self, config_id: str) -> dict[str, Any] | None:
+        """Get configuration by audit ID."""
+        try:
+            # Get audit trail and find by ID
+            audit_records = await self.get_audit_trail("", None, limit=100)
+            for record in audit_records:
+                if record.id == config_id and record.new_parameters:
+                    return {
+                        "id": record.id,
+                        "strategy_id": record.strategy_id,
+                        "symbol": record.symbol,
+                        "parameters": record.new_parameters,
+                        "changed_by": record.changed_by,
+                        "changed_at": record.changed_at,
+                        "reason": record.reason or "",
+                    }
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get config by ID: {e}")
+            return None
+
+    async def rollback_config(
+        self,
+        version_spec: str,
+        strategy_id: str,
+        symbol: Optional[str],
+        reason: str,
+        changed_by: str,
+    ) -> tuple[bool, dict[str, Any] | None, list[str]]:
+        """Rollback configuration to a previous version."""
+        try:
+            if version_spec == "previous":
+                target_config = await self.get_previous_config(strategy_id, symbol)
+            else:
+                return False, None, ["Version-based rollback not yet implemented for strategies"]
+
+            if not target_config:
+                return False, None, [f"Previous configuration not found"]
+
+            # Restore configuration
+            rollback_reason = f"ROLLBACK: {reason}"
+            success, _, errors = await self.set_config(
+                strategy_id=strategy_id,
+                parameters=target_config["parameters"],
+                changed_by=changed_by,
+                symbol=symbol,
+                reason=rollback_reason,
+            )
+
+            if success:
+                logger.info(f"Successfully rolled back {strategy_id} config")
+                return success, target_config, []
+
+            return success, None, errors
+
+        except Exception as e:
+            logger.error(f"Rollback failed: {e}")
+            return False, None, [str(e)]
