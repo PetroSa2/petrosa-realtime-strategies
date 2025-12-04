@@ -1,406 +1,441 @@
 """
-Market Metrics API Routes.
+Performance Metrics API for TA Bot.
 
-Provides endpoints for real-time market depth analytics including:
-- Current order book metrics
-- Market pressure indicators
-- Historical pressure trends
-- Overall market summary
+Provides agent-friendly REST endpoints to query performance metrics,
+success rates, latency trends, and resource utilization.
 """
 
 import logging
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, HTTPException, Query
 
-from strategies.services.depth_analyzer import DepthAnalyzer
+from strategies.models.metrics import (
+    ComparisonResponse,
+    MetricChange,
+    PerformanceMetricsData,
+    PerformanceMetricsResponse,
+    SuccessMetrics,
+    SuccessRateResponse,
+    SymbolBreakdown,
+    TrendResponse,
+    ResourceUsageResponse,
+    DataPoint,
+    TrendAnalysis,
+)
+from strategies.services.metrics_aggregator import MetricsAggregator
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/metrics", tags=["market-metrics"])
+router = APIRouter(prefix="/api/v1/metrics", tags=["metrics"])
 
-# Global depth analyzer instance (injected on startup)
-_depth_analyzer: Optional[DepthAnalyzer] = None
+# Global metrics aggregator instance
+_metrics_aggregator: Optional[MetricsAggregator] = None
+_depth_analyzer: Optional[Any] = None
 
 
-def set_depth_analyzer(analyzer: DepthAnalyzer) -> None:
-    """Set the global depth analyzer instance."""
+def get_metrics_aggregator() -> MetricsAggregator:
+    """Get or create metrics aggregator instance"""
+    global _metrics_aggregator
+    if _metrics_aggregator is None:
+        _metrics_aggregator = MetricsAggregator()
+    return _metrics_aggregator
+
+
+def set_depth_analyzer(depth_analyzer: Any) -> None:
+    """
+    Set depth analyzer instance (compatibility function).
+    
+    This function exists for compatibility with existing health server setup.
+    The performance metrics API doesn't currently use the depth analyzer.
+    """
     global _depth_analyzer
-    _depth_analyzer = analyzer
+    _depth_analyzer = depth_analyzer
+    logger.info("Depth analyzer set for metrics routes")
 
 
-def get_depth_analyzer() -> DepthAnalyzer:
-    """Get the global depth analyzer instance."""
-    if _depth_analyzer is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Depth analyzer not initialized",
+@router.get(
+    "/performance",
+    response_model=PerformanceMetricsResponse,
+    summary="Get performance metrics",
+    description="""
+    **For LLM Agents**: Query performance metrics to evaluate configuration changes.
+    
+    Returns latency, throughput, error rates with time windows.
+    Use this after configuration changes to measure impact.
+    
+    **Example**: `GET /api/v1/metrics/performance?timeframe=1h&metric=latency`
+    
+    **Time Windows**:
+    - `1m` - 1 minute
+    - `5m` - 5 minutes
+    - `1h` - 1 hour
+    - `24h` - 24 hours
+    - `7d` - 7 days
+    - `30d` - 30 days
+    
+    **Metrics**:
+    - `latency` - Response time percentiles (p50, p95, p99)
+    - `throughput` - Requests per second
+    - `errors` - Error rates and types
+    - `cpu` - CPU usage
+    - `memory` - Memory usage
+    """,
+)
+async def get_performance_metrics(
+    timeframe: str = Query(
+        "1h",
+        description="Time window: 1m, 5m, 1h, 24h, 7d, 30d",
+        regex="^[0-9]+(m|h|d)$",
+    ),
+    metric: Optional[str] = Query(
+        None,
+        description="Specific metric: latency, throughput, errors, cpu, memory",
+    ),
+    strategy_id: Optional[str] = Query(None, description="Filter by strategy ID"),
+    symbol: Optional[str] = Query(None, description="Filter by trading symbol"),
+) -> PerformanceMetricsResponse:
+    """
+    Get performance metrics aggregated over time window.
+    
+    Returns comprehensive performance data including latency percentiles,
+    throughput, error rates, and resource usage.
+    """
+    try:
+        aggregator = get_metrics_aggregator()
+        
+        # Parse timeframe and calculate start time
+        window_seconds = aggregator.parse_timeframe(timeframe)
+        from datetime import timedelta
+        start_time = datetime.utcnow() - timedelta(seconds=window_seconds)
+        
+        # Get metrics
+        metrics_dict = await aggregator.get_metrics(
+            start_time=start_time,
+            metric_filter=metric,
+            strategy_id=strategy_id,
+            symbol=symbol,
         )
-    return _depth_analyzer
-
-
-@router.get(
-    "/depth/{symbol}",
-    summary="Get current depth metrics for symbol",
-    description="""
-    **For LLM Agents**: Get real-time order book depth metrics for a specific symbol.
-
-    Returns comprehensive metrics including:
-    - Order book imbalance (bid vs ask volume)
-    - Market pressure (buy pressure vs sell pressure)
-    - Liquidity depth at different levels
-    - Bid-ask spread metrics
-    - Volume-weighted prices
-    - Strongest support/resistance levels
-
-    **Example Request**: `GET /api/v1/metrics/depth/BTCUSDT`
-
-    **Use Cases**:
-    - Monitor market sentiment for a symbol
-    - Detect order book imbalances
-    - Identify liquidity conditions
-    - Track bid-ask spread changes
-    """,
-)
-async def get_depth_metrics(
-    symbol: str = Path(..., description="Trading symbol (e.g., BTCUSDT)"),
-):
-    """Get current depth metrics for a symbol."""
-    try:
-        analyzer = get_depth_analyzer()
-        metrics = analyzer.get_current_metrics(symbol.upper())
-
-        if metrics is None:
-            return {
-                "error": f"No metrics available for {symbol}",
-                "message": "Symbol may not be actively tracked or data is stale",
-                "suggestion": "Check GET /api/v1/metrics/all to see tracked symbols",
-            }
-
-        return {
-            "symbol": metrics.symbol,
-            "timestamp": metrics.timestamp.isoformat(),
-            "imbalance": {
-                "ratio": round(metrics.imbalance_ratio, 4),
-                "percent": round(metrics.imbalance_percent, 2),
-                "bid_volume": round(metrics.bid_volume, 4),
-                "ask_volume": round(metrics.ask_volume, 4),
+        
+        # Build response
+        metrics_data = PerformanceMetricsData(
+            latency=metrics_dict.get("latency"),
+            throughput=metrics_dict.get("throughput"),
+            errors=metrics_dict.get("errors"),
+            resource_usage=metrics_dict.get("resource_usage"),
+        )
+        
+        # Calculate sample count (mock for now)
+        sample_count = int(window_seconds / 10)  # Assuming 10-second samples
+        
+        return PerformanceMetricsResponse(
+            success=True,
+            timeframe=timeframe,
+            metrics=metrics_data,
+            sample_count=sample_count,
+            collection_timestamp=datetime.utcnow(),
+            metadata={
+                "window_seconds": window_seconds,
+                "strategy_id": strategy_id,
+                "symbol": symbol,
             },
-            "pressure": {
-                "buy_pressure": round(metrics.buy_pressure, 2),
-                "sell_pressure": round(metrics.sell_pressure, 2),
-                "net_pressure": round(metrics.net_pressure, 2),
-                "interpretation": (
-                    "bullish"
-                    if metrics.net_pressure > 20
-                    else "bearish"
-                    if metrics.net_pressure < -20
-                    else "neutral"
-                ),
-            },
-            "liquidity": {
-                "total": round(metrics.total_liquidity, 4),
-                "bid_depth_5": round(metrics.bid_depth_5, 4),
-                "ask_depth_5": round(metrics.ask_depth_5, 4),
-                "bid_depth_10": round(metrics.bid_depth_10, 4),
-                "ask_depth_10": round(metrics.ask_depth_10, 4),
-            },
-            "spread": {
-                "best_bid": metrics.best_bid,
-                "best_ask": metrics.best_ask,
-                "spread_abs": round(metrics.spread_abs, 2),
-                "spread_bps": round(metrics.spread_bps, 2),
-                "mid_price": metrics.mid_price,
-            },
-            "vwap": {
-                "bid": round(metrics.vwap_bid, 2),
-                "ask": round(metrics.vwap_ask, 2),
-                "spread": round(abs(metrics.vwap_bid - metrics.vwap_ask), 2),
-            },
-            "order_book_quality": {
-                "bid_levels": metrics.bid_levels,
-                "ask_levels": metrics.ask_levels,
-                "total_levels": metrics.total_levels,
-            },
-            "strongest_levels": {
-                "bid": (
-                    {
-                        "price": metrics.strongest_bid_level[0],
-                        "volume": round(metrics.strongest_bid_level[1], 4),
-                    }
-                    if metrics.strongest_bid_level
-                    else None
-                ),
-                "ask": (
-                    {
-                        "price": metrics.strongest_ask_level[0],
-                        "volume": round(metrics.strongest_ask_level[1], 4),
-                    }
-                    if metrics.strongest_ask_level
-                    else None
-                ),
-            },
-        }
-
-    except HTTPException:
-        raise
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error getting depth metrics for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching performance metrics: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch performance metrics"
+        )
 
 
 @router.get(
-    "/pressure/{symbol}",
-    summary="Get market pressure history",
+    "/success-rates",
+    response_model=SuccessRateResponse,
+    summary="Get success rates by strategy",
     description="""
-    **For LLM Agents**: Get historical market pressure data for trend analysis.
-
-    Returns pressure history over different timeframes:
-    - 1m (1 minute): Last 60 data points
-    - 5m (5 minutes): Last 300 data points
-    - 15m (15 minutes): Last 900 data points
-
-    Includes:
-    - Pressure history (time series)
-    - Imbalance history (time series)
-    - Statistical summary (avg, max, min)
-    - Trend analysis (bullish/bearish/neutral)
-    - Trend strength indicator
-
-    **Example Request**: `GET /api/v1/metrics/pressure/BTCUSDT?timeframe=5m`
-
-    **Use Cases**:
-    - Identify pressure trends
-    - Detect sustained buying/selling
-    - Confirm momentum signals
-    - Track market sentiment changes
+    **For LLM Agents**: Measure how often strategies succeed.
+    
+    Returns win rate, signal quality, execution success for strategies.
+    Use this to evaluate strategy effectiveness and identify underperforming strategies.
+    
+    **Example**: `GET /api/v1/metrics/success-rates?strategy_id=rsi_extreme_reversal&window=24h`
     """,
 )
-async def get_pressure_history(
-    symbol: str = Path(..., description="Trading symbol"),
-    timeframe: str = Query("5m", description="Timeframe: 1m, 5m, or 15m"),
-):
-    """Get market pressure history for a symbol."""
+async def get_success_rates(
+    strategy_id: Optional[str] = Query(None, description="Filter by strategy ID"),
+    window: str = Query(
+        "24h",
+        description="Time window: 1h, 24h, 7d",
+        regex="^[0-9]+(m|h|d)$",
+    ),
+    symbol: Optional[str] = Query(None, description="Filter by trading symbol"),
+) -> SuccessRateResponse:
+    """
+    Get success rate metrics for strategies.
+    
+    Returns execution rates, win rates, and profitability metrics.
+    """
     try:
-        if timeframe not in ["1m", "5m", "15m"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid timeframe. Must be '1m', '5m', or '15m'",
+        aggregator = get_metrics_aggregator()
+        
+        # Get success rate data
+        success_data = await aggregator.get_success_rates(
+            strategy_id=strategy_id,
+            window=window,
+            symbol=symbol,
+        )
+        
+        # Build response
+        success_metrics = SuccessMetrics(
+            signals_generated=success_data.get("signals_generated", 0),
+            signals_executed=success_data.get("signals_executed", 0),
+            execution_rate=success_data.get("execution_rate", 0.0),
+            winning_trades=success_data.get("winning_trades", 0),
+            losing_trades=success_data.get("losing_trades", 0),
+            win_rate=success_data.get("win_rate", 0.0),
+            avg_profit_per_trade=success_data.get("avg_profit_per_trade", 0.0),
+            total_pnl=success_data.get("total_pnl", 0.0),
+        )
+        
+        # Parse symbol breakdown
+        symbol_breakdown = {}
+        for sym, data in success_data.get("symbol_breakdown", {}).items():
+            symbol_breakdown[sym] = SymbolBreakdown(
+                win_rate=data.get("win_rate", 0.0),
+                trades=data.get("trades", 0),
+                pnl=data.get("pnl", 0.0),
             )
-
-        analyzer = get_depth_analyzer()
-        history = analyzer.get_pressure_history(symbol.upper(), timeframe)
-
-        if history is None:
-            return {
-                "error": f"No pressure history available for {symbol}",
-                "message": "Symbol may not be actively tracked",
-            }
-
-        # Limit history data points in response to last 100
-        pressure_limited = history.pressure_history[-100:]
-        imbalance_limited = history.imbalance_history[-100:]
-
-        return {
-            "symbol": history.symbol,
-            "timeframe": history.timeframe,
-            "summary": {
-                "avg_pressure": round(history.avg_pressure, 2),
-                "max_pressure": round(history.max_pressure, 2),
-                "min_pressure": round(history.min_pressure, 2),
-                "trend": history.trend,
-                "trend_strength": round(history.trend_strength, 2),
-            },
-            "total_data_points": len(history.pressure_history),
-            "returned_data_points": len(pressure_limited),
-            "pressure_history": [
-                {"timestamp": ts.isoformat(), "pressure": round(p, 2)}
-                for ts, p in pressure_limited
-            ],
-            "imbalance_history": [
-                {"timestamp": ts.isoformat(), "imbalance": round(i, 4)}
-                for ts, i in imbalance_limited
-            ],
-        }
-
-    except HTTPException:
-        raise
+        
+        return SuccessRateResponse(
+            success=True,
+            strategy_id=strategy_id,
+            window=window,
+            success_metrics=success_metrics,
+            symbol_breakdown=symbol_breakdown,
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error getting pressure history for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching success rates: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch success rates")
 
 
 @router.get(
-    "/summary",
-    summary="Get overall market summary",
+    "/resource-usage",
+    response_model=ResourceUsageResponse,
+    summary="Get resource utilization metrics",
     description="""
-    **For LLM Agents**: Get aggregated market metrics across all tracked symbols.
-
-    Returns:
-    - Number of symbols tracked
-    - Market sentiment distribution (bullish/bearish/neutral)
-    - Average market pressure
-    - Average order book imbalance
-    - Average spread
-    - Total liquidity
-    - Top symbols by buy/sell pressure
-
-    **Example Request**: `GET /api/v1/metrics/summary`
-
-    **Use Cases**:
-    - Get overall market sentiment
-    - Identify market-wide trends
-    - Compare individual symbols to market average
-    - Monitor overall liquidity conditions
+    **For LLM Agents**: Monitor resource usage to detect configuration issues.
+    
+    High CPU/memory after config change indicates problem.
+    Use this to identify resource-intensive configurations.
+    
+    **Example**: `GET /api/v1/metrics/resource-usage?timeframe=1h`
     """,
 )
-async def get_market_summary():
-    """Get overall market summary."""
+async def get_resource_usage(
+    pod_id: Optional[str] = Query(None, description="Specific pod ID"),
+    timeframe: str = Query(
+        "1h", description="Time window: 1h, 24h, 7d", regex="^[0-9]+(m|h|d)$"
+    ),
+) -> ResourceUsageResponse:
+    """
+    Get resource utilization metrics.
+    
+    Returns CPU, memory usage, pod count, and restart information.
+    """
     try:
-        analyzer = get_depth_analyzer()
-        summary = analyzer.get_market_summary()
-        return summary
-
+        aggregator = get_metrics_aggregator()
+        
+        # Get resource usage data
+        resource_data = await aggregator.get_resource_usage(
+            pod_id=pod_id,
+            timeframe=timeframe,
+        )
+        
+        return ResourceUsageResponse(
+            success=True,
+            pod_id=pod_id,
+            timeframe=timeframe,
+            resources=resource_data,
+            pod_count=resource_data.get("pod_count", 1),
+            pod_restarts=resource_data.get("pod_restarts", 0),
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error getting market summary: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching resource usage: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch resource usage")
 
 
 @router.get(
-    "/all",
-    summary="Get metrics for all symbols",
+    "/trends",
+    response_model=TrendResponse,
+    summary="Get metric trends over time",
     description="""
-    **For LLM Agents**: Get current metrics for all tracked symbols with filtering and pagination.
-
-    Returns metrics for symbols with comprehensive filtering capabilities.
-
-    **Example Request**: `GET /api/v1/metrics/all?symbols=BTCUSDT,ETHUSDT&limit=50`
-
-    **Use Cases**:
-    - Bulk monitoring of specific symbols
-    - Identify outliers with pressure filters
-    - Cross-symbol analysis
-    - Dashboard data feed
+    **For LLM Agents**: Analyze how metrics change over time.
+    
+    Useful for identifying gradual performance degradation or improvement.
+    Returns time-series data with trend analysis.
+    
+    **Example**: `GET /api/v1/metrics/trends?metric=latency_p95&period=7d&interval=1h`
     """,
 )
-async def get_all_metrics(
-    symbols: str | None = Query(
-        None, description="Comma-separated list of symbols to filter"
+async def get_metric_trends(
+    metric: str = Query(
+        ...,
+        description="Metric name: latency_p95, throughput, error_rate, etc.",
     ),
-    min_pressure: float | None = Query(None, description="Minimum net pressure filter"),
-    max_pressure: float | None = Query(None, description="Maximum net pressure filter"),
-    trend: str | None = Query(
-        None, description="Filter by trend (bullish, bearish, neutral)"
+    period: str = Query(
+        "7d", description="Time period: 1d, 7d, 30d", regex="^[0-9]+(d)$"
     ),
-    limit: int = Query(
-        50,
-        ge=1,
-        le=200,
-        description="Maximum number of symbols (default: 50, max: 200)",
+    interval: str = Query(
+        "1h",
+        description="Data point interval: 5m, 1h, 1d",
+        regex="^[0-9]+(m|h|d)$",
     ),
-    offset: int = Query(0, ge=0, description="Pagination offset (default: 0)"),
-    sort_by: str = Query(
-        "symbol", description="Sort by field (symbol, pressure, imbalance, liquidity)"
-    ),
-    sort_order: str = Query("asc", description="Sort order (asc, desc)"),
-):
-    """Get current metrics for all symbols with filtering and pagination."""
+    strategy_id: Optional[str] = Query(None, description="Filter by strategy ID"),
+) -> TrendResponse:
+    """
+    Get metric evolution over time with data points at intervals.
+    
+    Returns time-series data and trend analysis including direction,
+    slope, correlation, and detected anomalies.
+    """
     try:
-        analyzer = get_depth_analyzer()
-        all_metrics = analyzer.get_all_metrics()
-
-        # Convert to list of tuples for easier filtering and sorting
-        metrics_list = []
-        for symbol, metrics in all_metrics.items():
-            trend_classification = (
-                "bullish"
-                if metrics.net_pressure > 20
-                else "bearish"
-                if metrics.net_pressure < -20
-                else "neutral"
+        aggregator = get_metrics_aggregator()
+        
+        # Get trend data
+        trend_data = await aggregator.get_metric_trends(
+            metric=metric,
+            period=period,
+            interval=interval,
+            strategy_id=strategy_id,
+        )
+        
+        # Parse data points
+        data_points = [
+            DataPoint(
+                timestamp=dp["timestamp"],
+                value=dp["value"]
             )
-
-            metrics_list.append(
-                (
-                    symbol,
-                    {
-                        "timestamp": metrics.timestamp.isoformat(),
-                        "net_pressure": round(metrics.net_pressure, 2),
-                        "imbalance_percent": round(metrics.imbalance_percent, 2),
-                        "spread_bps": round(metrics.spread_bps, 2),
-                        "total_liquidity": round(metrics.total_liquidity, 4),
-                        "mid_price": metrics.mid_price,
-                        "trend": trend_classification,
-                    },
-                )
-            )
-
-        # Apply symbol filter
-        if symbols:
-            symbol_list = [s.strip().upper() for s in symbols.split(",")]
-            metrics_list = [(s, m) for s, m in metrics_list if s in symbol_list]
-
-        # Apply pressure filters
-        if min_pressure is not None:
-            metrics_list = [
-                (s, m) for s, m in metrics_list if m["net_pressure"] >= min_pressure
-            ]
-
-        if max_pressure is not None:
-            metrics_list = [
-                (s, m) for s, m in metrics_list if m["net_pressure"] <= max_pressure
-            ]
-
-        # Apply trend filter
-        if trend:
-            trend_lower = trend.lower()
-            metrics_list = [
-                (s, m) for s, m in metrics_list if m["trend"] == trend_lower
-            ]
-
-        total_count = len(metrics_list)
-
-        # Apply sorting
-        reverse = sort_order.lower() == "desc"
-        if sort_by == "symbol":
-            metrics_list.sort(key=lambda x: x[0], reverse=reverse)
-        elif sort_by == "pressure":
-            metrics_list.sort(key=lambda x: x[1]["net_pressure"], reverse=reverse)
-        elif sort_by == "imbalance":
-            metrics_list.sort(key=lambda x: x[1]["imbalance_percent"], reverse=reverse)
-        elif sort_by == "liquidity":
-            metrics_list.sort(key=lambda x: x[1]["total_liquidity"], reverse=reverse)
-
-        # Apply pagination
-        paginated_metrics = metrics_list[offset : offset + limit]
-
-        # Convert back to dict for response
-        result = {symbol: metrics for symbol, metrics in paginated_metrics}
-
-        return {
-            "data": result,
-            "pagination": {
-                "total": total_count,
-                "limit": limit,
-                "offset": offset,
-                "page": (offset // limit) + 1,
-                "pages": (total_count + limit - 1) // limit if limit > 0 else 0,
-                "has_next": offset + limit < total_count,
-                "has_previous": offset > 0,
-            },
-            "filters_applied": {
-                "symbols": symbols,
-                "min_pressure": min_pressure,
-                "max_pressure": max_pressure,
-                "trend": trend,
-            },
-            "sort": {
-                "by": sort_by,
-                "order": sort_order,
-            },
-            "symbols_count": len(result),
-        }
-
+            for dp in trend_data.get("data_points", [])
+        ]
+        
+        # Parse trend analysis
+        analysis = trend_data.get("trend_analysis", {})
+        trend_analysis = TrendAnalysis(
+            direction=analysis.get("direction", "stable"),
+            slope=analysis.get("slope", 0.0),
+            correlation=analysis.get("correlation", 0.0),
+            anomalies=analysis.get("anomalies", []),
+        )
+        
+        return TrendResponse(
+            success=True,
+            metric=metric,
+            period=period,
+            interval=interval,
+            data_points=data_points,
+            trend_analysis=trend_analysis,
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error getting all metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching metric trends: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch metric trends")
+
+
+@router.get(
+    "/comparison",
+    response_model=ComparisonResponse,
+    summary="Compare metrics before and after timestamp",
+    description="""
+    **For LLM Agents**: Compare performance before/after configuration changes.
+    
+    Provide timestamps of config change, get before/after comparison.
+    Use this to measure the impact of configuration changes.
+    
+    **Example**: `GET /api/v1/metrics/comparison?before=2024-10-24T10:00:00Z&after=2024-10-24T11:00:00Z&window=3600`
+    """,
+)
+async def compare_metrics(
+    before: datetime = Query(..., description="Timestamp to compare before"),
+    after: datetime = Query(..., description="Timestamp to compare after"),
+    metric: Optional[str] = Query(None, description="Specific metric to compare"),
+    window: int = Query(
+        3600, description="Time window around timestamps (seconds)", ge=60, le=86400
+    ),
+) -> ComparisonResponse:
+    """
+    Compare metrics before and after a specific timestamp.
+    
+    Returns detailed comparison showing changes, improvement status,
+    and recommendations.
+    """
+    try:
+        # Validate timestamps
+        if after <= before:
+            raise ValueError("'after' timestamp must be later than 'before'")
+        
+        aggregator = get_metrics_aggregator()
+        
+        # Get comparison data
+        comparison_data = await aggregator.compare_metrics(
+            before=before,
+            after=after,
+            metric=metric,
+            window=window,
+        )
+        
+        # Parse comparison results
+        comparison = {}
+        for metric_name, metric_data in comparison_data.get("comparison", {}).items():
+            comparison[metric_name] = MetricChange(
+                before=metric_data["before"],
+                after=metric_data["after"],
+                change_percent=metric_data["change_percent"],
+                improvement=metric_data["improvement"],
+            )
+        
+        return ComparisonResponse(
+            success=True,
+            before_timestamp=before,
+            after_timestamp=after,
+            window_seconds=window,
+            comparison=comparison,
+            overall_assessment=comparison_data.get("overall_assessment", "unknown"),
+            recommendation=comparison_data.get("recommendation", ""),
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error comparing metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to compare metrics")
+
+
+@router.get(
+    "/health",
+    summary="Metrics API health check",
+    description="Verify metrics API is operational",
+)
+async def metrics_health():
+    """Health check for metrics API"""
+    return {
+        "status": "healthy",
+        "service": "ta-bot-metrics-api",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
