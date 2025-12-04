@@ -585,3 +585,110 @@ class StrategyConfigManager:
         """Force immediate cache invalidation."""
         self._cache.clear()
         logger.info("Configuration cache cleared")
+
+    async def get_config_history(
+        self, strategy_id: str, symbol: Optional[str] = None, limit: int = 20
+    ) -> list[StrategyConfigAudit]:
+        """Get configuration version history."""
+        return await self.get_audit_trail(strategy_id=strategy_id, symbol=symbol, limit=limit)
+
+    async def get_previous_config(
+        self, strategy_id: str, symbol: Optional[str] = None
+    ) -> StrategyConfigAudit | None:
+        """Get immediately previous configuration."""
+        history = await self.get_config_history(strategy_id, symbol, limit=2)
+        return history[1] if len(history) >= 2 else None
+
+    async def get_config_by_version(
+        self, strategy_id: str, version_number: int, symbol: Optional[str] = None
+    ) -> StrategyConfigAudit | None:
+        """Get configuration at specific version number."""
+        all_history = await self.get_config_history(strategy_id, symbol, limit=1000)
+        if not all_history:
+            return None
+        chronological = list(reversed(all_history))
+        if 1 <= version_number <= len(chronological):
+            return chronological[version_number - 1]
+        return None
+
+    async def get_config_by_id(self, config_id: str) -> StrategyConfigAudit | None:
+        """Get configuration by audit record ID."""
+        if not self.mongodb_client or not self.mongodb_client.is_connected:
+            return None
+        try:
+            from bson import ObjectId
+
+            record = await self.mongodb_client.database.strategy_config_audit.find_one(
+                {"_id": ObjectId(config_id)}
+            )
+            if not record:
+                return None
+            return StrategyConfigAudit(
+                id=str(record.get("_id")),
+                config_id=record.get("config_id"),
+                strategy_id=record["strategy_id"],
+                symbol=record.get("symbol"),
+                action=record["action"],
+                old_parameters=record.get("old_parameters"),
+                new_parameters=record.get("new_parameters"),
+                changed_by=record["changed_by"],
+                changed_at=record["changed_at"],
+                reason=record.get("reason"),
+            )
+        except Exception as e:
+            logger.error(f"Failed to get config by ID {config_id}: {e}")
+            return None
+
+    async def rollback_config(
+        self,
+        strategy_id: str,
+        target_version: str,
+        reason: str,
+        symbol: Optional[str] = None,
+        changed_by: str = "system_rollback",
+    ) -> tuple[bool, StrategyConfig | None, list[str]]:
+        """Rollback strategy configuration."""
+        target_audit = None
+        if target_version == "previous":
+            target_audit = await self.get_previous_config(strategy_id, symbol)
+            if not target_audit:
+                return False, None, ["No previous configuration found"]
+        elif target_version.isdigit():
+            target_audit = await self.get_config_by_version(strategy_id, int(target_version), symbol)
+            if not target_audit:
+                return False, None, [f"Version {target_version} not found"]
+        else:
+            target_audit = await self.get_config_by_id(target_version)
+            if not target_audit:
+                return False, None, [f"Configuration ID {target_version} not found"]
+
+        config_to_restore = target_audit.new_parameters
+        if not config_to_restore:
+            return False, None, ["Target configuration has no parameters"]
+
+        # Validate before restoring
+        is_valid, _, validation_errors = await self.set_config(
+            strategy_id=strategy_id,
+            parameters=config_to_restore,
+            changed_by=changed_by,
+            symbol=symbol,
+            reason=f"Rollback validation: {reason}",
+            validate_only=True,
+        )
+        if not is_valid:
+            return False, None, [f"Validation failed: {', '.join(validation_errors)}"]
+
+        # Perform rollback
+        success, restored_config, _ = await self.set_config(
+            strategy_id=strategy_id,
+            parameters=config_to_restore,
+            changed_by=changed_by,
+            symbol=symbol,
+            reason=f"Rollback: {reason}",
+            validate_only=False,
+        )
+        if not success:
+            return False, None, ["Failed to apply rollback"]
+
+        logger.info(f"Rolled back {strategy_id}", extra={"symbol": symbol, "reason": reason})
+        return True, restored_config, []
