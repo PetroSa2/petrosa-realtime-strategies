@@ -2619,6 +2619,129 @@ async def get_audit_trail(
 
 
 @router.post(
+    "/strategies/{strategy_id}/config/rollback",
+    response_model=APIResponse[dict[str, Any]],
+    summary="Rollback strategy configuration to previous version",
+    description="""
+    **For LLM Agents**: Quickly revert configuration changes that caused issues.
+
+    Supports three rollback modes:
+    - `version=previous` - Rollback to immediately previous configuration
+    - `version=5` - Rollback to specific version number
+    - `version=507f...` - Rollback to specific audit record ID
+
+    **Safety**: Configuration is validated before rollback.
+
+    **Example**: `POST /api/v1/strategies/momentum_pulse/config/rollback?version=previous&reason=High+latency`
+    """,
+)
+async def rollback_strategy_config(
+    strategy_id: str,
+    version: str = Query(..., description="Target version: 'previous', version number, or audit ID"),
+    reason: str = Query(..., description="Reason for rollback"),
+    symbol: Optional[str] = Query(None, description="Symbol for symbol-specific rollback"),
+    changed_by: str = Query(default="llm_agent", description="Who is performing rollback"),
+):
+    """Rollback strategy configuration to a previous version."""
+    try:
+        config_manager = get_config_manager()
+
+        success, restored_config, errors = await config_manager.rollback_config(
+            strategy_id=strategy_id,
+            target_version=version,
+            reason=reason,
+            symbol=symbol,
+            changed_by=changed_by,
+        )
+
+        if not success:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "ROLLBACK_FAILED",
+                    "message": f"Failed to rollback: {', '.join(errors)}",
+                },
+            )
+
+        return APIResponse(
+            success=True,
+            data={"parameters": restored_config.parameters if restored_config else {}},
+            metadata={
+                "strategy_id": strategy_id,
+                "symbol": symbol,
+                "rolled_back_to": version,
+                "reason": reason,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error during rollback for {strategy_id}: {e}")
+        return APIResponse(
+            success=False,
+            error={"code": "INTERNAL_ERROR", "message": str(e)},
+        )
+
+
+@router.post(
+    "/strategies/{strategy_id}/config/restore",
+    response_model=APIResponse[dict[str, Any]],
+    summary="Restore strategy configuration from audit ID",
+    description="""
+    **For LLM Agents**: Restore a specific configuration by audit record ID.
+
+    **Safety**: Configuration is validated before restore.
+
+    **Example**: `POST /api/v1/strategies/momentum_pulse/config/restore?audit_id=507f...&reason=Restore+good+config`
+    """,
+)
+async def restore_strategy_config(
+    strategy_id: str,
+    audit_id: str = Query(..., description="Audit record ID to restore from"),
+    reason: str = Query(..., description="Reason for restore"),
+    symbol: Optional[str] = Query(None, description="Symbol for symbol-specific restore"),
+    changed_by: str = Query(default="llm_agent", description="Who is performing restore"),
+):
+    """Restore strategy configuration from a specific audit record."""
+    try:
+        config_manager = get_config_manager()
+
+        success, restored_config, errors = await config_manager.rollback_config(
+            strategy_id=strategy_id,
+            target_version=audit_id,
+            reason=reason,
+            symbol=symbol,
+            changed_by=changed_by,
+        )
+
+        if not success:
+            return APIResponse(
+                success=False,
+                error={
+                    "code": "RESTORE_FAILED",
+                    "message": f"Failed to restore: {', '.join(errors)}",
+                },
+            )
+
+        return APIResponse(
+            success=True,
+            data={"parameters": restored_config.parameters if restored_config else {}},
+            metadata={
+                "strategy_id": strategy_id,
+                "symbol": symbol,
+                "restored_from_audit_id": audit_id,
+                "reason": reason,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error during restore for {strategy_id}: {e}")
+        return APIResponse(
+            success=False,
+            error={"code": "INTERNAL_ERROR", "message": str(e)},
+        )
+
+
+@router.post(
     "/config/validate",
     response_model=APIResponse,
     summary="Validate configuration without applying changes",
