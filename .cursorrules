@@ -556,3 +556,4 @@ kubectl logs -n petrosa-apps -l app=realtime-strategies | grep "consumer_group"
 - For NATS topics and message formats: **See master § NATS Message Bus**
 - For deployment and HPA configuration: **See master § Realtime Strategies Configuration**
 - For configuration management patterns: **See master § Configuration Management**
+- For pre-merge cleanup: **See master § Pre-Merge Intelligent Cleanup Workflow** - Cursor AI automatically reorganizes files, removes outdated content, and consolidates documentation before merges using semantic understanding
