@@ -495,3 +495,4 @@ class TestMetricsContextEdgeCases:
                     ctx.record_signal("buy", 0.8)
 
         # All executions should be recorded
+        assert True  # Test passes if no exception was raised

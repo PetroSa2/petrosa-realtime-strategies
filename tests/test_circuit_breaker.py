@@ -149,18 +149,18 @@ class TestCircuitBreakerBasics:
         cb = CircuitBreaker()
 
         @cb
-        def test_func(should_fail=False):
+        def func_to_test(should_fail=False):
             if should_fail:
                 raise ValueError("Error")
             return "success"
 
         # Mixed operations
-        result1 = test_func()
-        result2 = test_func()
+        result1 = func_to_test()
+        result2 = func_to_test()
         assert result1 == "success"  # Should succeed
         assert result2 == "success"  # Should succeed
         try:
-            test_func(should_fail=True)
+            func_to_test(should_fail=True)
         except ValueError:
             # Expected: test_func raises ValueError when should_fail=True
             assert True  # Exception was raised as expected
@@ -492,20 +492,20 @@ class TestCircuitBreakerStateTransitions:
         cb = CircuitBreaker()
 
         @cb
-        def test_func(should_fail=False):
+        def func_to_test(should_fail=False):
             if should_fail:
                 raise ValueError("Error")
             return "success"
 
         # 3 successes, 1 failure
-        result1 = test_func()
-        result2 = test_func()
-        result3 = test_func()
+        result1 = func_to_test()
+        result2 = func_to_test()
+        result3 = func_to_test()
         assert result1 == "success"  # Should succeed
         assert result2 == "success"  # Should succeed
         assert result3 == "success"  # Should succeed
         try:
-            test_func(should_fail=True)
+            func_to_test(should_fail=True)
         except ValueError:
             # Expected: test_func raises ValueError when should_fail=True
             assert True  # Exception was raised as expected
