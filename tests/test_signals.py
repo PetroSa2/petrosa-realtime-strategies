@@ -122,7 +122,7 @@ class TestSignal:
 
     def test_symbol_validation(self):
         """Test symbol validation."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             Signal(
                 symbol="BTC",  # Too short
                 signal_type=SignalType.BUY,
@@ -132,6 +132,7 @@ class TestSignal:
                 price=50000.0,
                 strategy_name="test_strategy",
             )
+        assert exc_info.value is not None
 
     def test_symbol_uppercase_conversion(self):
         """Test symbol is converted to uppercase."""
@@ -149,7 +150,7 @@ class TestSignal:
 
     def test_confidence_score_range(self):
         """Test confidence score must be 0-1."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             Signal(
                 symbol="BTCUSDT",
                 signal_type=SignalType.BUY,
@@ -159,10 +160,11 @@ class TestSignal:
                 price=50000.0,
                 strategy_name="test_strategy",
             )
+        assert exc_info.value is not None
 
     def test_confidence_score_negative(self):
         """Test confidence score validation with negative value - covers line 71."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             Signal(
                 symbol="BTCUSDT",
                 signal_type=SignalType.BUY,
@@ -175,7 +177,7 @@ class TestSignal:
 
     def test_price_positive(self):
         """Test price must be positive."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             Signal(
                 symbol="BTCUSDT",
                 signal_type=SignalType.BUY,
@@ -690,7 +692,7 @@ class TestSignalAggregation:
 
     def test_signal_aggregation_symbol_validation(self):
         """Test SignalAggregation symbol validation - covers line 178."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             SignalAggregation(
                 symbol="BTC",  # Too short
                 aggregated_signal_type=SignalType.BUY,
@@ -700,10 +702,11 @@ class TestSignalAggregation:
                 strategy_signals={},
                 aggregation_method="consensus",
             )
+        assert exc_info.value is not None
 
     def test_signal_aggregation_confidence_score_validation(self):
         """Test SignalAggregation confidence score validation - covers line 185."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             SignalAggregation(
                 symbol="BTCUSDT",
                 aggregated_signal_type=SignalType.BUY,
@@ -713,6 +716,7 @@ class TestSignalAggregation:
                 strategy_signals={},
                 aggregation_method="consensus",
             )
+        assert exc_info.value is not None
 
 
 class TestSignalMetrics:
