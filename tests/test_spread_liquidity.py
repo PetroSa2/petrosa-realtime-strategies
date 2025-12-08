@@ -396,7 +396,7 @@ class TestSpreadLiquidityStrategy:
     def test_spread_narrowing_event_detection(self, strategy, normal_orderbook, wide_orderbook):
         """Test spread narrowing event detection - covers lines 279-301."""
         base_time = datetime.utcnow()
-        
+
         # First create a wide spread event
         for i in range(10):
             strategy.analyze(
@@ -405,16 +405,16 @@ class TestSpreadLiquidityStrategy:
                 asks=wide_orderbook["asks"],
                 timestamp=base_time + timedelta(seconds=i * 2),
             )
-        
+
         # Wait to ensure persistence > threshold
         time.sleep(0.1)
-        
+
         # Now narrow the spread (liquidity returning)
         narrow_orderbook = {
             "bids": [(50000.0, 1.0), (49999.0, 1.5)],
             "asks": [(50001.0, 1.0), (50002.0, 1.5)],  # Tight spread
         }
-        
+
         # This should trigger narrowing event (lines 279-301)
         signal = strategy.analyze(
             symbol="BTCUSDT",
@@ -422,16 +422,21 @@ class TestSpreadLiquidityStrategy:
             asks=narrow_orderbook["asks"],
             timestamp=base_time + timedelta(seconds=35),  # After persistence threshold
         )
-        
+
         # May generate signal if conditions are met
         if signal:
             assert signal.signal_type.value in ["BUY", "SELL", "HOLD"]
 
     def test_confidence_mapping_low(self, strategy):
         """Test confidence mapping for LOW confidence - covers lines 391-394."""
-        from strategies.models.spread_metrics import SpreadEvent, SpreadSnapshot, SpreadMetrics
         from datetime import datetime
-        
+
+        from strategies.models.spread_metrics import (
+            SpreadEvent,
+            SpreadMetrics,
+            SpreadSnapshot,
+        )
+
         # Create event with low confidence (< 0.6)
         metrics = SpreadMetrics(
             symbol="BTCUSDT",
@@ -470,7 +475,7 @@ class TestSpreadLiquidityStrategy:
             reasoning="Test",
             snapshot=snapshot,
         )
-        
+
         # Generate signal - should map to LOW confidence (lines 391-394)
         signal = strategy._generate_signal(event, snapshot)
         if signal:
@@ -498,14 +503,19 @@ class TestSpreadLiquidityStrategy:
 
         # May or may not generate signal depending on thresholds
         if signal:
-            from strategies.models.signals import SignalType, SignalAction
+            from strategies.models.signals import SignalAction, SignalType
             assert signal.signal_type == SignalType.SELL
             assert signal.signal_action == SignalAction.OPEN_SHORT
 
     def test_signal_generation_unknown_event_type(self, strategy):
         """Test signal generation with unknown event type - covers line 385."""
-        from strategies.models.spread_metrics import SpreadEvent, SpreadSnapshot, SpreadMetrics
         from datetime import datetime
+
+        from strategies.models.spread_metrics import (
+            SpreadEvent,
+            SpreadMetrics,
+            SpreadSnapshot,
+        )
 
         # Create event with unknown type
         metrics = SpreadMetrics(
@@ -553,7 +563,7 @@ class TestSpreadLiquidityStrategy:
     def test_signal_rate_limiting_edge_case(self, strategy, normal_orderbook, wide_orderbook):
         """Test signal rate limiting edge cases - covers lines 366-373."""
         base_time = datetime.utcnow()
-        
+
         # Build history
         for i in range(25):
             strategy.analyze(
@@ -584,8 +594,13 @@ class TestSpreadLiquidityStrategy:
 
     def test_confidence_mapping_edge_cases(self, strategy):
         """Test confidence level mapping - covers lines 391-394."""
-        from strategies.models.spread_metrics import SpreadEvent, SpreadSnapshot, SpreadMetrics
         from datetime import datetime
+
+        from strategies.models.spread_metrics import (
+            SpreadEvent,
+            SpreadMetrics,
+            SpreadSnapshot,
+        )
 
         # Test HIGH confidence (>= 0.8)
         metrics_high = SpreadMetrics(

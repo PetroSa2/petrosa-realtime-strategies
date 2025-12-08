@@ -19,7 +19,7 @@ def test_depthlevel_invalid_numeric_string():
     with pytest.raises(ValueError) as exc_info:
         DepthLevel(price="abc", quantity="1.0")
     assert "price" in str(exc_info.value).lower() or "numeric" in str(exc_info.value).lower()
-    
+
     with pytest.raises(ValueError) as exc_info:
         DepthLevel(price="50000.0", quantity="x")
     assert "quantity" in str(exc_info.value).lower() or "numeric" in str(exc_info.value).lower()

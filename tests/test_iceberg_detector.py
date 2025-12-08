@@ -302,17 +302,18 @@ class TestIcebergDetectorStrategy:
 
     def test_iceberg_invalid_side_returns_none(self, strategy):
         """Test that invalid iceberg side returns None - covers line 204."""
-        from strategies.models.orderbook_tracker import IcebergPattern, LevelHistory
         from collections import deque
         from datetime import datetime
-        
+
+        from strategies.models.orderbook_tracker import IcebergPattern, LevelHistory
+
         # Create a minimal level_history for the iceberg
         level_history = LevelHistory(
             price=50000.0,
             side="bid",
             snapshots=deque(),
         )
-        
+
         # Create iceberg with invalid side (not "bid" or "ask")
         iceberg = IcebergPattern(
             symbol="BTCUSDT",
@@ -327,24 +328,25 @@ class TestIcebergDetectorStrategy:
             detected_at=datetime.utcnow(),
             level_history=level_history,
         )
-        
+
         # This should return None (line 204) - test through _generate_signal
         signal = strategy._generate_signal(iceberg, 50000.5)
         assert signal is None
 
     def test_iceberg_low_confidence_path(self, strategy):
         """Test LOW confidence path - covers lines 210-213."""
-        from strategies.models.orderbook_tracker import IcebergPattern, LevelHistory
         from collections import deque
         from datetime import datetime
-        
+
+        from strategies.models.orderbook_tracker import IcebergPattern, LevelHistory
+
         # Create a minimal level_history for the iceberg
         level_history = LevelHistory(
             price=50000.0,
             side="bid",
             snapshots=deque(),
         )
-        
+
         # Create iceberg with confidence < 0.6 (LOW)
         iceberg = IcebergPattern(
             symbol="BTCUSDT",
@@ -359,7 +361,7 @@ class TestIcebergDetectorStrategy:
             detected_at=datetime.utcnow(),
             level_history=level_history,
         )
-        
+
         # Test through _generate_signal directly
         signal = strategy._generate_signal(iceberg, 50000.5)
         if signal:

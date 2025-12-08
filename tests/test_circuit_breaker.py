@@ -211,7 +211,7 @@ class TestCircuitBreakerEdgeCases:
                 func(should_fail=True)
 
         assert cb.failure_count == 3
-        
+
         # Success resets
         result = func(should_fail=False)
         assert result == "success"

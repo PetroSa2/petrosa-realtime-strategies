@@ -22,11 +22,13 @@ class TestModuleImports:
 
     def test_import_all_market_logic_strategies(self):
         """Test importing all market logic strategies."""
-        from strategies.market_logic import btc_dominance
-        from strategies.market_logic import cross_exchange_spread
-        from strategies.market_logic import iceberg_detector
-        from strategies.market_logic import onchain_metrics
-        from strategies.market_logic import spread_liquidity
+        from strategies.market_logic import (
+            btc_dominance,
+            cross_exchange_spread,
+            iceberg_detector,
+            onchain_metrics,
+            spread_liquidity,
+        )
 
         assert btc_dominance is not None
         assert cross_exchange_spread is not None
