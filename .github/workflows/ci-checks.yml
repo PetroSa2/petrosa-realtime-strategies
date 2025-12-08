@@ -101,11 +101,15 @@ jobs:
 
       - name: Check test assertions
         run: |
-          python petrosa_k8s/scripts/check-test-assertions.py
+          # Find all test files and check them
+          find . -name "test_*.py" -o -name "*_test.py" | grep -v petrosa_k8s | while read -r test_file; do
+            python petrosa_k8s/scripts/check-test-assertions.py "$test_file" || exit 1
+          done
           if [ $? -ne 0 ]; then
             echo "❌ Tests without assertions detected"
             exit 1
           fi
+          echo "✅ All tests have assertions"
 
   security:
     name: Security Scan
