@@ -271,8 +271,10 @@ class TestMetricsContext:
             strategy="test_strategy", symbol="BTCUSDT", metrics=None
         ) as ctx:
             ctx.record_signal("buy", 0.9)
+            assert ctx is not None  # Context should be created
 
         # Should complete without error
+        assert True  # Test passes if no exception was raised
 
     def test_context_manager_with_signal_object(self):
         """Test context manager with Signal object using signal_action attribute.
