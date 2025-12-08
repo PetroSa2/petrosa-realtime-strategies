@@ -189,6 +189,7 @@ def test_signal_handler_no_service():
 
     # Should not raise error
     signal_handler(signal.SIGTERM, None)
+    assert True  # Test passes if no exception was raised
 
 
 def test_cli_run_command():

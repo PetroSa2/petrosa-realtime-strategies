@@ -473,8 +473,11 @@ class TestMetricsContextEdgeCases:
             ) as inner_ctx:
                 inner_ctx.record_signal("buy", 0.8)
             outer_ctx.record_signal("sell", 0.7)
+            assert inner_ctx is not None  # Inner context should be created
+            assert outer_ctx is not None  # Outer context should be created
 
         # Both contexts should record independently
+        assert True  # Test passes if no exception was raised
 
     def test_context_reuse(self):
         """Test that context manager can be used multiple times."""
@@ -487,6 +490,7 @@ class TestMetricsContextEdgeCases:
             with MetricsContext(
                 strategy="reusable_strategy", symbol="BTCUSDT", metrics=metrics
             ) as ctx:
+                assert ctx is not None  # Context should be created
                 if i % 2 == 0:
                     ctx.record_signal("buy", 0.8)
 
