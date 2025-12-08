@@ -102,9 +102,14 @@ jobs:
       - name: Check test assertions
         run: |
           # Find all test files and check them
-          find . -name "test_*.py" -o -name "*_test.py" | grep -v petrosa_k8s | while read -r test_file; do
-            python petrosa_k8s/scripts/check-test-assertions.py "$test_file" || exit 1
-          done
+          TEST_FILES=$(find . -type f -name "test_*.py" -o -name "*_test.py" | grep -v petrosa_k8s | grep -v ".venv" | grep -v "__pycache__" || true)
+          if [ -z "$TEST_FILES" ]; then
+            echo "⚠️  No test files found - skipping test quality check"
+            exit 0
+          fi
+          echo "Found test files:"
+          echo "$TEST_FILES" | sed 's/^/  - /'
+          python petrosa_k8s/scripts/check-test-assertions.py $(echo "$TEST_FILES" | tr '\n' ' ')
           if [ $? -ne 0 ]; then
             echo "❌ Tests without assertions detected"
             exit 1
