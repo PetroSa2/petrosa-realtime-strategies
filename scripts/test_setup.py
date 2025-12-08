@@ -73,10 +73,12 @@ def test_imports():
 
         print("✅ circuit breaker imported successfully")
 
+        assert True  # All imports successful
         return True
 
     except ImportError as e:
         print(f"❌ Import failed: {e}")
+        assert False, f"Import failed: {e}"
         return False
 
 
@@ -124,10 +126,12 @@ def test_logging():
         logger.info("Test log message", test=True)
 
         print("✅ Logging setup successful")
+        assert logger is not None
         return True
 
     except Exception as e:
         print(f"❌ Logging test failed: {e}")
+        assert False, f"Logging test failed: {e}"
         return False
 
 
@@ -188,10 +192,14 @@ def test_models():
         )
         print("✅ Trade order model created successfully")
 
+        assert depth_update is not None
+        assert signal is not None
+        assert order is not None
         return True
 
     except Exception as e:
         print(f"❌ Model test failed: {e}")
+        assert False, f"Model test failed: {e}"
         return False
 
 

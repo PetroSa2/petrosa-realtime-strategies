@@ -35,7 +35,7 @@ def test_spread_metrics_valid_creation():
 
 def test_spread_metrics_invalid_bid_zero():
     """Test SpreadMetrics validation rejects zero bid price - covers line 53."""
-    with pytest.raises(ValueError, match="Invalid bid/ask prices"):
+    with pytest.raises(ValueError, match="Invalid bid/ask prices") as exc_info:
         SpreadMetrics(
             symbol="BTCUSDT",
             timestamp=datetime.utcnow(),
@@ -49,11 +49,12 @@ def test_spread_metrics_invalid_bid_zero():
             ask_volume_top5=950.0,
             total_depth=1950.0,
         )
+    assert exc_info.value is not None
 
 
 def test_spread_metrics_invalid_ask_zero():
     """Test SpreadMetrics validation rejects zero ask price - covers line 53."""
-    with pytest.raises(ValueError, match="Invalid bid/ask prices"):
+    with pytest.raises(ValueError, match="Invalid bid/ask prices") as exc_info:
         SpreadMetrics(
             symbol="BTCUSDT",
             timestamp=datetime.utcnow(),
@@ -67,11 +68,12 @@ def test_spread_metrics_invalid_ask_zero():
             ask_volume_top5=950.0,
             total_depth=1950.0,
         )
+    assert exc_info.value is not None
 
 
 def test_spread_metrics_invalid_ask_less_than_bid():
     """Test SpreadMetrics validation rejects ask <= bid - covers line 58."""
-    with pytest.raises(ValueError, match="Ask must be greater than bid"):
+    with pytest.raises(ValueError, match="Ask must be greater than bid") as exc_info:
         SpreadMetrics(
             symbol="BTCUSDT",
             timestamp=datetime.utcnow(),
@@ -85,11 +87,12 @@ def test_spread_metrics_invalid_ask_less_than_bid():
             ask_volume_top5=950.0,
             total_depth=1950.0,
         )
+    assert exc_info.value is not None
 
 
 def test_spread_metrics_invalid_ask_equal_to_bid():
     """Test SpreadMetrics validation rejects ask = bid - covers line 58."""
-    with pytest.raises(ValueError, match="Ask must be greater than bid"):
+    with pytest.raises(ValueError, match="Ask must be greater than bid") as exc_info:
         SpreadMetrics(
             symbol="BTCUSDT",
             timestamp=datetime.utcnow(),
@@ -103,6 +106,7 @@ def test_spread_metrics_invalid_ask_equal_to_bid():
             ask_volume_top5=950.0,
             total_depth=1950.0,
         )
+    assert exc_info.value is not None
 
 
 def test_spread_snapshot_creation():

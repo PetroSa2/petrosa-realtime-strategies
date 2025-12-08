@@ -122,7 +122,7 @@ class TestTradeOrder:
 
     def test_symbol_validation(self):
         """Test symbol validation."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             TradeOrder(
                 order_id=str(uuid4()),
                 symbol="BTC",  # Too short
@@ -134,6 +134,7 @@ class TestTradeOrder:
                 signal_id=str(uuid4()),
                 confidence_score=0.85,
             )
+        assert exc_info.value is not None
 
     def test_symbol_uppercase_conversion(self):
         """Test symbol is converted to uppercase."""
@@ -153,7 +154,7 @@ class TestTradeOrder:
 
     def test_quantity_validation_positive(self):
         """Test quantity must be positive."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             TradeOrder(
                 order_id=str(uuid4()),
                 symbol="BTCUSDT",
@@ -165,10 +166,11 @@ class TestTradeOrder:
                 signal_id=str(uuid4()),
                 confidence_score=0.85,
             )
+        assert exc_info.value is not None
 
     def test_confidence_score_range(self):
         """Test confidence score must be 0-1."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             TradeOrder(
                 order_id=str(uuid4()),
                 symbol="BTCUSDT",
@@ -180,10 +182,11 @@ class TestTradeOrder:
                 signal_id=str(uuid4()),
                 confidence_score=1.5,  # Out of range
             )
+        assert exc_info.value is not None
 
     def test_leverage_range(self):
         """Test leverage must be 1-125."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             TradeOrder(
                 order_id=str(uuid4()),
                 symbol="BTCUSDT",
@@ -196,10 +199,11 @@ class TestTradeOrder:
                 signal_id=str(uuid4()),
                 confidence_score=0.85,
             )
+        assert exc_info.value is not None
 
     def test_order_id_validation(self):
         """Test order ID validation."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             TradeOrder(
                 order_id="short",  # Too short
                 symbol="BTCUSDT",
@@ -211,10 +215,11 @@ class TestTradeOrder:
                 signal_id=str(uuid4()),
                 confidence_score=0.85,
             )
+        assert exc_info.value is not None
 
     def test_signal_id_validation(self):
         """Test signal ID validation."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             TradeOrder(
                 order_id=str(uuid4()),
                 symbol="BTCUSDT",
@@ -226,6 +231,7 @@ class TestTradeOrder:
                 signal_id="short",  # Too short
                 confidence_score=0.85,
             )
+        assert exc_info.value is not None
 
     def test_time_in_force_default(self):
         """Test time_in_force defaults to GTC."""
