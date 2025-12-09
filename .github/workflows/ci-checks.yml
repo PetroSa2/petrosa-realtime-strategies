@@ -97,9 +97,14 @@ jobs:
         run: |
           curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/PetroSa2/petrosa_k8s/contents/scripts/check-test-assertions.py" | \
-            jq -r '.content' | base64 -d > /tmp/check-test-assertions.py
+            jq -r '.content' | base64 -d | tr -d '\r' > /tmp/check-test-assertions.py
           chmod +x /tmp/check-test-assertions.py
-          echo "✅ Script downloaded"
+          # Verify the file is valid Python
+          python3 -m py_compile /tmp/check-test-assertions.py || {
+            echo "❌ Downloaded file is not valid Python"
+            exit 1
+          }
+          echo "✅ Script downloaded and verified"
 
       - name: Check test assertions
         run: |
