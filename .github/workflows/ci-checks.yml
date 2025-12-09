@@ -93,6 +93,7 @@ jobs:
         with:
           repository: PetroSa2/petrosa_k8s
           path: petrosa_k8s
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
