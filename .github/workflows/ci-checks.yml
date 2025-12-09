@@ -84,8 +84,6 @@ jobs:
   test-quality:
     name: Test Quality Check
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout service code
         uses: actions/checkout@v4
