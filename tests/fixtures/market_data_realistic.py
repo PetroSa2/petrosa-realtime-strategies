@@ -81,21 +81,21 @@ CROSS_EXCHANGE_ARBITRAGE = {
 def generate_realistic_klines(symbol: str, count: int = 100, start_price: float = 50000.0):
     """Generate realistic candlestick data with random walk."""
     import random
-    
+
     klines = []
     current_price = start_price
     timestamp = datetime.utcnow()
-    
+
     for i in range(count):
         # Random walk with slight upward bias
         price_change = random.uniform(-0.002, 0.0025) * current_price
         open_price = current_price
         close_price = current_price + price_change
-        
+
         high_price = max(open_price, close_price) * random.uniform(1.0, 1.001)
         low_price = min(open_price, close_price) * random.uniform(0.999, 1.0)
         volume = random.uniform(5.0, 20.0)
-        
+
         klines.append({
             "symbol": symbol,
             "timestamp": timestamp + timedelta(minutes=i),
@@ -105,23 +105,23 @@ def generate_realistic_klines(symbol: str, count: int = 100, start_price: float 
             "close": round(close_price, 2),
             "volume": round(volume, 4)
         })
-        
+
         current_price = close_price
-    
+
     return klines
 
 
 def generate_depth_updates(symbol: str, count: int = 50):
     """Generate sequence of realistic depth updates."""
     import random
-    
+
     updates = []
     base_price = 50000.0
-    
+
     for i in range(count):
         mid_price = base_price * (1 + random.uniform(-0.001, 0.001))
         spread_bps = random.uniform(5, 15)  # 5-15 basis points
-        
+
         bids = [
             [mid_price * (1 - spread_bps/10000 - j*0.0001), random.uniform(0.5, 3.0)]
             for j in range(5)
@@ -130,13 +130,13 @@ def generate_depth_updates(symbol: str, count: int = 50):
             [mid_price * (1 + spread_bps/10000 + j*0.0001), random.uniform(0.5, 3.0)]
             for j in range(5)
         ]
-        
+
         updates.append({
             "symbol": symbol,
             "timestamp": datetime.utcnow() + timedelta(seconds=i),
             "bids": bids,
             "asks": asks
         })
-    
+
     return updates
 

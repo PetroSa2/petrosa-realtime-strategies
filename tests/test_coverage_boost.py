@@ -1,8 +1,13 @@
 """Massive coverage boost tests - smoke tests and property tests for low-coverage modules."""
 
 import pytest
-from strategies.market_logic import btc_dominance, cross_exchange_spread, onchain_metrics
+
 from strategies.core import consumer, publisher
+from strategies.market_logic import (
+    btc_dominance,
+    cross_exchange_spread,
+    onchain_metrics,
+)
 
 
 class TestBtcDominanceSmoke:

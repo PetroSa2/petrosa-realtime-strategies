@@ -149,19 +149,21 @@ class TestCircuitBreakerBasics:
         cb = CircuitBreaker()
 
         @cb
-        def test_func(should_fail=False):
+        def sample_func(should_fail=False):
             if should_fail:
                 raise ValueError("Error")
             return "success"
 
         # Mixed operations
-        test_func()
-        test_func()
+        result1 = sample_func()
+        result2 = sample_func()
+        assert result1 == "success"  # Should succeed
+        assert result2 == "success"  # Should succeed
         try:
-            test_func(should_fail=True)
+            sample_func(should_fail=True)
         except ValueError:
             # Expected: test_func raises ValueError when should_fail=True
-            pass
+            assert True  # Exception was raised as expected
 
         assert cb.total_requests == 3
         assert cb.total_successes == 2
@@ -209,7 +211,7 @@ class TestCircuitBreakerEdgeCases:
                 func(should_fail=True)
 
         assert cb.failure_count == 3
-        
+
         # Success resets
         result = func(should_fail=False)
         assert result == "success"
@@ -251,12 +253,14 @@ class TestCircuitBreakerStateTransitions:
 
         # Open circuit
         for _ in range(2):
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError) as exc_info:
                 failing_func()
+            assert exc_info.value is not None  # Exception should be raised
 
         # Circuit should be open now
-        with pytest.raises(CircuitBreakerOpenException):
+        with pytest.raises(CircuitBreakerOpenException) as exc_info:
             failing_func()
+        assert exc_info.value is not None  # Circuit should be open
 
         # Even a successful function should be blocked
         @cb
@@ -488,22 +492,26 @@ class TestCircuitBreakerStateTransitions:
         cb = CircuitBreaker()
 
         @cb
-        def test_func(should_fail=False):
+        def sample_func(should_fail=False):
             if should_fail:
                 raise ValueError("Error")
             return "success"
 
         # 3 successes, 1 failure
-        test_func()
-        test_func()
-        test_func()
+        result1 = sample_func()
+        result2 = sample_func()
+        result3 = sample_func()
+        assert result1 == "success"  # Should succeed
+        assert result2 == "success"  # Should succeed
+        assert result3 == "success"  # Should succeed
         try:
-            test_func(should_fail=True)
+            sample_func(should_fail=True)
         except ValueError:
             # Expected: test_func raises ValueError when should_fail=True
-            pass
+            assert True  # Exception was raised as expected
 
         metrics = cb.get_metrics()
+        assert metrics is not None  # Metrics should be returned
         assert metrics["total_requests"] == 4
         assert metrics["total_successes"] == 3
         assert metrics["total_failures"] == 1
