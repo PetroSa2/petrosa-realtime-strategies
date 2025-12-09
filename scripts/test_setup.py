@@ -78,7 +78,7 @@ def test_imports():
 
     except ImportError as e:
         print(f"❌ Import failed: {e}")
-        assert False, f"Import failed: {e}"
+        raise AssertionError(f"Import failed: {e}")
         return False
 
 
@@ -131,7 +131,7 @@ def test_logging():
 
     except Exception as e:
         print(f"❌ Logging test failed: {e}")
-        assert False, f"Logging test failed: {e}"
+        raise AssertionError(f"Logging test failed: {e}")
         return False
 
 
@@ -199,7 +199,7 @@ def test_models():
 
     except Exception as e:
         print(f"❌ Model test failed: {e}")
-        assert False, f"Model test failed: {e}"
+        raise AssertionError(f"Model test failed: {e}")
         return False
 
 
