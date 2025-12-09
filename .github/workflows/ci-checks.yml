@@ -84,6 +84,8 @@ jobs:
   test-quality:
     name: Test Quality Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout service code
         uses: actions/checkout@v4
@@ -93,7 +95,6 @@ jobs:
         with:
           repository: PetroSa2/petrosa_k8s
           path: petrosa_k8s
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
