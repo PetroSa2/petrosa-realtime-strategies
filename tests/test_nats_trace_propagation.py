@@ -245,7 +245,6 @@ async def test_end_to_end_trace_propagation(
     
     with tracer.start_as_current_span("upstream_service_span") as root_span:
         root_trace_id = format(root_span.context.trace_id, "032x")
-        root_span_id = format(root_span.context.span_id, "016x")
         
         # Create a signal to publish
         from strategies.models.signals import Signal, SignalAction, SignalType, SignalConfidence
