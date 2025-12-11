@@ -21,6 +21,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from strategies.core.consumer import NATSConsumer
 from strategies.core.publisher import TradeOrderPublisher
 from strategies.models.orders import TradeOrder
+from strategies.models.signals import Signal, SignalAction, SignalType, SignalConfidence
 
 
 @pytest.fixture(scope="session")
@@ -247,8 +248,6 @@ async def test_end_to_end_trace_propagation(
         root_trace_id = format(root_span.context.trace_id, "032x")
         
         # Create a signal to publish
-        from strategies.models.signals import Signal, SignalAction, SignalType, SignalConfidence
-        
         signal = Signal(
             symbol="BTCUSDT",
             signal_type=SignalType.BUY,
@@ -327,9 +326,11 @@ async def test_end_to_end_trace_propagation(
         # Consumer topic is "test.topic" (from fixture), not "signals.trading"
         assert attributes.get("messaging.destination") == consumer.topic
         
-        # Verify span is a child of root span (parent span ID should match)
-        # Note: In OpenTelemetry, parent span ID is stored in span context
-        # The consumer span should be linked to the root span
-        assert consumer_span.parent is not None or consumer_span.context.trace_id == root_span.context.trace_id, (
-            "Consumer span should be linked to root span trace"
+        # Verify span is linked to root span trace
+        # The consumer span should have the same trace ID as the root span
+        # (indicating it's part of the same distributed trace)
+        assert consumer_span.context.trace_id == root_span.context.trace_id, (
+            f"Consumer span should be part of same trace: "
+            f"consumer_trace_id={format(consumer_span.context.trace_id, '032x')}, "
+            f"root_trace_id={root_trace_id}"
         )
