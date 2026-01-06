@@ -263,6 +263,11 @@ def signal_handler(signum, frame):
 
     # Flush telemetry data immediately on signal to prevent data loss
     # This ensures telemetry is flushed even if the async shutdown doesn't complete
+    # Note: Blocking I/O here is acceptable because:
+    # 1. We're shutting down - no new requests will be processed
+    # 2. Kubernetes terminationGracePeriodSeconds (typically 30s) allows time for flush
+    # 3. The timeout (5s) is well within typical grace periods
+    # 4. This is a critical operation to prevent data loss
     try:
         flush_telemetry(timeout_seconds=5.0)
         shutdown_telemetry()

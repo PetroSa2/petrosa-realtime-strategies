@@ -60,8 +60,9 @@ def flush_telemetry(timeout_seconds: float = 5.0) -> None:
         return
 
     start_time = time.time()
+
+    # Flush traces (with timeout) - handle failures individually
     try:
-        # Flush traces (with timeout)
         tracer_provider = trace.get_tracer_provider()
         if hasattr(tracer_provider, "force_flush"):
             try:
@@ -72,8 +73,11 @@ def flush_telemetry(timeout_seconds: float = 5.0) -> None:
                 # Fallback for providers that don't accept timeout
                 tracer_provider.force_flush()
                 logger.info("✅ Traces flushed successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Error flushing traces: {e}")
 
-        # Flush metrics (with timeout if supported)
+    # Flush metrics (with timeout if supported) - handle failures individually
+    try:
         meter_provider = metrics.get_meter_provider()
         if hasattr(meter_provider, "force_flush"):
             try:
@@ -82,8 +86,11 @@ def flush_telemetry(timeout_seconds: float = 5.0) -> None:
             except TypeError:
                 meter_provider.force_flush()
                 logger.info("✅ Metrics flushed successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Error flushing metrics: {e}")
 
-        # Flush logs (with timeout if supported)
+    # Flush logs (with timeout if supported) - handle failures individually
+    try:
         global _global_logger_provider
         if _global_logger_provider is not None and hasattr(
             _global_logger_provider, "force_flush"
@@ -96,16 +103,15 @@ def flush_telemetry(timeout_seconds: float = 5.0) -> None:
             except TypeError:
                 _global_logger_provider.force_flush()
                 logger.info("✅ Logs flushed successfully")
-
-        # Ensure we don't exceed total timeout
-        elapsed = time.time() - start_time
-        if elapsed < timeout_seconds:
-            # Brief wait to allow batch processors to finalize export
-            remaining_time = timeout_seconds - elapsed
-            time.sleep(min(0.5, remaining_time))
-
     except Exception as e:
-        logger.error(f"⚠️  Error flushing telemetry: {e}")
+        logger.error(f"⚠️  Error flushing logs: {e}")
+
+    # Ensure we don't exceed total timeout
+    elapsed = time.time() - start_time
+    if elapsed < timeout_seconds:
+        # Brief wait to allow batch processors to finalize export
+        remaining_time = timeout_seconds - elapsed
+        time.sleep(min(0.5, remaining_time))
 
 
 def shutdown_telemetry() -> None:
@@ -122,26 +128,31 @@ def shutdown_telemetry() -> None:
         logger.warning("OpenTelemetry not available - skipping telemetry shutdown")
         return
 
+    # Shutdown traces - handle failures individually
     try:
-        # Shutdown traces
         tracer_provider = trace.get_tracer_provider()
         if hasattr(tracer_provider, "shutdown"):
             tracer_provider.shutdown()
             logger.info("✅ Trace provider shut down successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Error shutting down trace provider: {e}")
 
-        # Shutdown metrics
+    # Shutdown metrics - handle failures individually
+    try:
         meter_provider = metrics.get_meter_provider()
         if hasattr(meter_provider, "shutdown"):
             meter_provider.shutdown()
             logger.info("✅ Metrics provider shut down successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Error shutting down metrics provider: {e}")
 
-        # Shutdown logs
+    # Shutdown logs - handle failures individually
+    try:
         global _global_logger_provider
         if _global_logger_provider is not None and hasattr(
             _global_logger_provider, "shutdown"
         ):
             _global_logger_provider.shutdown()
             logger.info("✅ Log provider shut down successfully")
-
     except Exception as e:
-        logger.error(f"⚠️  Error shutting down telemetry: {e}")
+        logger.error(f"⚠️  Error shutting down log provider: {e}")

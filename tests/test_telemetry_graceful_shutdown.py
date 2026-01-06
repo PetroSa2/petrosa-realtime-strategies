@@ -77,15 +77,8 @@ class TestFlushTelemetry:
                 return_value=mock_meter_provider,
             ):
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
-                    # Should not raise exception
-                    try:
-                        flush_telemetry()
-                        # Assert function completes without exception
-                        assert True
-                    except Exception:
-                        assert (
-                            False
-                        ), "flush_telemetry should handle missing providers gracefully"
+                    # Should not raise exception - function handles missing providers gracefully
+                    flush_telemetry()
 
     def test_flush_telemetry_handles_exceptions(self):
         """Test that flush_telemetry handles provider exceptions gracefully."""
@@ -94,35 +87,29 @@ class TestFlushTelemetry:
             side_effect=Exception("Flush failed")
         )
 
+        mock_meter_provider = MagicMock()
+        mock_meter_provider.force_flush = MagicMock()
+
         with patch(
             "strategies.utils.telemetry.trace.get_tracer_provider",
             return_value=mock_tracer_provider,
         ):
             with patch(
                 "strategies.utils.telemetry.metrics.get_meter_provider",
-                return_value=MagicMock(),
+                return_value=mock_meter_provider,
             ):
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
-                    # Should not raise exception
-                    try:
-                        flush_telemetry()
-                        # Assert function completes without propagating exception
-                        assert True
-                    except Exception as e:
-                        assert False, f"flush_telemetry should catch exceptions: {e}"
+                    # Should not raise exception - function catches and logs errors
+                    # Verify that even if tracer provider fails, meter provider still gets flushed
+                    flush_telemetry()
+                    mock_meter_provider.force_flush.assert_called_once()
 
     def test_flush_telemetry_without_opentelemetry(self):
         """Test flushing when OpenTelemetry is not available."""
         with patch("strategies.utils.telemetry.trace", None):
             with patch("strategies.utils.telemetry.metrics", None):
-                # Should not raise exception
-                try:
-                    flush_telemetry()
-                    assert True
-                except Exception:
-                    assert (
-                        False
-                    ), "flush_telemetry should handle missing OpenTelemetry gracefully"
+                # Should not raise exception - function handles missing OpenTelemetry gracefully
+                flush_telemetry()
 
 
 class TestShutdownTelemetry:
@@ -173,13 +160,8 @@ class TestShutdownTelemetry:
                 return_value=mock_meter_provider,
             ):
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
-                    # Should not raise exception
-                    try:
-                        shutdown_telemetry()
-                        # Assert function completes without exception
-                        assert True
-                    except Exception:
-                        assert False, "shutdown_telemetry should handle missing providers gracefully"
+                    # Should not raise exception - function handles missing providers gracefully
+                    shutdown_telemetry()
 
     def test_shutdown_telemetry_handles_exceptions(self):
         """Test that shutdown_telemetry handles provider exceptions gracefully."""
@@ -197,21 +179,12 @@ class TestShutdownTelemetry:
                 return_value=MagicMock(),
             ):
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
-                    # Should not raise exception
-                    try:
-                        shutdown_telemetry()
-                        # Assert function completes without propagating exception
-                        assert True
-                    except Exception as e:
-                        assert False, f"shutdown_telemetry should catch exceptions: {e}"
+                    # Should not raise exception - function catches and logs errors
+                    shutdown_telemetry()
 
     def test_shutdown_telemetry_without_opentelemetry(self):
         """Test shutting down when OpenTelemetry is not available."""
         with patch("strategies.utils.telemetry.trace", None):
             with patch("strategies.utils.telemetry.metrics", None):
-                # Should not raise exception
-                try:
-                    shutdown_telemetry()
-                    assert True
-                except Exception:
-                    assert False, "shutdown_telemetry should handle missing OpenTelemetry gracefully"
+                # Should not raise exception - function handles missing OpenTelemetry gracefully
+                shutdown_telemetry()

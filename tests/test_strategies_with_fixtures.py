@@ -40,7 +40,7 @@ class TestSpreadLiquidityWithFixtures:
         for depth_data in BTCUSDT_WIDENING_SPREAD:
             bids_tuples = [(float(p), float(q)) for p, q in depth_data["bids"]]
             asks_tuples = [(float(p), float(q)) for p, q in depth_data["asks"]]
-            signal = strategy.analyze(
+            strategy.analyze(
                 "BTCUSDT",
                 bids=bids_tuples,
                 asks=asks_tuples,
@@ -88,7 +88,7 @@ class TestIcebergDetectorWithFixtures:
             price = trade_data["price"]
             bids = [(price - 0.5, 1.0)]
             asks = [(price + 0.5, 1.0)]
-            signal = strategy.analyze(
+            strategy.analyze(
                 "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
             )
 
