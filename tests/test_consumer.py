@@ -71,6 +71,7 @@ def test_consumer_initialization(consumer):
 @pytest.mark.asyncio
 async def test_consumer_start_exception_handling(consumer):
     """Test start() exception handling - covers lines 132-135, 194-196."""
+
     # Mock _connect_to_nats to raise exception
     async def mock_connect():
         raise Exception("Connection failed")
@@ -164,9 +165,13 @@ async def test_consumer_process_market_data_unknown_type(consumer):
     )
 
     # Mock the properties to return False for all types using PropertyMock
-    with patch.object(MarketDataMessage, 'is_depth', new_callable=PropertyMock, return_value=False), \
-         patch.object(MarketDataMessage, 'is_trade', new_callable=PropertyMock, return_value=False), \
-         patch.object(MarketDataMessage, 'is_ticker', new_callable=PropertyMock, return_value=False):
+    with patch.object(
+        MarketDataMessage, "is_depth", new_callable=PropertyMock, return_value=False
+    ), patch.object(
+        MarketDataMessage, "is_trade", new_callable=PropertyMock, return_value=False
+    ), patch.object(
+        MarketDataMessage, "is_ticker", new_callable=PropertyMock, return_value=False
+    ):
         # Create new instance with mocked properties
         market_data_mock = MarketDataMessage(
             stream="btcusdt@unknown",
@@ -240,14 +245,14 @@ async def test_consumer_process_depth_data_error(consumer):
 async def test_consumer_process_microstructure_strategies_error(consumer):
     """Test _process_microstructure_strategies error handling - covers lines 665-667."""
     # Mock microstructure strategies
-    consumer.microstructure_strategies = {
-        "test_strategy": Mock()
-    }
+    consumer.microstructure_strategies = {"test_strategy": Mock()}
     consumer.microstructure_strategies["test_strategy"].analyze = Mock(
         side_effect=Exception("Strategy error")
     )
 
-    await consumer._process_microstructure_strategies("BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)])
+    await consumer._process_microstructure_strategies(
+        "BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)]
+    )
     # Should handle error gracefully
 
 
@@ -332,7 +337,9 @@ async def test_consumer_transform_depth_data_error(consumer):
         "s": "BTCUSDT",
         "E": int(datetime.utcnow().timestamp() * 1000),
         "bids": [["invalid_price", "1.0"]],  # Invalid price will fail validation
-        "asks": [["50001.0", "invalid_quantity"]],  # Invalid quantity will fail validation
+        "asks": [
+            ["50001.0", "invalid_quantity"]
+        ],  # Invalid quantity will fail validation
     }
 
     result = consumer._transform_depth_data(invalid_data)
@@ -374,18 +381,20 @@ async def test_consumer_processing_loop_with_messages(consumer):
 
     # Mock fetch to return messages
     mock_msg1 = Mock()
-    mock_msg1.data = json.dumps({
-        "stream": "btcusdt@depth@20ms",
-        "data": {
-            "e": "depthUpdate",
-            "E": int(datetime.utcnow().timestamp() * 1000),
-            "s": "BTCUSDT",
-            "U": 1,
-            "u": 1,
-            "b": [["50000.0", "1.0"]],
-            "a": [["50001.0", "1.0"]],
+    mock_msg1.data = json.dumps(
+        {
+            "stream": "btcusdt@depth@20ms",
+            "data": {
+                "e": "depthUpdate",
+                "E": int(datetime.utcnow().timestamp() * 1000),
+                "s": "BTCUSDT",
+                "U": 1,
+                "u": 1,
+                "b": [["50000.0", "1.0"]],
+                "a": [["50001.0", "1.0"]],
+            },
         }
-    }).encode()
+    ).encode()
 
     consumer.subscription.fetch = AsyncMock(return_value=[mock_msg1])
     consumer._message_handler = AsyncMock()

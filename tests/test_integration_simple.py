@@ -107,4 +107,3 @@ class TestModuleConstants:
         assert TimeInForce.GTC
         assert TimeInForce.IOC
         assert TimeInForce.FOK
-

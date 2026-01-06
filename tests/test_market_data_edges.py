@@ -18,11 +18,17 @@ from strategies.models.market_data import (
 def test_depthlevel_invalid_numeric_string():
     with pytest.raises(ValueError) as exc_info:
         DepthLevel(price="abc", quantity="1.0")
-    assert "price" in str(exc_info.value).lower() or "numeric" in str(exc_info.value).lower()
+    assert (
+        "price" in str(exc_info.value).lower()
+        or "numeric" in str(exc_info.value).lower()
+    )
 
     with pytest.raises(ValueError) as exc_info:
         DepthLevel(price="50000.0", quantity="x")
-    assert "quantity" in str(exc_info.value).lower() or "numeric" in str(exc_info.value).lower()
+    assert (
+        "quantity" in str(exc_info.value).lower()
+        or "numeric" in str(exc_info.value).lower()
+    )
 
 
 def test_depthupdate_symbol_validation_and_empty_lists():
@@ -159,4 +165,3 @@ def test_market_data_message_stream_validation_and_props():
     assert msg.is_depth is True
     assert msg.is_trade is False
     assert msg.is_ticker is False
-

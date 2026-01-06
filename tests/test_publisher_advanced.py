@@ -218,6 +218,7 @@ async def test_publisher_logger_initialization(publisher_config):
 @pytest.mark.asyncio
 async def test_publisher_start_exception_handling(publisher):
     """Test start() exception handling - covers lines 86-90."""
+
     # Mock _connect_to_nats to raise exception
     async def mock_connect():
         raise Exception("Connection failed")
@@ -289,6 +290,7 @@ async def test_publisher_publishing_loop_with_orders(publisher):
 
     # Add multiple orders to queue
     import uuid
+
     for i in range(3):
         order = TradeOrder(
             order_id=str(uuid.uuid4()),
@@ -332,6 +334,7 @@ async def test_publisher_publishing_loop_batch_timeout(publisher):
 
     # Add one order
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -365,6 +368,7 @@ async def test_publisher_publishing_loop_basic(publisher):
 
     # Add an order to queue
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -397,6 +401,7 @@ async def test_publisher_publishing_loop_exception_handling(publisher):
 
     # Add order to trigger batch publish
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -427,6 +432,7 @@ async def test_publish_orders_batch_exception_handling(publisher, mock_nats_clie
     publisher.nats_client.publish = AsyncMock(side_effect=Exception("Publish error"))
 
     import uuid
+
     orders = [
         TradeOrder(
             order_id=str(uuid.uuid4()),
@@ -455,6 +461,7 @@ async def test_publish_order_success(publisher, mock_nats_client):
     publisher.is_running = True
 
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -479,6 +486,7 @@ async def test_publish_order_exception_handling(publisher):
     publisher.order_queue.put = AsyncMock(side_effect=Exception("Queue full"))
 
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -505,6 +513,7 @@ async def test_publish_order_sync_success(publisher, mock_nats_client):
     publisher.is_running = True
 
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -530,6 +539,7 @@ async def test_publish_order_sync_exception_handling(publisher, mock_nats_client
     publisher.nats_client.publish = AsyncMock(side_effect=Exception("Publish failed"))
 
     import uuid
+
     order = TradeOrder(
         order_id=str(uuid.uuid4()),
         symbol="BTCUSDT",
@@ -589,6 +599,7 @@ async def test_get_queue_status(publisher):
     """Test get_queue_status method - covers line 481."""
     # Add some orders to queue
     import uuid
+
     for i in range(5):
         order = TradeOrder(
             order_id=str(uuid.uuid4()),

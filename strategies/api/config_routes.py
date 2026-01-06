@@ -3079,6 +3079,7 @@ async def validate_config(request: ConfigValidationRequest):
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
 
+
 # Service URLs for cross-service conflict detection
 SERVICE_URLS = {
     "tradeengine": os.getenv("TRADEENGINE_URL", "http://petrosa-tradeengine:8080"),

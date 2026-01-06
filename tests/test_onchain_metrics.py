@@ -111,7 +111,14 @@ async def test_onchain_rate_limiting_prevents_signal():
     # Seed minimal valid history/cache for BTC
     now = time.time()
     strategy.metrics_history["BTC"] = [
-        {"active_addresses": 1, "transaction_volume_btc": 1, "hash_rate_eh": 1, "exchange_inflow_btc": 0, "exchange_outflow_btc": 0, "timestamp": now - 25 * 3600}
+        {
+            "active_addresses": 1,
+            "transaction_volume_btc": 1,
+            "hash_rate_eh": 1,
+            "exchange_inflow_btc": 0,
+            "exchange_outflow_btc": 0,
+            "timestamp": now - 25 * 3600,
+        }
     ] * 24
     strategy.metrics_cache["BTC"] = strategy.metrics_history["BTC"][-1]
     # Mark last signal as just emitted -> enforce min interval
@@ -146,14 +153,16 @@ async def test_onchain_eth_ecosystem_growth_signal():
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": 800_000 + i * 15_000,  # > 10% growth
-            "transaction_volume_eth": 300_000 + i * 50_000,  # > 15% growth
-            "defi_tvl_usd": 50_000_000_000 + i * 1_000_000_000,  # > 5% growth
-            "exchange_inflow_eth": 50_000,
-            "exchange_outflow_eth": 60_000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 800_000 + i * 15_000,  # > 10% growth
+                "transaction_volume_eth": 300_000 + i * 50_000,  # > 15% growth
+                "defi_tvl_usd": 50_000_000_000 + i * 1_000_000_000,  # > 5% growth
+                "exchange_inflow_eth": 50_000,
+                "exchange_outflow_eth": 60_000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["ETH"] = history
     strategy.metrics_cache["ETH"] = history[-1]
 
@@ -213,14 +222,16 @@ async def test_onchain_calculate_growth_metrics_exception():
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": None,  # Invalid data
-            "transaction_volume_btc": None,
-            "hash_rate_eh": None,
-            "exchange_inflow_btc": None,
-            "exchange_outflow_btc": None,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": None,  # Invalid data
+                "transaction_volume_btc": None,
+                "hash_rate_eh": None,
+                "exchange_inflow_btc": None,
+                "exchange_outflow_btc": None,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["BTC"] = history
 
     result = strategy._calculate_growth_metrics("BTC")
@@ -245,14 +256,16 @@ async def test_onchain_signal_confidence_mapping():
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": 1_000_000 + i * 15_000,
-            "transaction_volume_btc": 500_000 + i * 80_000,
-            "hash_rate_eh": 200 + i * 2,
-            "exchange_inflow_btc": 1_000,
-            "exchange_outflow_btc": 2_000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 1_000_000 + i * 15_000,
+                "transaction_volume_btc": 500_000 + i * 80_000,
+                "hash_rate_eh": 200 + i * 2,
+                "exchange_inflow_btc": 1_000,
+                "exchange_outflow_btc": 2_000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["BTC"] = history
     strategy.metrics_cache["BTC"] = history[-1]
 
@@ -277,14 +290,16 @@ async def test_onchain_price_extraction_from_trade():
     history = []
     base_time = time.time() - (24 * 3600)
     for i in range(25):
-        history.append({
-            "active_addresses": 1_000_000 + i * 15_000,
-            "transaction_volume_btc": 500_000 + i * 80_000,
-            "hash_rate_eh": 200 + i * 2,
-            "exchange_inflow_btc": 1_000,
-            "exchange_outflow_btc": 2_000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 1_000_000 + i * 15_000,
+                "transaction_volume_btc": 500_000 + i * 80_000,
+                "hash_rate_eh": 200 + i * 2,
+                "exchange_inflow_btc": 1_000,
+                "exchange_outflow_btc": 2_000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
     strategy.metrics_history["BTC"] = history
     strategy.metrics_cache["BTC"] = history[-1]
 
@@ -344,15 +359,17 @@ async def test_onchain_history_trimming():
     history = []
     base_time = time.time() - (10 * 24 * 3600)  # 10 days ago
     for i in range(10 * 24 + 1):  # More than max_entries
-        history.append({
-            "active_addresses": 1000000,
-            "timestamp": base_time + i * 3600,
-        })
+        history.append(
+            {
+                "active_addresses": 1000000,
+                "timestamp": base_time + i * 3600,
+            }
+        )
 
     strategy._update_metrics_history("BTC", history[-1])
-    strategy._update_metrics_history("BTC", {"active_addresses": 1000000, "timestamp": time.time()})
+    strategy._update_metrics_history(
+        "BTC", {"active_addresses": 1000000, "timestamp": time.time()}
+    )
 
     # History should be trimmed to max_entries
     assert len(strategy.metrics_history["BTC"]) <= 7 * 24
-
-

@@ -37,7 +37,11 @@ def make_ticker(symbol: str) -> TickerData:
 
 
 def make_mdm(symbol: str) -> MarketDataMessage:
-    return MarketDataMessage(stream=f"{symbol.lower()}@ticker", data=make_ticker(symbol), timestamp=datetime.utcnow())
+    return MarketDataMessage(
+        stream=f"{symbol.lower()}@ticker",
+        data=make_ticker(symbol),
+        timestamp=datetime.utcnow(),
+    )
 
 
 @pytest.mark.asyncio
@@ -45,7 +49,10 @@ async def test_btc_dominance_high_buy_signal():
     strat = BitcoinDominanceStrategy()
     now = time.time()
     # Price history to allow fallback price usage if needed
-    strat.price_history["BTCUSDT"] = [{"timestamp": now - 3600, "price": 50000.0}, {"timestamp": now, "price": 51000.0}]
+    strat.price_history["BTCUSDT"] = [
+        {"timestamp": now - 3600, "price": 50000.0},
+        {"timestamp": now, "price": 51000.0},
+    ]
     # Dominance history for rising trend and past 24h change
     strat.dominance_history = [
         {"timestamp": now - (25 * 3600), "dominance": 60.0},
@@ -67,7 +74,10 @@ async def test_btc_dominance_low_sell_signal():
     strat = BitcoinDominanceStrategy()
     now = time.time()
     # Seed price history to ensure current price > 0
-    strat.price_history["BTCUSDT"] = [{"timestamp": now - 3600, "price": 48000.0}, {"timestamp": now, "price": 47500.0}]
+    strat.price_history["BTCUSDT"] = [
+        {"timestamp": now - 3600, "price": 48000.0},
+        {"timestamp": now, "price": 47500.0},
+    ]
     strat.dominance_history = [
         {"timestamp": now - (25 * 3600), "dominance": 45.0},
         {"timestamp": now - 1800, "dominance": 39.0},
@@ -86,7 +96,10 @@ async def test_btc_dominance_low_sell_signal():
 async def test_btc_dominance_momentum_signal():
     strat = BitcoinDominanceStrategy()
     now = time.time()
-    strat.price_history["BTCUSDT"] = [{"timestamp": now - 3600, "price": 50000.0}, {"timestamp": now, "price": 50500.0}]
+    strat.price_history["BTCUSDT"] = [
+        {"timestamp": now - 3600, "price": 50000.0},
+        {"timestamp": now, "price": 50500.0},
+    ]
     # Momentum change over 24h
     strat.dominance_history = [
         {"timestamp": now - (25 * 3600), "dominance": 40.0},
@@ -121,15 +134,15 @@ async def test_btc_dominance_process_market_data_full_flow():
     # Seed price history for BTC, ETH, BNB
     strat.price_history["BTCUSDT"] = [
         {"timestamp": now - 3600, "price": 50000.0},
-        {"timestamp": now, "price": 51000.0}
+        {"timestamp": now, "price": 51000.0},
     ]
     strat.price_history["ETHUSDT"] = [
         {"timestamp": now - 3600, "price": 3000.0},
-        {"timestamp": now, "price": 3100.0}
+        {"timestamp": now, "price": 3100.0},
     ]
     strat.price_history["BNBUSDT"] = [
         {"timestamp": now - 3600, "price": 400.0},
-        {"timestamp": now, "price": 410.0}
+        {"timestamp": now, "price": 410.0},
     ]
 
     # Seed dominance history
@@ -170,7 +183,7 @@ async def test_btc_dominance_price_extraction_from_trade():
     )
 
     # Add 'p' attribute using object.__setattr__ to bypass Pydantic validation
-    object.__setattr__(trade_data, 'p', "52000.0")
+    object.__setattr__(trade_data, "p", "52000.0")
 
     mdm = MarketDataMessage(
         stream="btcusdt@trade",
@@ -181,7 +194,10 @@ async def test_btc_dominance_price_extraction_from_trade():
     strat._update_price_history(mdm)
     # Price should be extracted and added to history (if 'p' attribute is found)
     # The code checks hasattr(data, 'p'), so this should work
-    assert "BTCUSDT" in strat.price_history or len(strat.price_history.get("BTCUSDT", [])) >= 0
+    assert (
+        "BTCUSDT" in strat.price_history
+        or len(strat.price_history.get("BTCUSDT", [])) >= 0
+    )
 
 
 @pytest.mark.asyncio
@@ -192,7 +208,11 @@ async def test_btc_dominance_price_history_cleanup():
 
     # Add old entries that should be cleaned up
     strat.price_history["BTCUSDT"] = [
-        {"timestamp": now - (30 * 3600), "price": 48000.0, "symbol": "BTCUSDT"},  # Too old
+        {
+            "timestamp": now - (30 * 3600),
+            "price": 48000.0,
+            "symbol": "BTCUSDT",
+        },  # Too old
         {"timestamp": now - 3600, "price": 50000.0, "symbol": "BTCUSDT"},  # Recent
         {"timestamp": now, "price": 51000.0, "symbol": "BTCUSDT"},  # Current
     ]
@@ -200,7 +220,7 @@ async def test_btc_dominance_price_history_cleanup():
     mdm = make_mdm("BTCUSDT")
     # Code checks for 'c' attribute (Binance format for close price)
     # Use object.__setattr__ to bypass Pydantic validation
-    object.__setattr__(mdm.data, 'c', "52000.0")  # Ensure price is extracted
+    object.__setattr__(mdm.data, "c", "52000.0")  # Ensure price is extracted
     strat._update_price_history(mdm)
 
     # Old entries should be removed (window_hours = 24, so cutoff is 25 hours ago)
@@ -248,7 +268,9 @@ async def test_btc_dominance_momentum_calculation():
     assert momentum == 0
 
     # Test with only one data point
-    momentum = strat._calculate_momentum([{"timestamp": now, "price": 50000.0}], window_start)
+    momentum = strat._calculate_momentum(
+        [{"timestamp": now, "price": 50000.0}], window_start
+    )
     assert momentum == 0
 
 
@@ -280,7 +302,7 @@ async def test_btc_dominance_momentum_negative_change():
     now = time.time()
     strat.price_history["BTCUSDT"] = [
         {"timestamp": now - 3600, "price": 50000.0},
-        {"timestamp": now, "price": 49000.0}
+        {"timestamp": now, "price": 49000.0},
     ]
 
     # Dominance declining significantly
@@ -348,7 +370,7 @@ async def test_btc_dominance_confidence_mapping_medium():
     now = time.time()
     strat.price_history["BTCUSDT"] = [
         {"timestamp": now - 3600, "price": 50000.0},
-        {"timestamp": now, "price": 50500.0}
+        {"timestamp": now, "price": 50500.0},
     ]
 
     # Create signal with medium confidence score
@@ -375,7 +397,7 @@ async def test_btc_dominance_price_from_history():
     # Price history but no ticker/trade price
     strat.price_history["BTCUSDT"] = [
         {"timestamp": now - 3600, "price": 50000.0},
-        {"timestamp": now, "price": 51000.0}
+        {"timestamp": now, "price": 51000.0},
     ]
 
     # Market data without price in ticker
@@ -402,5 +424,3 @@ async def test_btc_dominance_get_metrics():
     assert "strategy_name" in metrics
     assert "signals_generated" in metrics
     assert metrics["strategy_name"] == "btc_dominance"
-
-

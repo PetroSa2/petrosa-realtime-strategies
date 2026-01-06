@@ -25,6 +25,10 @@ from strategies.core.publisher import TradeOrderPublisher  # noqa: E402
 from strategies.health.server import HealthServer  # noqa: E402
 from strategies.utils.heartbeat import HeartbeatManager  # noqa: E402
 from strategies.utils.logger import setup_logging  # noqa: E402
+from strategies.utils.telemetry import (  # noqa: E402
+    flush_telemetry,
+    shutdown_telemetry,
+)
 
 # Initialize OpenTelemetry as early as possible
 try:
@@ -237,12 +241,39 @@ class StrategiesService:
                 "Configuration manager stopped", event_type="config_manager_stopped"
             )
 
+        # Flush telemetry data before shutdown to prevent data loss
+        self.logger.info("Flushing telemetry data...", event_type="telemetry_flush")
+        flush_telemetry(timeout_seconds=5.0)
+
+        # Shutdown telemetry providers
+        self.logger.info(
+            "Shutting down telemetry providers...", event_type="telemetry_shutdown"
+        )
+        shutdown_telemetry()
+
         self.logger.info("Service stopped gracefully", event_type="service_stopped")
 
 
 def signal_handler(signum, frame):
     """Handle shutdown signals."""
-    print(f"\nReceived signal {signum}, shutting down gracefully...")
+    signal_name = (
+        signal.Signals(signum).name if signum in signal.Signals else str(signum)
+    )
+    print(f"\nReceived {signal_name}, shutting down gracefully...")
+
+    # Flush telemetry data immediately on signal to prevent data loss
+    # This ensures telemetry is flushed even if the async shutdown doesn't complete
+    # Note: Blocking I/O here is acceptable because:
+    # 1. We're shutting down - no new requests will be processed
+    # 2. Kubernetes terminationGracePeriodSeconds (typically 30s) allows time for flush
+    # 3. The timeout (5s) is well within typical grace periods
+    # 4. This is a critical operation to prevent data loss
+    try:
+        flush_telemetry(timeout_seconds=5.0)
+        shutdown_telemetry()
+    except Exception as e:
+        print(f"⚠️  Error flushing telemetry during signal handler: {e}")
+
     if hasattr(signal_handler, "service"):
         signal_handler.service.shutdown_event.set()
 

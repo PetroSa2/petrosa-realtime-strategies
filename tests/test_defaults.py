@@ -51,4 +51,3 @@ class TestParameterValidation:
 
         # Should return None or empty dict
         assert schema is None or schema == {}
-

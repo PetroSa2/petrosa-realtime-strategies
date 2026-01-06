@@ -296,7 +296,9 @@ class TestIcebergDetectorStrategy:
         # Test when no iceberg is detected
         bids = [(50000.0, 1.0)]
         asks = [(50001.0, 1.0)]
-        signal = strategy.analyze("BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow())
+        signal = strategy.analyze(
+            "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+        )
         # Should return None when no iceberg detected
         assert signal is None or isinstance(signal, type(None))
 
