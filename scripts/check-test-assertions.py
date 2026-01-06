@@ -27,7 +27,9 @@ class TestAssertionChecker(ast.NodeVisitor):
 
     def __init__(self):
         self.has_assertion = False
-        self.test_functions: list[tuple[str, int, bool]] = []  # (name, line, has_assertion)
+        self.test_functions: list[
+            tuple[str, int, bool]
+        ] = []  # (name, line, has_assertion)
         self.current_test: Optional[str] = None
         self.current_line: int = 0
 
@@ -35,10 +37,10 @@ class TestAssertionChecker(ast.NodeVisitor):
         """Visit function definitions to find test functions."""
         # Check if this is a test function
         is_test = (
-            node.name.startswith('test_') or
-            node.name.endswith('_test') or
-            any(
-                isinstance(dec, ast.Name) and dec.id == 'pytest.mark.parametrize'
+            node.name.startswith("test_")
+            or node.name.endswith("_test")
+            or any(
+                isinstance(dec, ast.Name) and dec.id == "pytest.mark.parametrize"
                 for dec in node.decorator_list
             )
         )
@@ -74,13 +76,16 @@ class TestAssertionChecker(ast.NodeVisitor):
                     func = item.context_expr.func
 
                     # Check for pytest.raises
-                    if isinstance(func, ast.Attribute) and func.attr == 'raises':
+                    if isinstance(func, ast.Attribute) and func.attr == "raises":
                         # If assigns to variable, it's likely checking exception
                         if item.optional_vars is not None:
                             return True
 
                     # Check for unittest.mock.patch or similar
-                    if isinstance(func, ast.Attribute) and func.attr in ('patch', 'patch.object'):
+                    if isinstance(func, ast.Attribute) and func.attr in (
+                        "patch",
+                        "patch.object",
+                    ):
                         # Mock patches often used with assertions
                         return True
 
@@ -88,14 +93,14 @@ class TestAssertionChecker(ast.NodeVisitor):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute):
-                if func.attr.startswith('assert'):
+                if func.attr.startswith("assert"):
                     return True
 
         # Pattern 4: pytest.fail() - explicit failure
         if isinstance(node, ast.Call):
             func = node.func
-            if isinstance(func, ast.Attribute) and func.attr == 'fail':
-                if isinstance(func.value, ast.Name) and func.value.id == 'pytest':
+            if isinstance(func, ast.Attribute) and func.attr == "fail":
+                if isinstance(func.value, ast.Name) and func.value.id == "pytest":
                     return True
 
         return False
@@ -107,43 +112,46 @@ def find_test_files(paths: list[str] = None) -> list[str]:
         # Use provided paths
         test_files = []
         for path in paths:
-            if os.path.isfile(path) and path.endswith('.py'):
+            if os.path.isfile(path) and path.endswith(".py"):
                 # Check if it's a test file
                 filename = os.path.basename(path)
-                if filename.startswith('test_') or filename.endswith('_test.py'):
+                if filename.startswith("test_") or filename.endswith("_test.py"):
                     test_files.append(path)
         return test_files
 
     # Get staged files from git
     import subprocess
+
     try:
         result = subprocess.run(
-            ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACM'],
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
-        staged_files = result.stdout.strip().split('\n')
+        staged_files = result.stdout.strip().split("\n")
 
         # Filter to test files
         test_files = [
-            f for f in staged_files
-            if f.endswith('.py') and (
-                os.path.basename(f).startswith('test_') or
-                os.path.basename(f).endswith('_test.py') or
-                'test' in os.path.dirname(f).lower()
+            f
+            for f in staged_files
+            if f.endswith(".py")
+            and (
+                os.path.basename(f).startswith("test_")
+                or os.path.basename(f).endswith("_test.py")
+                or "test" in os.path.dirname(f).lower()
             )
         ]
         return test_files
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Git not available or not in a git repo - check current directory
         test_files = []
-        for root, dirs, files in os.walk('.'):
+        for root, dirs, files in os.walk("."):
             # Skip hidden directories
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
 
             for file in files:
-                if file.startswith('test_') and file.endswith('.py'):
+                if file.startswith("test_") and file.endswith(".py"):
                     test_files.append(os.path.join(root, file))
         return test_files
 
@@ -156,7 +164,7 @@ def check_file(filepath: str) -> tuple[bool, list[tuple[str, int]]]:
         (all_have_assertions, list_of_tests_without_assertions)
     """
     try:
-        with open(filepath, encoding='utf-8') as f:
+        with open(filepath, encoding="utf-8") as f:
             content = f.read()
 
         tree = ast.parse(content, filename=filepath)
@@ -165,7 +173,8 @@ def check_file(filepath: str) -> tuple[bool, list[tuple[str, int]]]:
 
         # Find tests without assertions
         tests_without = [
-            (name, line) for name, line, has_assert in checker.test_functions
+            (name, line)
+            for name, line, has_assert in checker.test_functions
             if not has_assert
         ]
 
@@ -215,11 +224,16 @@ def main():
             print(f"  {filepath}:{line} - {test_name}()", file=sys.stderr)
 
         print("", file=sys.stderr)
-        print("💡 All test functions must contain at least one assertion.", file=sys.stderr)
+        print(
+            "💡 All test functions must contain at least one assertion.",
+            file=sys.stderr,
+        )
         print("   Common patterns:", file=sys.stderr)
         print("   - assert statements", file=sys.stderr)
         print("   - pytest.raises(...) with variable assignment", file=sys.stderr)
-        print("   - unittest assertions (assertEqual, assertTrue, etc.)", file=sys.stderr)
+        print(
+            "   - unittest assertions (assertEqual, assertTrue, etc.)", file=sys.stderr
+        )
         print("   - pytest.fail()", file=sys.stderr)
 
         sys.exit(1)
@@ -228,6 +242,5 @@ def main():
     sys.exit(0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

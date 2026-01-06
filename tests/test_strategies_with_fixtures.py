@@ -24,7 +24,9 @@ class TestSpreadLiquidityWithFixtures:
         # Convert directly to tuple format expected by analyze method (skip DepthUpdate)
         bids_tuples = [(float(p), float(q)) for p, q in BTCUSDT_DEPTH_SNAPSHOT["bids"]]
         asks_tuples = [(float(p), float(q)) for p, q in BTCUSDT_DEPTH_SNAPSHOT["asks"]]
-        signal = strategy.analyze("BTCUSDT", bids=bids_tuples, asks=asks_tuples, timestamp=datetime.utcnow())
+        signal = strategy.analyze(
+            "BTCUSDT", bids=bids_tuples, asks=asks_tuples, timestamp=datetime.utcnow()
+        )
 
         # Normal spread shouldn't trigger
         if signal:
@@ -38,7 +40,12 @@ class TestSpreadLiquidityWithFixtures:
         for depth_data in BTCUSDT_WIDENING_SPREAD:
             bids_tuples = [(float(p), float(q)) for p, q in depth_data["bids"]]
             asks_tuples = [(float(p), float(q)) for p, q in depth_data["asks"]]
-            signal = strategy.analyze("BTCUSDT", bids=bids_tuples, asks=asks_tuples, timestamp=datetime.utcnow())
+            signal = strategy.analyze(
+                "BTCUSDT",
+                bids=bids_tuples,
+                asks=asks_tuples,
+                timestamp=datetime.utcnow(),
+            )
 
         # Should detect widening
         stats = strategy.get_statistics()
@@ -53,11 +60,18 @@ class TestSpreadLiquidityWithFixtures:
         for update_data in updates:
             bids_tuples = [(float(p), float(q)) for p, q in update_data["bids"]]
             asks_tuples = [(float(p), float(q)) for p, q in update_data["asks"]]
-            strategy.analyze(update_data["symbol"], bids=bids_tuples, asks=asks_tuples, timestamp=update_data["timestamp"])
+            strategy.analyze(
+                update_data["symbol"],
+                bids=bids_tuples,
+                asks=asks_tuples,
+                timestamp=update_data["timestamp"],
+            )
 
         stats = strategy.get_statistics()
         # SpreadLiquidityStrategy has different stats than IcebergDetectorStrategy
-        assert "signals_generated" in stats or "symbols_tracked" in stats  # Strategy tracks symbols
+        assert (
+            "signals_generated" in stats or "symbols_tracked" in stats
+        )  # Strategy tracks symbols
 
 
 class TestIcebergDetectorWithFixtures:
@@ -74,7 +88,9 @@ class TestIcebergDetectorWithFixtures:
             price = trade_data["price"]
             bids = [(price - 0.5, 1.0)]
             asks = [(price + 0.5, 1.0)]
-            signal = strategy.analyze("BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow())
+            signal = strategy.analyze(
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+            )
 
         # Should detect iceberg pattern
         stats = strategy.get_statistics()
@@ -88,11 +104,14 @@ class TestIcebergDetectorWithFixtures:
 
         # Random trades at different prices - simulate as orderbook updates
         import random
+
         for i in range(50):
             price = 50000.0 + random.uniform(-100, 100)
             bids = [(price - 0.5, random.uniform(0.01, 1.0))]
             asks = [(price + 0.5, random.uniform(0.01, 1.0))]
-            strategy.analyze("BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow())
+            strategy.analyze(
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+            )
 
         stats = strategy.get_statistics()
         # SpreadLiquidityStrategy has different stats than IcebergDetectorStrategy
@@ -110,7 +129,12 @@ class TestStrategyStateMaintenance:
         for update_data in generate_depth_updates("BTCUSDT", 50):
             bids_tuples = [(float(p), float(q)) for p, q in update_data["bids"]]
             asks_tuples = [(float(p), float(q)) for p, q in update_data["asks"]]
-            strategy.analyze(update_data["symbol"], bids=bids_tuples, asks=asks_tuples, timestamp=update_data["timestamp"])
+            strategy.analyze(
+                update_data["symbol"],
+                bids=bids_tuples,
+                asks=asks_tuples,
+                timestamp=update_data["timestamp"],
+            )
 
         # Verify state tracking
         stats = strategy.get_statistics()
@@ -123,11 +147,14 @@ class TestStrategyStateMaintenance:
 
         # Process 100 orderbook updates (simulating trades as orderbook changes)
         import random
+
         for i in range(100):
             price = 50000.0
             bids = [(price - 0.5, random.uniform(0.01, 0.5))]
             asks = [(price + 0.5, random.uniform(0.01, 0.5))]
-            strategy.analyze("BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow())
+            strategy.analyze(
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+            )
 
         stats = strategy.get_statistics()
         # SpreadLiquidityStrategy has different stats than IcebergDetectorStrategy
@@ -146,7 +173,12 @@ class TestStrategyPerformance:
         for update_data in updates:
             bids_tuples = [(float(p), float(q)) for p, q in update_data["bids"]]
             asks_tuples = [(float(p), float(q)) for p, q in update_data["asks"]]
-            strategy.analyze(update_data["symbol"], bids=bids_tuples, asks=asks_tuples, timestamp=update_data["timestamp"])
+            strategy.analyze(
+                update_data["symbol"],
+                bids=bids_tuples,
+                asks=asks_tuples,
+                timestamp=update_data["timestamp"],
+            )
 
         stats = strategy.get_statistics()
         # SpreadLiquidityStrategy has different stats than IcebergDetectorStrategy
@@ -157,11 +189,14 @@ class TestStrategyPerformance:
         strategy = IcebergDetectorStrategy()
 
         import random
+
         for i in range(1000):
             price = 50000.0 + random.uniform(-50, 50)
             bids = [(price - 0.5, random.uniform(0.01, 2.0))]
             asks = [(price + 0.5, random.uniform(0.01, 2.0))]
-            strategy.analyze("BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow())
+            strategy.analyze(
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+            )
 
         stats = strategy.get_statistics()
         # SpreadLiquidityStrategy has different stats than IcebergDetectorStrategy
@@ -182,8 +217,12 @@ class TestMultiSymbolProcessing:
             for update_data in updates:
                 bids_tuples = [(float(p), float(q)) for p, q in update_data["bids"]]
                 asks_tuples = [(float(p), float(q)) for p, q in update_data["asks"]]
-                strategy.analyze(update_data["symbol"], bids=bids_tuples, asks=asks_tuples, timestamp=update_data["timestamp"])
+                strategy.analyze(
+                    update_data["symbol"],
+                    bids=bids_tuples,
+                    asks=asks_tuples,
+                    timestamp=update_data["timestamp"],
+                )
 
         stats = strategy.get_statistics()
         assert stats["symbols_tracked"] == 3  # 3 symbols
-

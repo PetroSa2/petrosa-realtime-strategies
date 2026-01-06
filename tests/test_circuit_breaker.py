@@ -562,5 +562,3 @@ class TestCircuitBreakerStateTransitions:
         can_execute = cb._can_execute()
         assert can_execute
         assert cb.state == CircuitState.HALF_OPEN
-
-

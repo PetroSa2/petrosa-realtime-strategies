@@ -676,9 +676,15 @@ class TestSignalAggregation:
             aggregated_confidence_score=0.5,
             aggregated_confidence=SignalConfidence.MEDIUM,
             strategy_signals={
-                "s1": StrategySignal(signal=signal1, strategy_version="1.0", processing_time_ms=1.0),
-                "s2": StrategySignal(signal=signal2, strategy_version="1.0", processing_time_ms=1.0),
-                "s3": StrategySignal(signal=signal3, strategy_version="1.0", processing_time_ms=1.0),
+                "s1": StrategySignal(
+                    signal=signal1, strategy_version="1.0", processing_time_ms=1.0
+                ),
+                "s2": StrategySignal(
+                    signal=signal2, strategy_version="1.0", processing_time_ms=1.0
+                ),
+                "s3": StrategySignal(
+                    signal=signal3, strategy_version="1.0", processing_time_ms=1.0
+                ),
             },
             aggregation_method="consensus",
         )
@@ -825,4 +831,3 @@ class TestSignalMetrics:
         assert isinstance(distribution, dict)
         # Should have distribution data when signals exist
         assert len(distribution) > 0 or metrics.total_signals_generated == 2
-

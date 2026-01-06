@@ -73,10 +73,12 @@ async def test_consumer_processing_loop_exception(consumer):
 async def test_consumer_process_message_invalid_market_data(consumer):
     """Test _process_message with invalid market data - covers lines 358-368."""
     mock_msg = Mock()
-    mock_msg.data = json.dumps({
-        "stream": "btcusdt@depth@20ms",
-        "data": {}  # Invalid data
-    }).encode()
+    mock_msg.data = json.dumps(
+        {
+            "stream": "btcusdt@depth@20ms",
+            "data": {},  # Invalid data
+        }
+    ).encode()
 
     consumer._parse_market_data = Mock(return_value=None)  # Simulate invalid parse
 
@@ -90,18 +92,20 @@ async def test_consumer_process_message_success(consumer):
     from strategies.models.market_data import DepthLevel, DepthUpdate
 
     mock_msg = Mock()
-    mock_msg.data = json.dumps({
-        "stream": "btcusdt@depth@20ms",
-        "data": {
-            "e": "depthUpdate",
-            "E": int(datetime.utcnow().timestamp() * 1000),
-            "s": "BTCUSDT",
-            "U": 1,
-            "u": 1,
-            "b": [["50000.0", "1.0"]],
-            "a": [["50001.0", "1.0"]],
+    mock_msg.data = json.dumps(
+        {
+            "stream": "btcusdt@depth@20ms",
+            "data": {
+                "e": "depthUpdate",
+                "E": int(datetime.utcnow().timestamp() * 1000),
+                "s": "BTCUSDT",
+                "U": 1,
+                "u": 1,
+                "b": [["50000.0", "1.0"]],
+                "a": [["50001.0", "1.0"]],
+            },
         }
-    }).encode()
+    ).encode()
 
     # Mock successful parsing
     depth_data = DepthUpdate(
@@ -132,18 +136,20 @@ async def test_consumer_process_message_processing_error(consumer):
     from strategies.models.market_data import DepthLevel, DepthUpdate
 
     mock_msg = Mock()
-    mock_msg.data = json.dumps({
-        "stream": "btcusdt@depth@20ms",
-        "data": {
-            "e": "depthUpdate",
-            "E": int(datetime.utcnow().timestamp() * 1000),
-            "s": "BTCUSDT",
-            "U": 1,
-            "u": 1,
-            "b": [["50000.0", "1.0"]],
-            "a": [["50001.0", "1.0"]],
+    mock_msg.data = json.dumps(
+        {
+            "stream": "btcusdt@depth@20ms",
+            "data": {
+                "e": "depthUpdate",
+                "E": int(datetime.utcnow().timestamp() * 1000),
+                "s": "BTCUSDT",
+                "U": 1,
+                "u": 1,
+                "b": [["50000.0", "1.0"]],
+                "a": [["50001.0", "1.0"]],
+            },
         }
-    }).encode()
+    ).encode()
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
@@ -196,28 +202,30 @@ async def test_consumer_process_market_logic_strategies_list_signals(consumer):
     # Mock cross_exchange_spread to return list of signals
     if "cross_exchange_spread" in consumer.market_logic_strategies:
         strategy = consumer.market_logic_strategies["cross_exchange_spread"]
-        strategy.process_market_data = AsyncMock(return_value=[
-            Signal(
-                symbol="BTCUSDT",
-                signal_type=SignalType.BUY,
-                signal_action=SignalAction.OPEN_LONG,
-                confidence=SignalConfidence.HIGH,
-                confidence_score=0.85,
-                price=50000.0,
-                strategy_name="cross_exchange_spread",
-                signal_id="test-signal-12345",
-            ),
-            Signal(
-                symbol="BTCUSDT",
-                signal_type=SignalType.SELL,
-                signal_action=SignalAction.OPEN_SHORT,
-                confidence=SignalConfidence.MEDIUM,
-                confidence_score=0.65,
-                price=50000.0,
-                strategy_name="cross_exchange_spread",
-                signal_id="test-signal-67890",
-            ),
-        ])
+        strategy.process_market_data = AsyncMock(
+            return_value=[
+                Signal(
+                    symbol="BTCUSDT",
+                    signal_type=SignalType.BUY,
+                    signal_action=SignalAction.OPEN_LONG,
+                    confidence=SignalConfidence.HIGH,
+                    confidence_score=0.85,
+                    price=50000.0,
+                    strategy_name="cross_exchange_spread",
+                    signal_id="test-signal-12345",
+                ),
+                Signal(
+                    symbol="BTCUSDT",
+                    signal_type=SignalType.SELL,
+                    signal_action=SignalAction.OPEN_SHORT,
+                    confidence=SignalConfidence.MEDIUM,
+                    confidence_score=0.65,
+                    price=50000.0,
+                    strategy_name="cross_exchange_spread",
+                    signal_id="test-signal-67890",
+                ),
+            ]
+        )
 
     await consumer._process_market_logic_strategies(market_data)
     # Should handle list of signals
@@ -357,4 +365,3 @@ async def test_consumer_publish_market_logic_signals_error(consumer):
 
     await consumer._publish_market_logic_signals(signals)
     # Should handle error gracefully
-
