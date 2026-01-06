@@ -21,6 +21,7 @@ Additionally, this service exposes a **Runtime Configuration API** for live para
 
 - **Ecosystem Architecture**: See master § System Architecture Overview → Signal Generation Layer
 - **Work Tracking**: See master § Centralized Work Tracking with GitHub Projects
+- **GitHub CLI Profile**: See master § Prerequisites & Installation → GitHub CLI Profile Configuration (CRITICAL: Always use `yurisa2` profile)
 - **NATS Topics**: See master § NATS Message Bus → `binance.websocket.data` (input), `signals.trading` (output)
 - **Deployment Patterns**: See master § Realtime Strategies Configuration
 - **Scaling Strategy**: See master § Deployment Patterns (horizontal scaling via NATS consumer groups)
