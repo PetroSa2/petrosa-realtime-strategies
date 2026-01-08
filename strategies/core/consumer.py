@@ -371,6 +371,18 @@ class NATSConsumer:
                     message_type = market_data.stream_type or "unknown"
                     symbol = market_data.symbol or "UNKNOWN"
 
+                    # Add business context attributes for observability
+                    span.set_attribute("symbol", symbol)
+                    # Extract interval/timeframe from stream if available (e.g., "btcusdt@ticker_1s", "btcusdt@depth5@100ms")
+                    if market_data.stream:
+                        stream_parts = market_data.stream.split("@")
+                        if len(stream_parts) > 1:
+                            # Extract timeframe/interval from stream (e.g., "100ms", "1s", "5m")
+                            interval_match = stream_parts[-1]
+                            if interval_match:
+                                span.set_attribute("interval", interval_match)
+                                span.set_attribute("timeframe", interval_match)
+
                     # Record message type received
                     self.metrics.record_message_type(message_type)
 
@@ -774,67 +786,88 @@ class NATSConsumer:
 
         Compatible with existing Petrosa trade engine format.
         """
-        # Map signal to order action
-        if signal.signal_action == "OPEN_LONG":
-            action = "buy"
-        elif signal.signal_action == "OPEN_SHORT":
-            action = "sell"
-        else:
-            action = signal.signal_type.lower()  # BUY -> buy, SELL -> sell
+        # Create span for order conversion with business context
+        with tracer.start_as_current_span("consumer.signal_to_order") as span:
+            # Add business context attributes for signal
+            span.set_attribute("symbol", signal.symbol)
+            span.set_attribute("signal.type", signal.signal_type.value)
+            span.set_attribute("signal.strength", signal.confidence_score)
+            span.set_attribute("strategy.name", signal.strategy_name)
 
-        # CRITICAL FIX: Calculate stop_loss and take_profit based on risk management parameters
-        current_price = signal.price
+            # Map signal to order action
+            if signal.signal_action == "OPEN_LONG":
+                action = "buy"
+            elif signal.signal_action == "OPEN_SHORT":
+                action = "sell"
+            else:
+                action = signal.signal_type.lower()  # BUY -> buy, SELL -> sell
 
-        # Get risk management parameters from constants
-        stop_loss_pct = (
-            constants.RISK_STOP_LOSS_PERCENT / 100.0
-        )  # Convert from percentage to decimal
-        take_profit_pct = constants.RISK_TAKE_PROFIT_PERCENT / 100.0
+            # CRITICAL FIX: Calculate stop_loss and take_profit based on risk management parameters
+            current_price = signal.price
 
-        # Calculate stop_loss and take_profit based on action
-        if action == "buy":
-            # For LONG positions
-            stop_loss = current_price * (1 - stop_loss_pct)
-            take_profit = current_price * (1 + take_profit_pct)
-        else:  # action == "sell"
-            # For SHORT positions
-            stop_loss = current_price * (1 + stop_loss_pct)
-            take_profit = current_price * (1 - take_profit_pct)
+            # Get risk management parameters from constants
+            stop_loss_pct = (
+                constants.RISK_STOP_LOSS_PERCENT / 100.0
+            )  # Convert from percentage to decimal
+            take_profit_pct = constants.RISK_TAKE_PROFIT_PERCENT / 100.0
 
-        # Create order in trade engine format
-        order = {
-            "strategy_id": f"market_logic_{signal.strategy_name}",
-            "strategy_mode": "deterministic",  # Market logic uses deterministic rules
-            "symbol": signal.symbol,
-            "action": action,
-            "confidence": signal.confidence_score,
-            "current_price": current_price,
-            "order_type": "market",  # Market orders for quick execution
-            "position_size_pct": 0.05,  # 5% position size for market logic signals
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
-            "metadata": {
-                **signal.metadata,
-                "signal_source": "market_logic",
-                "original_signal_type": signal.signal_type,
-                "original_signal_action": signal.signal_action,
-                "stop_loss_pct": stop_loss_pct * 100,
-                "take_profit_pct": take_profit_pct * 100,
-            },
-        }
+            # Calculate stop_loss and take_profit based on action
+            if action == "buy":
+                # For LONG positions
+                stop_loss = current_price * (1 - stop_loss_pct)
+                take_profit = current_price * (1 + take_profit_pct)
+            else:  # action == "sell"
+                # For SHORT positions
+                stop_loss = current_price * (1 + stop_loss_pct)
+                take_profit = current_price * (1 - take_profit_pct)
 
-        self.logger.info(
-            "Signal converted to order with risk management",
-            symbol=signal.symbol,
-            action=action,
-            price=current_price,
-            stop_loss=stop_loss,
-            take_profit=take_profit,
-            sl_pct=f"{stop_loss_pct*100:.2f}%",
-            tp_pct=f"{take_profit_pct*100:.2f}%",
-        )
+            # Calculate order quantity percentage
+            position_size_pct = 0.05  # 5% position size for market logic signals
 
-        return order
+            # Add order business context attributes
+            span.set_attribute("order.side", action)
+            span.set_attribute("order.quantity_pct", position_size_pct)
+            span.set_attribute("order.stop_loss", stop_loss)
+            span.set_attribute("order.take_profit", take_profit)
+            span.set_attribute("order.current_price", current_price)
+
+            # Create order in trade engine format
+            order = {
+                "strategy_id": f"market_logic_{signal.strategy_name}",
+                "strategy_mode": "deterministic",  # Market logic uses deterministic rules
+                "symbol": signal.symbol,
+                "action": action,
+                "confidence": signal.confidence_score,
+                "current_price": current_price,
+                "order_type": "market",  # Market orders for quick execution
+                "position_size_pct": position_size_pct,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "metadata": {
+                    **signal.metadata,
+                    "signal_source": "market_logic",
+                    "original_signal_type": signal.signal_type,
+                    "original_signal_action": signal.signal_action,
+                    "stop_loss_pct": stop_loss_pct * 100,
+                    "take_profit_pct": take_profit_pct * 100,
+                },
+            }
+
+            span.set_attribute("order.created", True)
+            span.set_attribute("result", "success")
+
+            self.logger.info(
+                "Signal converted to order with risk management",
+                symbol=signal.symbol,
+                action=action,
+                price=current_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                sl_pct=f"{stop_loss_pct*100:.2f}%",
+                tp_pct=f"{take_profit_pct*100:.2f}%",
+            )
+
+            return order
 
     def _update_processing_metrics(self, processing_time: float) -> None:
         """Update processing time metrics."""
