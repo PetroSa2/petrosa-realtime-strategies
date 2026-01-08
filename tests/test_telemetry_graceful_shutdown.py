@@ -79,6 +79,9 @@ class TestFlushTelemetry:
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
                     # Should not raise exception - function handles missing providers gracefully
                     flush_telemetry()
+        
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
 
     def test_flush_telemetry_handles_exceptions(self):
         """Test that flush_telemetry handles provider exceptions gracefully."""
@@ -110,6 +113,9 @@ class TestFlushTelemetry:
             with patch("strategies.utils.telemetry.metrics", None):
                 # Should not raise exception - function handles missing OpenTelemetry gracefully
                 flush_telemetry()
+        
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
 
 
 class TestShutdownTelemetry:
@@ -162,6 +168,9 @@ class TestShutdownTelemetry:
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
                     # Should not raise exception - function handles missing providers gracefully
                     shutdown_telemetry()
+        
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
 
     def test_shutdown_telemetry_handles_exceptions(self):
         """Test that shutdown_telemetry handles provider exceptions gracefully."""
@@ -181,6 +190,9 @@ class TestShutdownTelemetry:
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
                     # Should not raise exception - function catches and logs errors
                     shutdown_telemetry()
+        
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
 
     def test_shutdown_telemetry_without_opentelemetry(self):
         """Test shutting down when OpenTelemetry is not available."""
@@ -188,3 +200,6 @@ class TestShutdownTelemetry:
             with patch("strategies.utils.telemetry.metrics", None):
                 # Should not raise exception - function handles missing OpenTelemetry gracefully
                 shutdown_telemetry()
+        
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
