@@ -206,9 +206,9 @@ async def test_consumer_handles_missing_trace_context(
     """Test graceful fallback when trace context is missing"""
     # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
     current_provider = trace.get_tracer_provider()
-    if isinstance(current_provider, TracerProvider):
-        # Ensure our exporter is added (it might already be from conftest.py or fixture)
-        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
+    # Ensure exporter is attached (adding multiple times is safe)
+    current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
     msg = create_nats_message(market_data_without_trace)
 
@@ -364,9 +364,9 @@ async def test_end_to_end_trace_propagation(
 
         # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
         current_provider = trace.get_tracer_provider()
-        if isinstance(current_provider, TracerProvider):
-            # Ensure our exporter is added (it might already be from conftest.py or fixture)
-            current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+        assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
+        # Ensure exporter is attached (adding multiple times is safe)
+        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
         # Now simulate consumer receiving the message
         # Create NATS message from published data
