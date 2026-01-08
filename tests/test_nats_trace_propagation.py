@@ -27,16 +27,35 @@ from strategies.models.signals import Signal, SignalAction, SignalConfidence, Si
 @pytest.fixture(scope="session")
 def span_exporter():
     """In-memory span exporter for testing"""
+    # Use the span exporter from conftest.py if available
+    try:
+        import sys
+        conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
+        if conftest and hasattr(conftest, "_test_span_exporter"):
+            exporter = conftest._test_span_exporter
+            if exporter is not None:
+                return exporter
+    except Exception:
+        pass
+    # Fallback: create new exporter (but this won't capture spans if tracer provider was already set)
     return InMemorySpanExporter()
 
 
 @pytest.fixture(scope="session")
 def tracer_provider(span_exporter):
-    """Configure tracer provider with in-memory exporter"""
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    trace.set_tracer_provider(provider)
-    return provider
+    """Get the configured tracer provider with in-memory exporter"""
+    # Use the tracer provider from conftest.py if available
+    try:
+        import sys
+        conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
+        if conftest and hasattr(conftest, "_test_tracer_provider"):
+            provider = conftest._test_tracer_provider
+            if provider is not None:
+                return provider
+    except Exception:
+        pass
+    # Fallback: return current provider (may not capture spans if already set)
+    return trace.get_tracer_provider()
 
 
 @pytest.fixture(autouse=True)

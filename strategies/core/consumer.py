@@ -48,6 +48,9 @@ from strategies.utils.metrics import (
 )
 
 # OpenTelemetry tracer
+# Note: get_tracer() returns a tracer that uses the current tracer provider
+# dynamically, so spans created later will use whatever provider is current
+# at the time the span is created, not when the tracer was obtained.
 tracer = trace.get_tracer(__name__)
 
 

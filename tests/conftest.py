@@ -2,6 +2,36 @@
 Pytest configuration and fixtures for Petrosa Realtime Strategies tests.
 """
 
+# Set up OpenTelemetry tracer provider BEFORE any imports that use it
+# This ensures test spans are captured correctly
+_test_span_exporter = None
+_test_tracer_provider = None
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    # Set up tracer provider early, before any test imports
+    # Check if provider is already a TracerProvider (not a ProxyTracerProvider)
+    current_provider = trace.get_tracer_provider()
+    if not isinstance(current_provider, TracerProvider):
+        # Provider not set yet, set it up
+        _test_span_exporter = InMemorySpanExporter()
+        _test_tracer_provider = TracerProvider()
+        _test_tracer_provider.add_span_processor(SimpleSpanProcessor(_test_span_exporter))
+        try:
+            trace.set_tracer_provider(_test_tracer_provider)
+        except Exception:
+            # Provider already set by another import, use current one
+            _test_tracer_provider = current_provider
+except ImportError:
+    # OpenTelemetry not available - skip setup
+    pass
+
 from unittest.mock import Mock
 
 import pytest
