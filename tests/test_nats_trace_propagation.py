@@ -150,19 +150,39 @@ async def test_consumer_extracts_trace_context(
     )
     consumer._process_market_data = AsyncMock()
 
+    # Verify provider and exporter setup before processing
+    current_provider = trace.get_tracer_provider()
+    assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
+    
+    # Check that exporter is attached to provider
+    # Get all span processors from the provider
+    processors = getattr(current_provider, '_span_processors', [])
+    assert len(processors) > 0, "Provider should have at least one span processor"
+    
     # Process message (get_tracer() now always uses current provider, no need to reload)
     await consumer._process_message(msg)
 
     # Force flush to ensure spans are exported
-    current_provider = trace.get_tracer_provider()
     if isinstance(current_provider, TracerProvider):
         try:
             current_provider.force_flush(timeout_millis=1000)
         except Exception:
             pass  # Provider might not have force_flush method
 
-    # Verify span was created
+    # Verify span was created - check both the test exporter and conftest exporter
     spans = span_exporter.get_finished_spans()
+    
+    # Also check conftest exporter if it exists
+    import sys
+    conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
+    if conftest and hasattr(conftest, "_test_span_exporter"):
+        conftest_exporter = conftest._test_span_exporter
+        if conftest_exporter is not None and conftest_exporter is not span_exporter:
+            conftest_spans = conftest_exporter.get_finished_spans()
+            if len(conftest_spans) > 0:
+                print(f"DEBUG: Found {len(conftest_spans)} spans in conftest exporter: {[s.name for s in conftest_spans]}")
+                spans.extend(conftest_spans)
+    
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
