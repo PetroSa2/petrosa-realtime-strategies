@@ -134,18 +134,22 @@ async def test_consumer_extracts_trace_context(
     consumer, market_data_with_trace, span_exporter, tracer_provider
 ):
     """Test that consumer extracts trace context from messages"""
-    # Ensure tracer provider is set up for this test (in case it wasn't set early enough)
-    # OpenTelemetry tracers are lazy, so they'll use the current provider when creating spans
+    # Ensure tracer provider is set up for this test
+    # If provider is already set (e.g., by conftest.py), add our exporter to it
     current_provider = trace.get_tracer_provider()
-    if not isinstance(current_provider, TracerProvider):
-        # Provider not set yet, set it up now
+    if isinstance(current_provider, TracerProvider):
+        # Provider already set, add our exporter to it so spans are captured
+        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    else:
+        # Provider not set yet, create new one
         provider = TracerProvider()
         provider.add_span_processor(SimpleSpanProcessor(span_exporter))
         try:
             trace.set_tracer_provider(provider)
         except Exception:
-            # Provider already set, use current one
-            pass
+            # Provider was set between check and set, add exporter to it
+            if isinstance(trace.get_tracer_provider(), TracerProvider):
+                trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
     msg = create_nats_message(market_data_with_trace)
 
@@ -181,17 +185,22 @@ async def test_consumer_handles_missing_trace_context(
     consumer, market_data_without_trace, span_exporter, tracer_provider
 ):
     """Test graceful fallback when trace context is missing"""
-    # Ensure tracer provider is set up for this test (in case it wasn't set early enough)
+    # Ensure tracer provider is set up for this test
+    # If provider is already set (e.g., by conftest.py), add our exporter to it
     current_provider = trace.get_tracer_provider()
-    if not isinstance(current_provider, TracerProvider):
-        # Provider not set yet, set it up now
+    if isinstance(current_provider, TracerProvider):
+        # Provider already set, add our exporter to it so spans are captured
+        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    else:
+        # Provider not set yet, create new one
         provider = TracerProvider()
         provider.add_span_processor(SimpleSpanProcessor(span_exporter))
         try:
             trace.set_tracer_provider(provider)
         except Exception:
-            # Provider already set, use current one
-            pass
+            # Provider was set between check and set, add exporter to it
+            if isinstance(trace.get_tracer_provider(), TracerProvider):
+                trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
     msg = create_nats_message(market_data_without_trace)
 
@@ -337,17 +346,22 @@ async def test_end_to_end_trace_propagation(
                     f"root={root_trace_id}"
                 )
 
-        # Ensure tracer provider is set up for consumer spans (in case it wasn't set early enough)
+        # Ensure tracer provider is set up for consumer spans
+        # If provider is already set (e.g., by conftest.py), add our exporter to it
         current_provider = trace.get_tracer_provider()
-        if not isinstance(current_provider, TracerProvider):
-            # Provider not set yet, set it up now
+        if isinstance(current_provider, TracerProvider):
+            # Provider already set, add our exporter to it so spans are captured
+            current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+        else:
+            # Provider not set yet, create new one
             provider = TracerProvider()
             provider.add_span_processor(SimpleSpanProcessor(span_exporter))
             try:
                 trace.set_tracer_provider(provider)
             except Exception:
-                # Provider already set, use current one
-                pass
+                # Provider was set between check and set, add exporter to it
+                if isinstance(trace.get_tracer_provider(), TracerProvider):
+                    trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
         # Now simulate consumer receiving the message
         # Create NATS message from published data

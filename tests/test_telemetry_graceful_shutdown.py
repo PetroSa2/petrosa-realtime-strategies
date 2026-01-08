@@ -79,7 +79,7 @@ class TestFlushTelemetry:
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
                     # Should not raise exception - function handles missing providers gracefully
                     flush_telemetry()
-        
+
         # Verify the function completed without errors
         assert True  # Test passes if no exception was raised
 
@@ -113,7 +113,7 @@ class TestFlushTelemetry:
             with patch("strategies.utils.telemetry.metrics", None):
                 # Should not raise exception - function handles missing OpenTelemetry gracefully
                 flush_telemetry()
-        
+
         # Verify the function completed without errors
         assert True  # Test passes if no exception was raised
 
@@ -168,7 +168,7 @@ class TestShutdownTelemetry:
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
                     # Should not raise exception - function handles missing providers gracefully
                     shutdown_telemetry()
-        
+
         # Verify the function completed without errors
         assert True  # Test passes if no exception was raised
 
@@ -190,7 +190,7 @@ class TestShutdownTelemetry:
                 with patch("strategies.utils.telemetry._global_logger_provider", None):
                     # Should not raise exception - function catches and logs errors
                     shutdown_telemetry()
-        
+
         # Verify the function completed without errors
         assert True  # Test passes if no exception was raised
 
@@ -200,6 +200,6 @@ class TestShutdownTelemetry:
             with patch("strategies.utils.telemetry.metrics", None):
                 # Should not raise exception - function handles missing OpenTelemetry gracefully
                 shutdown_telemetry()
-        
+
         # Verify the function completed without errors
         assert True  # Test passes if no exception was raised
