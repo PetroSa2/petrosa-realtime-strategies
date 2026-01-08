@@ -558,6 +558,7 @@ async def test_consumer_signal_to_order_conversion(consumer):
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
         InMemorySpanExporter,
     )
+
     from strategies.models.signals import (
         Signal,
         SignalAction,
@@ -566,10 +567,24 @@ async def test_consumer_signal_to_order_conversion(consumer):
     )
 
     # Setup in-memory span exporter for testing
+    # Note: If tracer provider is already set (e.g., by conftest.py), we can't override it
+    # Instead, we'll use the current provider and add our exporter to it
     span_exporter = InMemorySpanExporter()
-    tracer_provider = TracerProvider()
-    tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    trace.set_tracer_provider(tracer_provider)
+    current_provider = trace.get_tracer_provider()
+
+    if isinstance(current_provider, TracerProvider):
+        # Provider already set, add our exporter to it
+        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    else:
+        # Provider not set yet, create new one
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+        try:
+            trace.set_tracer_provider(tracer_provider)
+        except Exception:
+            # Provider already set by another test, use current one
+            if isinstance(trace.get_tracer_provider(), TracerProvider):
+                trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
     signal = Signal(
         symbol="BTCUSDT",

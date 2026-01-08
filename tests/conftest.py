@@ -2,6 +2,11 @@
 Pytest configuration and fixtures for Petrosa Realtime Strategies tests.
 """
 
+from unittest.mock import Mock
+
+import pytest
+import structlog
+
 # Set up OpenTelemetry tracer provider BEFORE any imports that use it
 # This ensures test spans are captured correctly
 _test_span_exporter = None
@@ -31,11 +36,6 @@ try:
 except ImportError:
     # OpenTelemetry not available - skip setup
     pass
-
-from unittest.mock import Mock
-
-import pytest
-import structlog
 
 
 @pytest.fixture

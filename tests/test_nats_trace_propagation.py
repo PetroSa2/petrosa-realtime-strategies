@@ -146,7 +146,7 @@ async def test_consumer_extracts_trace_context(
         except Exception:
             # Provider already set, use current one
             pass
-    
+
     msg = create_nats_message(market_data_with_trace)
 
     # Mock the parse and process methods
@@ -192,7 +192,7 @@ async def test_consumer_handles_missing_trace_context(
         except Exception:
             # Provider already set, use current one
             pass
-    
+
     msg = create_nats_message(market_data_without_trace)
 
     # Mock the parse and process methods
@@ -348,7 +348,7 @@ async def test_end_to_end_trace_propagation(
             except Exception:
                 # Provider already set, use current one
                 pass
-        
+
         # Now simulate consumer receiving the message
         # Create NATS message from published data
         consumer_msg = create_nats_message(published_data, subject="signals.trading")
