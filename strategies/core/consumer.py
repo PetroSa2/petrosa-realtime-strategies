@@ -47,18 +47,14 @@ from strategies.utils.metrics import (
     initialize_metrics,
 )
 
+
 # OpenTelemetry tracer - lazy-loaded to ensure it uses the current provider
 # Note: get_tracer() returns a tracer that uses the current tracer provider
-# dynamically, but we use a function to ensure it's called with the current provider
-# at the time spans are created, not when the module is imported.
-_tracer = None
-
+# dynamically. We always get a fresh tracer to ensure it uses the current provider
+# at the time spans are created, not when the module is imported or cached.
 def get_tracer():
-    """Get tracer, creating it if necessary with current provider."""
-    global _tracer
-    if _tracer is None:
-        _tracer = trace.get_tracer(__name__)
-    return _tracer
+    """Get tracer, always using current provider."""
+    return trace.get_tracer(__name__)
 
 
 class NATSConsumer:
