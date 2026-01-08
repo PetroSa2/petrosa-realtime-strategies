@@ -32,7 +32,10 @@ try:
             trace.set_tracer_provider(_test_tracer_provider)
         except Exception:
             # Provider already set by another import, use current one
-            _test_tracer_provider = current_provider
+            # IMPORTANT: Add exporter to the current provider (the one actually being used)
+            _test_tracer_provider = trace.get_tracer_provider()
+            if isinstance(_test_tracer_provider, TracerProvider):
+                _test_tracer_provider.add_span_processor(SimpleSpanProcessor(_test_span_exporter))
 except ImportError:
     # OpenTelemetry not available - skip setup
     pass
