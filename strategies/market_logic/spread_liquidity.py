@@ -16,11 +16,15 @@ from datetime import datetime
 from typing import Optional
 
 import structlog
+from opentelemetry import trace
 
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 from strategies.models.spread_metrics import SpreadEvent, SpreadMetrics, SpreadSnapshot
 
 logger = structlog.get_logger(__name__)
+
+# OpenTelemetry tracer for manual spans
+tracer = trace.get_tracer(__name__)
 
 
 class SpreadLiquidityStrategy:
@@ -123,40 +127,59 @@ class SpreadLiquidityStrategy:
         Returns:
             Signal if liquidity event detected, None otherwise
         """
-        if timestamp is None:
-            timestamp = datetime.utcnow()
+        with tracer.start_as_current_span("spread_liquidity.analyze") as span:
+            span.set_attribute("symbol", symbol)
+            span.set_attribute("bids_count", len(bids))
+            span.set_attribute("asks_count", len(asks))
 
-        # Validate inputs
-        if not bids or not asks:
+            if timestamp is None:
+                timestamp = datetime.utcnow()
+
+            # Validate inputs
+            if not bids or not asks:
+                span.set_attribute("result", "invalid_input")
+                return None
+
+            # Calculate spread metrics
+            metrics = self._calculate_spread_metrics(symbol, bids, asks, timestamp)
+            if not metrics:
+                span.set_attribute("result", "no_metrics")
+                return None
+
+            span.set_attribute("spread_bps", metrics.spread_bps)
+            span.set_attribute("mid_price", metrics.mid_price)
+
+            # Update history
+            self.spread_history[symbol].append(metrics)
+
+            # Need history for comparison
+            if len(self.spread_history[symbol]) < 3:
+                span.set_attribute("result", "insufficient_history")
+                return None
+
+            # Create snapshot with comparative metrics
+            snapshot = self._create_snapshot(symbol, metrics)
+            span.set_attribute("spread_ratio", snapshot.spread_ratio)
+            span.set_attribute("spread_velocity", snapshot.spread_velocity)
+
+            # Detect events
+            event = self._detect_event(symbol, snapshot, timestamp)
+            if event:
+                self.events_detected += 1
+                span.set_attribute("event_type", event.event_type)
+                span.set_attribute("event_confidence", event.confidence)
+
+                # Generate signal
+                signal = self._generate_signal(event, snapshot)
+                if signal:
+                    self.signals_generated += 1
+                    span.set_attribute("result", "signal_generated")
+                    span.set_attribute("signal_type", signal.signal_type.value)
+                    span.set_attribute("signal_confidence", signal.confidence_score)
+                    return signal
+
+            span.set_attribute("result", "no_signal")
             return None
-
-        # Calculate spread metrics
-        metrics = self._calculate_spread_metrics(symbol, bids, asks, timestamp)
-        if not metrics:
-            return None
-
-        # Update history
-        self.spread_history[symbol].append(metrics)
-
-        # Need history for comparison
-        if len(self.spread_history[symbol]) < 3:
-            return None
-
-        # Create snapshot with comparative metrics
-        snapshot = self._create_snapshot(symbol, metrics)
-
-        # Detect events
-        event = self._detect_event(symbol, snapshot, timestamp)
-        if event:
-            self.events_detected += 1
-
-            # Generate signal
-            signal = self._generate_signal(event, snapshot)
-            if signal:
-                self.signals_generated += 1
-                return signal
-
-        return None
 
     def _calculate_spread_metrics(
         self,
@@ -340,111 +363,147 @@ class SpreadLiquidityStrategy:
         self, event_type: str, snapshot: SpreadSnapshot, persistence: float
     ) -> float:
         """Calculate signal confidence based on event strength."""
-        confidence = self.base_confidence
+        with tracer.start_as_current_span("spread_liquidity.calculate_confidence") as span:
+            span.set_attribute("event_type", event_type)
+            span.set_attribute("persistence_seconds", persistence)
+            span.set_attribute("spread_ratio", snapshot.spread_ratio)
+            span.set_attribute("spread_velocity", snapshot.spread_velocity)
+            span.set_attribute("depth_reduction_pct", snapshot.depth_reduction_pct)
 
-        if event_type == "narrowing":
-            # Stronger signal with higher ratio and longer persistence
-            confidence += (snapshot.spread_ratio - self.spread_ratio_threshold) * 0.05
-            confidence += min(
-                0.10, persistence / 300.0 * 0.10
-            )  # Up to +0.10 for 5min persistence
+            confidence = self.base_confidence
 
-        elif event_type == "widening":
-            # Stronger signal with higher velocity and depth reduction
-            confidence += abs(snapshot.spread_velocity) * 0.10
-            confidence += snapshot.depth_reduction_pct * 0.15
+            if event_type == "narrowing":
+                # Stronger signal with higher ratio and longer persistence
+                confidence += (snapshot.spread_ratio - self.spread_ratio_threshold) * 0.05
+                confidence += min(
+                    0.10, persistence / 300.0 * 0.10
+                )  # Up to +0.10 for 5min persistence
 
-        return min(0.95, confidence)
+            elif event_type == "widening":
+                # Stronger signal with higher velocity and depth reduction
+                confidence += abs(snapshot.spread_velocity) * 0.10
+                confidence += snapshot.depth_reduction_pct * 0.15
+
+            final_confidence = min(0.95, confidence)
+            span.set_attribute("confidence", final_confidence)
+            return final_confidence
 
     def _generate_signal(
         self, event: SpreadEvent, snapshot: SpreadSnapshot
     ) -> Signal | None:
         """Generate trading signal from spread event."""
-        # Rate limiting
-        current_time = time.time()
-        if event.symbol in self.last_signal_time:
-            time_since_last = current_time - self.last_signal_time[event.symbol]
-            if time_since_last < self.min_signal_interval:
-                logger.debug(
-                    "Signal rate limited",
-                    symbol=event.symbol,
-                    time_since_last=time_since_last,
-                )
+        with tracer.start_as_current_span("spread_liquidity.generate_signal") as span:
+            span.set_attribute("symbol", event.symbol)
+            span.set_attribute("event_type", event.event_type)
+            span.set_attribute("event_confidence", event.confidence)
+
+            # Rate limiting
+            current_time = time.time()
+            if event.symbol in self.last_signal_time:
+                time_since_last = current_time - self.last_signal_time[event.symbol]
+                if time_since_last < self.min_signal_interval:
+                    span.set_attribute("result", "rate_limited")
+                    span.set_attribute("time_since_last", time_since_last)
+                    logger.debug(
+                        "Signal rate limited",
+                        symbol=event.symbol,
+                        time_since_last=time_since_last,
+                    )
+                    return None
+
+            metrics = snapshot.metrics
+
+            # Determine signal type and action
+            if event.event_type == "narrowing":
+                signal_type = SignalType.BUY
+                signal_action = SignalAction.OPEN_LONG
+            elif event.event_type == "widening":
+                signal_type = SignalType.SELL
+                signal_action = SignalAction.OPEN_SHORT
+            else:
+                span.set_attribute("result", "unknown_event_type")
                 return None
 
-        metrics = snapshot.metrics
+            span.set_attribute("signal_type", signal_type.value)
+            span.set_attribute("signal_action", signal_action.value)
 
-        # Determine signal type and action
-        if event.event_type == "narrowing":
-            signal_type = SignalType.BUY
-            signal_action = SignalAction.OPEN_LONG
-        elif event.event_type == "widening":
-            signal_type = SignalType.SELL
-            signal_action = SignalAction.OPEN_SHORT
-        else:
-            return None
+            # Map confidence float to enum
+            confidence_score = event.confidence
+            if confidence_score >= 0.8:
+                confidence_level = SignalConfidence.HIGH
+            elif confidence_score >= 0.6:
+                confidence_level = SignalConfidence.MEDIUM
+            else:
+                confidence_level = SignalConfidence.LOW
 
-        # Map confidence float to enum
-        confidence_score = event.confidence
-        if confidence_score >= 0.8:
-            confidence_level = SignalConfidence.HIGH
-        elif confidence_score >= 0.6:
-            confidence_level = SignalConfidence.MEDIUM
-        else:
-            confidence_level = SignalConfidence.LOW
+            span.set_attribute("confidence_level", confidence_level.value)
 
-        # Calculate risk management levels
-        atr_proxy = metrics.spread_abs * 2  # Rough ATR approximation
+            # Calculate risk management levels
+            with tracer.start_as_current_span("spread_liquidity.calculate_risk_management") as risk_span:
+                risk_span.set_attribute("symbol", event.symbol)
+                risk_span.set_attribute("signal_type", signal_type.value)
+                risk_span.set_attribute("mid_price", metrics.mid_price)
+                risk_span.set_attribute("spread_abs", metrics.spread_abs)
 
-        if signal_type == SignalType.BUY:
-            stop_loss = metrics.mid_price - atr_proxy
-            take_profit = metrics.mid_price + (atr_proxy * 2)
-        else:  # SELL
-            stop_loss = metrics.mid_price + atr_proxy
-            take_profit = metrics.mid_price - (atr_proxy * 2)
+                atr_proxy = metrics.spread_abs * 2  # Rough ATR approximation
+                risk_span.set_attribute("atr_proxy", atr_proxy)
 
-        # Create signal with all required fields
-        signal = Signal(
-            symbol=event.symbol,
-            signal_type=signal_type,
-            signal_action=signal_action,
-            confidence=confidence_level,
-            confidence_score=confidence_score,
-            price=metrics.mid_price,
-            strategy_name="Spread Liquidity Monitor",
-            metadata={
-                "strategy_id": "spread_liquidity",
-                "event_type": event.event_type,
-                "reasoning": event.reasoning,
-                "persistence_seconds": event.duration_seconds,
-                "best_bid": metrics.best_bid,
-                "best_ask": metrics.best_ask,
-                "spread_bps": metrics.spread_bps,
-                "spread_ratio": snapshot.spread_ratio,
-                "spread_velocity": snapshot.spread_velocity,
-                "total_depth": metrics.total_depth,
-                "depth_reduction_pct": snapshot.depth_reduction_pct,
-                "stop_loss": stop_loss,
-                "take_profit": take_profit,
-                "quantity": 0.001,
-                "timeframe": "tick",
-            },
-        )
+                if signal_type == SignalType.BUY:
+                    stop_loss = metrics.mid_price - atr_proxy
+                    take_profit = metrics.mid_price + (atr_proxy * 2)
+                else:  # SELL
+                    stop_loss = metrics.mid_price + atr_proxy
+                    take_profit = metrics.mid_price - (atr_proxy * 2)
 
-        # Update last signal time
-        self.last_signal_time[event.symbol] = current_time
+                risk_span.set_attribute("stop_loss", stop_loss)
+                risk_span.set_attribute("take_profit", take_profit)
+                risk_span.set_attribute("risk_reward_ratio", (take_profit - metrics.mid_price) / (metrics.mid_price - stop_loss) if signal_type == SignalType.BUY else (metrics.mid_price - take_profit) / (stop_loss - metrics.mid_price))
 
-        logger.info(
-            f"Spread signal generated: {signal_type.value}",
-            symbol=event.symbol,
-            event_type=event.event_type,
-            confidence=confidence_level.value,
-            confidence_score=round(confidence_score, 2),
-            spread_bps=round(metrics.spread_bps, 2),
-            spread_ratio=round(snapshot.spread_ratio, 2),
-        )
+            # Create signal with all required fields
+            signal = Signal(
+                symbol=event.symbol,
+                signal_type=signal_type,
+                signal_action=signal_action,
+                confidence=confidence_level,
+                confidence_score=confidence_score,
+                price=metrics.mid_price,
+                strategy_name="Spread Liquidity Monitor",
+                metadata={
+                    "strategy_id": "spread_liquidity",
+                    "event_type": event.event_type,
+                    "reasoning": event.reasoning,
+                    "persistence_seconds": event.duration_seconds,
+                    "best_bid": metrics.best_bid,
+                    "best_ask": metrics.best_ask,
+                    "spread_bps": metrics.spread_bps,
+                    "spread_ratio": snapshot.spread_ratio,
+                    "spread_velocity": snapshot.spread_velocity,
+                    "total_depth": metrics.total_depth,
+                    "depth_reduction_pct": snapshot.depth_reduction_pct,
+                    "stop_loss": stop_loss,
+                    "take_profit": take_profit,
+                    "quantity": 0.001,
+                    "timeframe": "tick",
+                },
+            )
 
-        return signal
+            # Update last signal time
+            self.last_signal_time[event.symbol] = current_time
+
+            span.set_attribute("result", "signal_generated")
+            span.set_attribute("signal_type", signal_type.value)
+            span.set_attribute("confidence_score", confidence_score)
+            logger.info(
+                f"Spread signal generated: {signal_type.value}",
+                symbol=event.symbol,
+                event_type=event.event_type,
+                confidence=confidence_level.value,
+                confidence_score=round(confidence_score, 2),
+                spread_bps=round(metrics.spread_bps, 2),
+                spread_ratio=round(snapshot.spread_ratio, 2),
+            )
+
+            return signal
 
     def get_statistics(self) -> dict:
         """Get strategy statistics."""
