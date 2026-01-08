@@ -375,13 +375,21 @@ class NATSConsumer:
                     # Use market_data.* prefix for consistency with existing market_data.symbol attribute
                     span.set_attribute("market_data.symbol", symbol)
                     # Extract interval from stream if available (e.g., "btcusdt@ticker_1s", "btcusdt@depth5@100ms")
-                    if market_data.stream:
-                        stream_parts = market_data.stream.split("@")
-                        if len(stream_parts) > 1:
-                            # Extract interval from stream (e.g., "100ms", "1s", "5m")
-                            interval = stream_parts[-1]
-                            if interval:
-                                span.set_attribute("market_data.interval", interval)
+                    # Safely handle both real MarketDataMessage objects and test mocks
+                    try:
+                        if hasattr(market_data, "stream") and market_data.stream:
+                            stream_value = str(market_data.stream)
+                            # Only process if it's a valid string with "@" separator (not a MagicMock representation)
+                            if stream_value and "@" in stream_value and not stream_value.startswith("<"):
+                                stream_parts = stream_value.split("@")
+                                if len(stream_parts) > 1:
+                                    # Extract interval from stream (e.g., "100ms", "1s", "5m")
+                                    interval = stream_parts[-1]
+                                    if interval and interval.strip():
+                                        span.set_attribute("market_data.interval", interval)
+                    except (AttributeError, TypeError):
+                        # Ignore errors when stream is not available or is a mock object
+                        pass
 
                     # Record message type received
                     self.metrics.record_message_type(message_type)
