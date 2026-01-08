@@ -27,18 +27,19 @@ from strategies.models.signals import Signal, SignalAction, SignalConfidence, Si
 @pytest.fixture(scope="session")
 def span_exporter():
     """In-memory span exporter for testing"""
-    # Use the span exporter from conftest.py if available
-    try:
-        import sys
-        conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
-        if conftest and hasattr(conftest, "_test_span_exporter"):
-            exporter = conftest._test_span_exporter
-            if exporter is not None:
-                return exporter
-    except Exception:
-        pass
-    # Fallback: create new exporter (but this won't capture spans if tracer provider was already set)
-    return InMemorySpanExporter()
+    # Always use the span exporter from conftest.py - it's already set up with the provider
+    import sys
+    conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
+    if conftest and hasattr(conftest, "_test_span_exporter"):
+        exporter = conftest._test_span_exporter
+        if exporter is not None:
+            return exporter
+    # If conftest exporter not available, create new one and ensure it's added to provider
+    exporter = InMemorySpanExporter()
+    current_provider = trace.get_tracer_provider()
+    if isinstance(current_provider, TracerProvider):
+        current_provider.add_span_processor(SimpleSpanProcessor(exporter))
+    return exporter
 
 
 @pytest.fixture(scope="session")
@@ -134,22 +135,12 @@ async def test_consumer_extracts_trace_context(
     consumer, market_data_with_trace, span_exporter, tracer_provider
 ):
     """Test that consumer extracts trace context from messages"""
-    # Ensure tracer provider is set up for this test
-    # If provider is already set (e.g., by conftest.py), add our exporter to it
+    # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
     current_provider = trace.get_tracer_provider()
     if isinstance(current_provider, TracerProvider):
-        # Provider already set, add our exporter to it so spans are captured
+        # Ensure our exporter is added (it might already be from conftest.py or fixture)
+        # Check if it's already there by checking processors (or just add it - adding multiple times is safe)
         current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    else:
-        # Provider not set yet, create new one
-        provider = TracerProvider()
-        provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-        try:
-            trace.set_tracer_provider(provider)
-        except Exception:
-            # Provider was set between check and set, add exporter to it
-            if isinstance(trace.get_tracer_provider(), TracerProvider):
-                trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
     msg = create_nats_message(market_data_with_trace)
 
@@ -159,12 +150,7 @@ async def test_consumer_extracts_trace_context(
     )
     consumer._process_market_data = AsyncMock()
 
-    # Force the tracer to use the current provider (in case it was cached)
-    import strategies.core.consumer as consumer_module
-    # Reload tracer to ensure it uses the current provider
-    consumer_module.tracer = trace.get_tracer(consumer_module.__name__)
-
-    # Process message
+    # Process message (get_tracer() now always uses current provider, no need to reload)
     await consumer._process_message(msg)
 
     # Force flush to ensure spans are exported
@@ -198,22 +184,11 @@ async def test_consumer_handles_missing_trace_context(
     consumer, market_data_without_trace, span_exporter, tracer_provider
 ):
     """Test graceful fallback when trace context is missing"""
-    # Ensure tracer provider is set up for this test
-    # If provider is already set (e.g., by conftest.py), add our exporter to it
+    # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
     current_provider = trace.get_tracer_provider()
     if isinstance(current_provider, TracerProvider):
-        # Provider already set, add our exporter to it so spans are captured
+        # Ensure our exporter is added (it might already be from conftest.py or fixture)
         current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    else:
-        # Provider not set yet, create new one
-        provider = TracerProvider()
-        provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-        try:
-            trace.set_tracer_provider(provider)
-        except Exception:
-            # Provider was set between check and set, add exporter to it
-            if isinstance(trace.get_tracer_provider(), TracerProvider):
-                trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
     msg = create_nats_message(market_data_without_trace)
 
@@ -223,12 +198,7 @@ async def test_consumer_handles_missing_trace_context(
     )
     consumer._process_market_data = AsyncMock()
 
-    # Force the tracer to use the current provider (in case it was cached)
-    import strategies.core.consumer as consumer_module
-    # Reload tracer to ensure it uses the current provider
-    consumer_module.tracer = trace.get_tracer(consumer_module.__name__)
-
-    # Process message
+    # Process message (get_tracer() now always uses current provider, no need to reload)
     await consumer._process_message(msg)
 
     # Force flush to ensure spans are exported
@@ -372,22 +342,11 @@ async def test_end_to_end_trace_propagation(
                     f"root={root_trace_id}"
                 )
 
-        # Ensure tracer provider is set up for consumer spans
-        # If provider is already set (e.g., by conftest.py), add our exporter to it
+        # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
         current_provider = trace.get_tracer_provider()
         if isinstance(current_provider, TracerProvider):
-            # Provider already set, add our exporter to it so spans are captured
+            # Ensure our exporter is added (it might already be from conftest.py or fixture)
             current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-        else:
-            # Provider not set yet, create new one
-            provider = TracerProvider()
-            provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-            try:
-                trace.set_tracer_provider(provider)
-            except Exception:
-                # Provider was set between check and set, add exporter to it
-                if isinstance(trace.get_tracer_provider(), TracerProvider):
-                    trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
 
         # Now simulate consumer receiving the message
         # Create NATS message from published data
@@ -401,12 +360,8 @@ async def test_end_to_end_trace_propagation(
         )
         consumer._process_market_data = AsyncMock()
 
-        # Force the tracer to use the current provider (in case it was cached)
-        import strategies.core.consumer as consumer_module
-        # Reload tracer to ensure it uses the current provider
-        consumer_module.tracer = trace.get_tracer(consumer_module.__name__)
-
         # Process message in consumer (should extract trace context)
+        # get_tracer() now always uses current provider, no need to reload
         await consumer._process_message(consumer_msg)
 
         # Force flush to ensure spans are exported
