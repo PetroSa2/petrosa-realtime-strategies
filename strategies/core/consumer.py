@@ -774,67 +774,91 @@ class NATSConsumer:
 
         Compatible with existing Petrosa trade engine format.
         """
-        # Map signal to order action
-        if signal.signal_action == "OPEN_LONG":
-            action = "buy"
-        elif signal.signal_action == "OPEN_SHORT":
-            action = "sell"
-        else:
-            action = signal.signal_type.lower()  # BUY -> buy, SELL -> sell
+        with tracer.start_as_current_span("consumer.signal_to_order") as span:
+            span.set_attribute("symbol", signal.symbol)
+            span.set_attribute("signal_type", signal.signal_type.value if hasattr(signal.signal_type, 'value') else str(signal.signal_type))
+            span.set_attribute("strategy_name", signal.strategy_name)
 
-        # CRITICAL FIX: Calculate stop_loss and take_profit based on risk management parameters
-        current_price = signal.price
+            # Map signal to order action
+            if signal.signal_action == "OPEN_LONG":
+                action = "buy"
+            elif signal.signal_action == "OPEN_SHORT":
+                action = "sell"
+            else:
+                action = signal.signal_type.lower()  # BUY -> buy, SELL -> sell
 
-        # Get risk management parameters from constants
-        stop_loss_pct = (
-            constants.RISK_STOP_LOSS_PERCENT / 100.0
-        )  # Convert from percentage to decimal
-        take_profit_pct = constants.RISK_TAKE_PROFIT_PERCENT / 100.0
+            span.set_attribute("action", action)
 
-        # Calculate stop_loss and take_profit based on action
-        if action == "buy":
-            # For LONG positions
-            stop_loss = current_price * (1 - stop_loss_pct)
-            take_profit = current_price * (1 + take_profit_pct)
-        else:  # action == "sell"
-            # For SHORT positions
-            stop_loss = current_price * (1 + stop_loss_pct)
-            take_profit = current_price * (1 - take_profit_pct)
+            # CRITICAL FIX: Calculate stop_loss and take_profit based on risk management parameters
+            current_price = signal.price
+            span.set_attribute("current_price", current_price)
 
-        # Create order in trade engine format
-        order = {
-            "strategy_id": f"market_logic_{signal.strategy_name}",
-            "strategy_mode": "deterministic",  # Market logic uses deterministic rules
-            "symbol": signal.symbol,
-            "action": action,
-            "confidence": signal.confidence_score,
-            "current_price": current_price,
-            "order_type": "market",  # Market orders for quick execution
-            "position_size_pct": 0.05,  # 5% position size for market logic signals
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
-            "metadata": {
-                **signal.metadata,
-                "signal_source": "market_logic",
-                "original_signal_type": signal.signal_type,
-                "original_signal_action": signal.signal_action,
-                "stop_loss_pct": stop_loss_pct * 100,
-                "take_profit_pct": take_profit_pct * 100,
-            },
-        }
+            # Get risk management parameters from constants
+            stop_loss_pct = (
+                constants.RISK_STOP_LOSS_PERCENT / 100.0
+            )  # Convert from percentage to decimal
+            take_profit_pct = constants.RISK_TAKE_PROFIT_PERCENT / 100.0
 
-        self.logger.info(
-            "Signal converted to order with risk management",
-            symbol=signal.symbol,
-            action=action,
-            price=current_price,
-            stop_loss=stop_loss,
-            take_profit=take_profit,
-            sl_pct=f"{stop_loss_pct*100:.2f}%",
-            tp_pct=f"{take_profit_pct*100:.2f}%",
-        )
+            # Calculate risk management levels with manual span
+            with tracer.start_as_current_span("consumer.calculate_risk_management") as risk_span:
+                risk_span.set_attribute("symbol", signal.symbol)
+                risk_span.set_attribute("action", action)
+                risk_span.set_attribute("current_price", current_price)
+                risk_span.set_attribute("stop_loss_pct", stop_loss_pct)
+                risk_span.set_attribute("take_profit_pct", take_profit_pct)
 
-        return order
+                # Calculate stop_loss and take_profit based on action
+                if action == "buy":
+                    # For LONG positions
+                    stop_loss = current_price * (1 - stop_loss_pct)
+                    take_profit = current_price * (1 + take_profit_pct)
+                else:  # action == "sell"
+                    # For SHORT positions
+                    stop_loss = current_price * (1 + stop_loss_pct)
+                    take_profit = current_price * (1 - take_profit_pct)
+
+                risk_span.set_attribute("stop_loss", stop_loss)
+                risk_span.set_attribute("take_profit", take_profit)
+                risk_span.set_attribute("risk_reward_ratio", (take_profit - current_price) / (current_price - stop_loss) if action == "buy" else (current_price - take_profit) / (stop_loss - current_price))
+
+            span.set_attribute("stop_loss", stop_loss)
+            span.set_attribute("take_profit", take_profit)
+
+            # Create order in trade engine format
+            order = {
+                "strategy_id": f"market_logic_{signal.strategy_name}",
+                "strategy_mode": "deterministic",  # Market logic uses deterministic rules
+                "symbol": signal.symbol,
+                "action": action,
+                "confidence": signal.confidence_score,
+                "current_price": current_price,
+                "order_type": "market",  # Market orders for quick execution
+                "position_size_pct": 0.05,  # 5% position size for market logic signals
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "metadata": {
+                    **signal.metadata,
+                    "signal_source": "market_logic",
+                    "original_signal_type": signal.signal_type,
+                    "original_signal_action": signal.signal_action,
+                    "stop_loss_pct": stop_loss_pct * 100,
+                    "take_profit_pct": take_profit_pct * 100,
+                },
+            }
+
+            span.set_attribute("order_created", True)
+            self.logger.info(
+                "Signal converted to order with risk management",
+                symbol=signal.symbol,
+                action=action,
+                price=current_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                sl_pct=f"{stop_loss_pct*100:.2f}%",
+                tp_pct=f"{take_profit_pct*100:.2f}%",
+            )
+
+            return order
 
     def _update_processing_metrics(self, processing_time: float) -> None:
         """Update processing time metrics."""
