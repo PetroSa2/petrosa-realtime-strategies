@@ -16,10 +16,14 @@ from datetime import datetime
 from typing import Any, Optional
 
 import structlog
+from opentelemetry import trace
 
 import constants
 from strategies.models.market_data import MarketDataMessage
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+
+# OpenTelemetry tracer for manual spans
+tracer = trace.get_tracer(__name__)
 
 
 class BitcoinDominanceStrategy:
@@ -71,37 +75,49 @@ class BitcoinDominanceStrategy:
         Returns:
             Signal if dominance conditions are met, None otherwise
         """
-        try:
-            # Update price history (QTZD-style data accumulation)
-            self._update_price_history(market_data)
+        with tracer.start_as_current_span("btc_dominance.process_market_data") as span:
+            span.set_attribute("symbol", market_data.symbol or "UNKNOWN")
+            try:
+                # Update price history (QTZD-style data accumulation)
+                self._update_price_history(market_data)
 
-            # Calculate current Bitcoin dominance
-            current_dominance = await self._calculate_btc_dominance()
-            if current_dominance is None:
-                return None
+                # Calculate current Bitcoin dominance
+                current_dominance = await self._calculate_btc_dominance()
+                if current_dominance is None:
+                    span.set_attribute("result", "no_dominance_data")
+                    return None
 
-            # Update dominance history (QTZD-style time series)
-            self._update_dominance_history(current_dominance)
+                span.set_attribute("btc_dominance", current_dominance)
 
-            # Generate signal based on dominance analysis
-            signal = await self._generate_dominance_signal(
-                current_dominance, market_data
-            )
+                # Update dominance history (QTZD-style time series)
+                self._update_dominance_history(current_dominance)
 
-            if signal:
-                self.signals_generated += 1
-                self.logger.info(
-                    "Bitcoin dominance signal generated",
-                    signal_type=signal.signal_type,
-                    dominance=current_dominance,
-                    confidence=signal.confidence_score,
+                # Generate signal based on dominance analysis
+                signal = await self._generate_dominance_signal(
+                    current_dominance, market_data
                 )
 
-            return signal
+                if signal:
+                    self.signals_generated += 1
+                    span.set_attribute("result", "signal_generated")
+                    span.set_attribute("signal_type", signal.signal_type.value)
+                    span.set_attribute("signal_confidence", signal.confidence_score)
+                    self.logger.info(
+                        "Bitcoin dominance signal generated",
+                        signal_type=signal.signal_type,
+                        dominance=current_dominance,
+                        confidence=signal.confidence_score,
+                    )
+                else:
+                    span.set_attribute("result", "no_signal")
 
-        except Exception as e:
-            self.logger.error("Error processing Bitcoin dominance data", error=str(e))
-            return None
+                return signal
+
+            except Exception as e:
+                span.set_attribute("error", str(e))
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                self.logger.error("Error processing Bitcoin dominance data", error=str(e))
+                return None
 
     def _update_price_history(self, market_data: MarketDataMessage) -> None:
         """Update price history for dominance calculation."""
@@ -138,43 +154,61 @@ class BitcoinDominanceStrategy:
         Simplified calculation using price momentum as proxy for market cap changes.
         In production, this would use actual market cap data.
         """
-        try:
-            # Get recent prices for BTC and major altcoins
-            btc_data = self.price_history.get("BTCUSDT", [])
-            eth_data = self.price_history.get("ETHUSDT", [])
-            bnb_data = self.price_history.get("BNBUSDT", [])
+        with tracer.start_as_current_span("btc_dominance.calculate_dominance") as span:
+            try:
+                # Get recent prices for BTC and major altcoins
+                btc_data = self.price_history.get("BTCUSDT", [])
+                eth_data = self.price_history.get("ETHUSDT", [])
+                bnb_data = self.price_history.get("BNBUSDT", [])
 
-            if not btc_data or len(btc_data) < 2:
+                span.set_attribute("btc_data_points", len(btc_data))
+                span.set_attribute("eth_data_points", len(eth_data) if eth_data else 0)
+                span.set_attribute("bnb_data_points", len(bnb_data) if bnb_data else 0)
+
+                if not btc_data or len(btc_data) < 2:
+                    span.set_attribute("result", "insufficient_data")
+                    return None
+
+                current_time = time.time()
+                window_start = current_time - (self.window_hours * 3600)
+                span.set_attribute("window_hours", self.window_hours)
+
+                # Calculate price momentum for each asset
+                btc_momentum = self._calculate_momentum(btc_data, window_start)
+                eth_momentum = (
+                    self._calculate_momentum(eth_data, window_start) if eth_data else 0
+                )
+                bnb_momentum = (
+                    self._calculate_momentum(bnb_data, window_start) if bnb_data else 0
+                )
+
+                span.set_attribute("btc_momentum", btc_momentum)
+                span.set_attribute("eth_momentum", eth_momentum)
+                span.set_attribute("bnb_momentum", bnb_momentum)
+
+                # Simplified dominance calculation
+                # In reality, this would use actual market caps
+                total_momentum = btc_momentum + eth_momentum + bnb_momentum
+                if total_momentum <= 0:
+                    span.set_attribute("result", "invalid_momentum")
+                    return None
+
+                # Calculate dominance proxy (normalized between 30-80%)
+                btc_ratio = btc_momentum / total_momentum if total_momentum > 0 else 0.5
+                dominance_proxy = 30 + (btc_ratio * 50)  # Scale to 30-80% range
+
+                span.set_attribute("btc_ratio", btc_ratio)
+                span.set_attribute("dominance_proxy", dominance_proxy)
+                span.set_attribute("result", "success")
+
+                self.last_dominance_calculation = dominance_proxy
+                return dominance_proxy
+
+            except Exception as e:
+                span.set_attribute("error", str(e))
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                self.logger.error("Error calculating BTC dominance", error=str(e))
                 return None
-
-            current_time = time.time()
-            window_start = current_time - (self.window_hours * 3600)
-
-            # Calculate price momentum for each asset
-            btc_momentum = self._calculate_momentum(btc_data, window_start)
-            eth_momentum = (
-                self._calculate_momentum(eth_data, window_start) if eth_data else 0
-            )
-            bnb_momentum = (
-                self._calculate_momentum(bnb_data, window_start) if bnb_data else 0
-            )
-
-            # Simplified dominance calculation
-            # In reality, this would use actual market caps
-            total_momentum = btc_momentum + eth_momentum + bnb_momentum
-            if total_momentum <= 0:
-                return None
-
-            # Calculate dominance proxy (normalized between 30-80%)
-            btc_ratio = btc_momentum / total_momentum if total_momentum > 0 else 0.5
-            dominance_proxy = 30 + (btc_ratio * 50)  # Scale to 30-80% range
-
-            self.last_dominance_calculation = dominance_proxy
-            return dominance_proxy
-
-        except Exception as e:
-            self.logger.error("Error calculating BTC dominance", error=str(e))
-            return None
 
     def _calculate_momentum(
         self, price_data: list[dict[str, Any]], window_start: float
@@ -223,103 +257,118 @@ class BitcoinDominanceStrategy:
 
         Uses QTZD-style thresholds and rate limiting.
         """
-        # Rate limiting (QTZD-style minimum intervals)
-        if self.last_signal_time:
-            time_since_last = datetime.utcnow() - self.last_signal_time
-            if time_since_last.total_seconds() < self.min_signal_interval:
-                return None
+        with tracer.start_as_current_span("btc_dominance.generate_signal") as span:
+            span.set_attribute("symbol", market_data.symbol or "UNKNOWN")
+            span.set_attribute("current_dominance", current_dominance)
+            span.set_attribute("high_threshold", self.high_threshold)
+            span.set_attribute("low_threshold", self.low_threshold)
 
-        # Calculate dominance trend
-        dominance_trend = self._calculate_dominance_trend()
-        dominance_change_24h = self._calculate_dominance_change_24h()
+            # Rate limiting (QTZD-style minimum intervals)
+            if self.last_signal_time:
+                time_since_last = datetime.utcnow() - self.last_signal_time
+                if time_since_last.total_seconds() < self.min_signal_interval:
+                    span.set_attribute("result", "rate_limited")
+                    span.set_attribute("time_since_last", time_since_last.total_seconds())
+                    return None
 
-        signal = None
+            # Calculate dominance trend
+            dominance_trend = self._calculate_dominance_trend()
+            dominance_change_24h = self._calculate_dominance_change_24h()
+            span.set_attribute("dominance_trend", dominance_trend)
+            span.set_attribute("dominance_change_24h", dominance_change_24h)
 
-        # High dominance scenarios (QTZD-style threshold logic)
-        if current_dominance > self.high_threshold:
-            if (
-                dominance_trend == "rising"
-                or dominance_change_24h > self.change_threshold
-            ):
-                signal = self._create_signal(
-                    signal_type=SignalType.BUY,
-                    action=SignalAction.OPEN_LONG,
-                    symbol="BTCUSDT",  # Rotate TO Bitcoin
-                    confidence_score=0.8,
-                    reasoning=f"High BTC dominance ({current_dominance:.1f}%) with rising trend",
-                    market_data=market_data,
-                    metadata={
-                        "dominance": current_dominance,
-                        "trend": dominance_trend,
-                        "change_24h": dominance_change_24h,
-                        "strategy_type": "dominance_rotation",
-                        "rotation_direction": "to_btc",
-                    },
-                )
+            signal = None
 
-        # Low dominance scenarios (QTZD-style threshold logic)
-        elif current_dominance < self.low_threshold:
-            if (
-                dominance_trend == "falling"
-                or dominance_change_24h < -self.change_threshold
-            ):
-                # Alt season signal - this would ideally target specific altcoins
-                signal = self._create_signal(
-                    signal_type=SignalType.SELL,
-                    action=SignalAction.OPEN_SHORT,
-                    symbol="BTCUSDT",  # Rotate FROM Bitcoin (sell BTC)
-                    confidence_score=0.75,
-                    reasoning=f"Low BTC dominance ({current_dominance:.1f}%) - alt season",
-                    market_data=market_data,
-                    metadata={
-                        "dominance": current_dominance,
-                        "trend": dominance_trend,
-                        "change_24h": dominance_change_24h,
-                        "strategy_type": "dominance_rotation",
-                        "rotation_direction": "to_alts",
-                        "suggested_alts": ["ETHUSDT", "BNBUSDT"],
-                    },
-                )
+            # High dominance scenarios (QTZD-style threshold logic)
+            if current_dominance > self.high_threshold:
+                if (
+                    dominance_trend == "rising"
+                    or dominance_change_24h > self.change_threshold
+                ):
+                    signal = self._create_signal(
+                        signal_type=SignalType.BUY,
+                        action=SignalAction.OPEN_LONG,
+                        symbol="BTCUSDT",  # Rotate TO Bitcoin
+                        confidence_score=0.8,
+                        reasoning=f"High BTC dominance ({current_dominance:.1f}%) with rising trend",
+                        market_data=market_data,
+                        metadata={
+                            "dominance": current_dominance,
+                            "trend": dominance_trend,
+                            "change_24h": dominance_change_24h,
+                            "strategy_type": "dominance_rotation",
+                            "rotation_direction": "to_btc",
+                        },
+                    )
 
-        # Momentum-based signals (regardless of absolute level)
-        elif abs(dominance_change_24h) > self.change_threshold:
-            confidence = min(0.7, abs(dominance_change_24h) / 10)  # Scale confidence
+            # Low dominance scenarios (QTZD-style threshold logic)
+            elif current_dominance < self.low_threshold:
+                if (
+                    dominance_trend == "falling"
+                    or dominance_change_24h < -self.change_threshold
+                ):
+                    # Alt season signal - this would ideally target specific altcoins
+                    signal = self._create_signal(
+                        signal_type=SignalType.SELL,
+                        action=SignalAction.OPEN_SHORT,
+                        symbol="BTCUSDT",  # Rotate FROM Bitcoin (sell BTC)
+                        confidence_score=0.75,
+                        reasoning=f"Low BTC dominance ({current_dominance:.1f}%) - alt season",
+                        market_data=market_data,
+                        metadata={
+                            "dominance": current_dominance,
+                            "trend": dominance_trend,
+                            "change_24h": dominance_change_24h,
+                            "strategy_type": "dominance_rotation",
+                            "rotation_direction": "to_alts",
+                            "suggested_alts": ["ETHUSDT", "BNBUSDT"],
+                        },
+                    )
 
-            if dominance_change_24h > 0:  # BTC gaining dominance
-                signal = self._create_signal(
-                    signal_type=SignalType.BUY,
-                    action=SignalAction.OPEN_LONG,
-                    symbol="BTCUSDT",
-                    confidence_score=confidence,
-                    reasoning=f"BTC dominance momentum: {dominance_change_24h:.1f}% change",
-                    market_data=market_data,
-                    metadata={
-                        "dominance": current_dominance,
-                        "trend": dominance_trend,
-                        "change_24h": dominance_change_24h,
-                        "strategy_type": "dominance_momentum",
-                    },
-                )
-            else:  # BTC losing dominance
-                signal = self._create_signal(
-                    signal_type=SignalType.SELL,
-                    action=SignalAction.OPEN_SHORT,
-                    symbol="BTCUSDT",
-                    confidence_score=confidence,
-                    reasoning=f"BTC dominance decline: {dominance_change_24h:.1f}% change",
-                    market_data=market_data,
-                    metadata={
-                        "dominance": current_dominance,
-                        "trend": dominance_trend,
-                        "change_24h": dominance_change_24h,
-                        "strategy_type": "dominance_momentum",
-                    },
-                )
+            # Momentum-based signals (regardless of absolute level)
+            elif abs(dominance_change_24h) > self.change_threshold:
+                confidence = min(0.7, abs(dominance_change_24h) / 10)  # Scale confidence
 
-        if signal:
-            self.last_signal_time = datetime.utcnow()
+                if dominance_change_24h > 0:  # BTC gaining dominance
+                    signal = self._create_signal(
+                        signal_type=SignalType.BUY,
+                        action=SignalAction.OPEN_LONG,
+                        symbol="BTCUSDT",
+                        confidence_score=confidence,
+                        reasoning=f"BTC dominance momentum: {dominance_change_24h:.1f}% change",
+                        market_data=market_data,
+                        metadata={
+                            "dominance": current_dominance,
+                            "trend": dominance_trend,
+                            "change_24h": dominance_change_24h,
+                            "strategy_type": "dominance_momentum",
+                        },
+                    )
+                else:  # BTC losing dominance
+                    signal = self._create_signal(
+                        signal_type=SignalType.SELL,
+                        action=SignalAction.OPEN_SHORT,
+                        symbol="BTCUSDT",
+                        confidence_score=confidence,
+                        reasoning=f"BTC dominance decline: {dominance_change_24h:.1f}% change",
+                        market_data=market_data,
+                        metadata={
+                            "dominance": current_dominance,
+                            "trend": dominance_trend,
+                            "change_24h": dominance_change_24h,
+                            "strategy_type": "dominance_momentum",
+                        },
+                    )
 
-        return signal
+            if signal:
+                self.last_signal_time = datetime.utcnow()
+                span.set_attribute("result", "signal_generated")
+                span.set_attribute("signal_type", signal.signal_type.value)
+                span.set_attribute("signal_confidence", signal.confidence_score)
+            else:
+                span.set_attribute("result", "no_signal")
+
+            return signal
 
     def _calculate_dominance_trend(self) -> str:
         """Calculate dominance trend from history."""
