@@ -817,7 +817,7 @@ class NATSConsumer:
         - Consistent observability across the service
         """
         # Create span for order conversion with business context
-        with tracer.start_as_current_span("consumer.signal_to_order") as span:
+        with get_tracer().start_as_current_span("consumer.signal_to_order") as span:
             # Add business context attributes for signal
             # Use standardized dot-notation: signal.*, strategy.*, order.*
             span.set_attribute("symbol", signal.symbol)
