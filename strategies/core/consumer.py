@@ -47,11 +47,18 @@ from strategies.utils.metrics import (
     initialize_metrics,
 )
 
-# OpenTelemetry tracer
+# OpenTelemetry tracer - lazy-loaded to ensure it uses the current provider
 # Note: get_tracer() returns a tracer that uses the current tracer provider
-# dynamically, so spans created later will use whatever provider is current
-# at the time the span is created, not when the tracer was obtained.
-tracer = trace.get_tracer(__name__)
+# dynamically, but we use a function to ensure it's called with the current provider
+# at the time spans are created, not when the module is imported.
+_tracer = None
+
+def get_tracer():
+    """Get tracer, creating it if necessary with current provider."""
+    global _tracer
+    if _tracer is None:
+        _tracer = trace.get_tracer(__name__)
+    return _tracer
 
 
 class NATSConsumer:
@@ -341,7 +348,7 @@ class NATSConsumer:
                 ctx = None
 
             # Create span with extracted context for distributed tracing
-            with tracer.start_as_current_span(
+            with get_tracer().start_as_current_span(
                 "process_market_data_message",
                 context=ctx if ctx is not None else None,
                 kind=trace.SpanKind.CONSUMER,

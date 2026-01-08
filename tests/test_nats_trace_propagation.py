@@ -163,7 +163,7 @@ async def test_consumer_extracts_trace_context(
     import strategies.core.consumer as consumer_module
     # Reload tracer to ensure it uses the current provider
     consumer_module.tracer = trace.get_tracer(consumer_module.__name__)
-    
+
     # Process message
     await consumer._process_message(msg)
 
@@ -227,7 +227,7 @@ async def test_consumer_handles_missing_trace_context(
     import strategies.core.consumer as consumer_module
     # Reload tracer to ensure it uses the current provider
     consumer_module.tracer = trace.get_tracer(consumer_module.__name__)
-    
+
     # Process message
     await consumer._process_message(msg)
 
@@ -405,7 +405,7 @@ async def test_end_to_end_trace_propagation(
         import strategies.core.consumer as consumer_module
         # Reload tracer to ensure it uses the current provider
         consumer_module.tracer = trace.get_tracer(consumer_module.__name__)
-        
+
         # Process message in consumer (should extract trace context)
         await consumer._process_message(consumer_msg)
 
