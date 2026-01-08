@@ -552,12 +552,24 @@ async def test_consumer_process_market_logic_strategies_exception(consumer):
 @pytest.mark.asyncio
 async def test_consumer_signal_to_order_conversion(consumer):
     """Test _signal_to_order method - covers lines 758-760, 779, 781."""
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
     from strategies.models.signals import (
         Signal,
         SignalAction,
         SignalConfidence,
         SignalType,
     )
+
+    # Setup in-memory span exporter for testing
+    span_exporter = InMemorySpanExporter()
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    trace.set_tracer_provider(tracer_provider)
 
     signal = Signal(
         symbol="BTCUSDT",
@@ -566,7 +578,7 @@ async def test_consumer_signal_to_order_conversion(consumer):
         confidence=SignalConfidence.HIGH,
         confidence_score=0.85,
         price=50000.0,
-        strategy_name="test",
+        strategy_name="test_strategy",
         signal_id="test-signal-12345",
     )
 
@@ -577,6 +589,30 @@ async def test_consumer_signal_to_order_conversion(consumer):
     assert isinstance(order, dict)
     assert order["symbol"] == "BTCUSDT"
     assert order["action"] in ["buy", "sell"]
+
+    # Verify span attributes are set correctly
+    spans = span_exporter.get_finished_spans()
+    assert len(spans) > 0, "Expected at least one span from _signal_to_order"
+
+    # Find the signal_to_order span
+    signal_to_order_span = None
+    for span in spans:
+        if span.name == "consumer.signal_to_order":
+            signal_to_order_span = span
+            break
+
+    assert signal_to_order_span is not None, "Expected span 'consumer.signal_to_order' to exist"
+
+    # Verify business context attributes
+    attributes = signal_to_order_span.attributes
+    assert attributes.get("symbol") == "BTCUSDT", "Expected symbol attribute"
+    assert attributes.get("signal.type") == "BUY", "Expected signal.type attribute"
+    assert attributes.get("signal.strength") == 0.85, "Expected signal.strength attribute"
+    assert attributes.get("strategy.name") == "test_strategy", "Expected strategy.name attribute"
+    assert attributes.get("order.side") == "buy", "Expected order.side attribute"
+    assert attributes.get("order.quantity_pct") == 0.05, "Expected order.quantity_pct attribute"
+    assert attributes.get("order.created") is True, "Expected order.created attribute"
+    assert attributes.get("result") == "success", "Expected result attribute"
 
 
 @pytest.mark.asyncio

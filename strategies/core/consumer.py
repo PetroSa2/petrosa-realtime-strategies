@@ -372,16 +372,16 @@ class NATSConsumer:
                     symbol = market_data.symbol or "UNKNOWN"
 
                     # Add business context attributes for observability
-                    span.set_attribute("symbol", symbol)
-                    # Extract interval/timeframe from stream if available (e.g., "btcusdt@ticker_1s", "btcusdt@depth5@100ms")
+                    # Use market_data.* prefix for consistency with existing market_data.symbol attribute
+                    span.set_attribute("market_data.symbol", symbol)
+                    # Extract interval from stream if available (e.g., "btcusdt@ticker_1s", "btcusdt@depth5@100ms")
                     if market_data.stream:
                         stream_parts = market_data.stream.split("@")
                         if len(stream_parts) > 1:
-                            # Extract timeframe/interval from stream (e.g., "100ms", "1s", "5m")
-                            interval_match = stream_parts[-1]
-                            if interval_match:
-                                span.set_attribute("interval", interval_match)
-                                span.set_attribute("timeframe", interval_match)
+                            # Extract interval from stream (e.g., "100ms", "1s", "5m")
+                            interval = stream_parts[-1]
+                            if interval:
+                                span.set_attribute("market_data.interval", interval)
 
                     # Record message type received
                     self.metrics.record_message_type(message_type)
@@ -785,10 +785,23 @@ class NATSConsumer:
         Convert a market logic signal to a trade order format.
 
         Compatible with existing Petrosa trade engine format.
+
+        Span Attribute Naming Convention:
+        This method uses standardized dot-notation for business context attributes:
+        - signal.* attributes: signal.type, signal.strength (group signal-related context)
+        - strategy.* attributes: strategy.name (strategy identification)
+        - order.* attributes: order.side, order.quantity_pct, order.stop_loss, etc. (order context)
+        - symbol: Trading symbol (flat name for backward compatibility)
+
+        This naming convention helps with:
+        - Better filtering and grouping in Grafana traces
+        - Clear semantic grouping of related attributes
+        - Consistent observability across the service
         """
         # Create span for order conversion with business context
         with tracer.start_as_current_span("consumer.signal_to_order") as span:
             # Add business context attributes for signal
+            # Use standardized dot-notation: signal.*, strategy.*, order.*
             span.set_attribute("symbol", signal.symbol)
             span.set_attribute("signal.type", signal.signal_type.value)
             span.set_attribute("signal.strength", signal.confidence_score)
