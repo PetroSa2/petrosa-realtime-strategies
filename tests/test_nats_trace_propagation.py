@@ -162,12 +162,20 @@ async def test_consumer_extracts_trace_context(
     # Process message
     await consumer._process_message(msg)
 
+    # Force flush to ensure spans are exported
+    current_provider = trace.get_tracer_provider()
+    if isinstance(current_provider, TracerProvider):
+        try:
+            current_provider.force_flush(timeout_millis=1000)
+        except Exception:
+            pass  # Provider might not have force_flush method
+
     # Verify span was created
     spans = span_exporter.get_finished_spans()
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
-    assert consumer_span is not None
+    assert consumer_span is not None, f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
 
     # Verify trace ID exists (in CI, extract_trace_context may return None)
     actual_trace_id = format(consumer_span.context.trace_id, "032x")
@@ -213,12 +221,20 @@ async def test_consumer_handles_missing_trace_context(
     # Process message
     await consumer._process_message(msg)
 
+    # Force flush to ensure spans are exported
+    current_provider = trace.get_tracer_provider()
+    if isinstance(current_provider, TracerProvider):
+        try:
+            current_provider.force_flush(timeout_millis=1000)
+        except Exception:
+            pass  # Provider might not have force_flush method
+
     # Verify span was created (with new trace)
     spans = span_exporter.get_finished_spans()
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
-    assert consumer_span is not None
+    assert consumer_span is not None, f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
 
 
 @pytest.mark.asyncio
@@ -378,12 +394,20 @@ async def test_end_to_end_trace_propagation(
         # Process message in consumer (should extract trace context)
         await consumer._process_message(consumer_msg)
 
+        # Force flush to ensure spans are exported
+        current_provider = trace.get_tracer_provider()
+        if isinstance(current_provider, TracerProvider):
+            try:
+                current_provider.force_flush(timeout_millis=1000)
+            except Exception:
+                pass  # Provider might not have force_flush method
+
         # Verify consumer span was created
         spans = span_exporter.get_finished_spans()
         consumer_span = next(
             (s for s in spans if s.name == "process_market_data_message"), None
         )
-        assert consumer_span is not None, "Consumer span should be created"
+        assert consumer_span is not None, f"Consumer span should be created. Found spans: {[s.name for s in spans]}"
 
         # Verify trace ID is preserved (consumer span should have same trace ID as root)
         consumer_trace_id = format(consumer_span.context.trace_id, "032x")
