@@ -334,11 +334,9 @@ async def test_span_marked_as_error_on_exception(
 async def test_end_to_end_trace_propagation(
     publisher, consumer, span_exporter, tracer_provider
 ):
-    """
     NOTE: This test is marked as xfail due to OpenTelemetry infrastructure issues
     in the test environment. The span creation logic works correctly, but spans
     are not being exported to the InMemorySpanExporter in CI.
-    
     """
     Test end-to-end trace propagation: publisher injects, consumer extracts, trace ID preserved.
 
