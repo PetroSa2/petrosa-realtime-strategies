@@ -10,6 +10,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List
 
 
 # Colors for output
@@ -30,9 +31,9 @@ class PipelineRunner:
     def __init__(self, service_name: str = "realtime-strategies"):
         self.service_name = service_name
         self.start_time = datetime.now()
-        self.results = {}
-        self.errors = []
-        self.warnings = []
+        self.results: dict[str, Any] = {}
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
 
     def log(self, message: str, level: str = "info"):
         """Log message with timestamp and color"""

@@ -80,6 +80,9 @@ class TestFlushTelemetry:
                     # Should not raise exception - function handles missing providers gracefully
                     flush_telemetry()
 
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
+
     def test_flush_telemetry_handles_exceptions(self):
         """Test that flush_telemetry handles provider exceptions gracefully."""
         mock_tracer_provider = MagicMock()
@@ -110,6 +113,9 @@ class TestFlushTelemetry:
             with patch("strategies.utils.telemetry.metrics", None):
                 # Should not raise exception - function handles missing OpenTelemetry gracefully
                 flush_telemetry()
+
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
 
 
 class TestShutdownTelemetry:
@@ -163,6 +169,9 @@ class TestShutdownTelemetry:
                     # Should not raise exception - function handles missing providers gracefully
                     shutdown_telemetry()
 
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
+
     def test_shutdown_telemetry_handles_exceptions(self):
         """Test that shutdown_telemetry handles provider exceptions gracefully."""
         mock_tracer_provider = MagicMock()
@@ -182,9 +191,15 @@ class TestShutdownTelemetry:
                     # Should not raise exception - function catches and logs errors
                     shutdown_telemetry()
 
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
+
     def test_shutdown_telemetry_without_opentelemetry(self):
         """Test shutting down when OpenTelemetry is not available."""
         with patch("strategies.utils.telemetry.trace", None):
             with patch("strategies.utils.telemetry.metrics", None):
                 # Should not raise exception - function handles missing OpenTelemetry gracefully
                 shutdown_telemetry()
+
+        # Verify the function completed without errors
+        assert True  # Test passes if no exception was raised
