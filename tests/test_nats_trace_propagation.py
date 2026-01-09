@@ -166,8 +166,16 @@ async def test_consumer_extracts_trace_context(
         except Exception:
             pass  # Provider might not have force_flush method
 
+    # Debug: Check if spans were created but not exported
+    # Get the active span to see if one was created
+    from opentelemetry.trace import get_current_span
+    active_span = get_current_span()
+    if active_span and active_span.get_span_context().is_valid:
+        print(f"DEBUG: Active span found: {active_span.name}")
+
     # Verify span was created - check both the test exporter and conftest exporter
     spans = span_exporter.get_finished_spans()
+    print(f"DEBUG: Found {len(spans)} spans in test exporter: {[s.name for s in spans]}")
     
     # Also check conftest exporter if it exists
     import sys
