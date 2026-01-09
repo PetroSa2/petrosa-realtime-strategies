@@ -61,7 +61,13 @@ def tracer_provider(span_exporter):
 
 @pytest.fixture(autouse=True)
 def clear_spans(span_exporter):
-    """Clear spans before each test"""
+    """Clear spans before each test and ensure exporter is attached to provider"""
+    # Ensure exporter is attached to provider BEFORE clearing spans
+    # This ensures spans created during the test will be captured
+    current_provider = trace.get_tracer_provider()
+    if isinstance(current_provider, TracerProvider):
+        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    
     span_exporter.clear()
     yield
     span_exporter.clear()
