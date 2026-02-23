@@ -32,7 +32,10 @@ from strategies.utils.telemetry import (  # noqa: E402
 
 # Initialize OpenTelemetry as early as possible
 try:
-    from petrosa_otel import setup_telemetry  # noqa: E402
+    from petrosa_otel import (
+        ConfigRateLimiter,
+        setup_telemetry,
+    )
 
     if not os.getenv("OTEL_NO_AUTO_INIT"):
         setup_telemetry(
@@ -110,6 +113,15 @@ class StrategiesService:
                 cache_ttl_seconds=60,
             )
 
+            # Initialize and set configuration rate limiter
+            rate_limiter = ConfigRateLimiter(
+                mongodb_client=mongodb_client,
+                service_name="realtime-strategies",
+                per_agent_limit=int(os.getenv("CONFIG_RATE_LIMIT_PER_AGENT", "10")),
+                cooldown_seconds=int(os.getenv("CONFIG_RATE_LIMIT_COOLDOWN", "300")),
+            )
+            self.logger.info("Configuration rate limiter initialized")
+
             # Initialize depth analyzer for market metrics
             self.depth_analyzer = DepthAnalyzer(
                 history_window_seconds=900,  # 15 minutes
@@ -135,8 +147,9 @@ class StrategiesService:
                 depth_analyzer=self.depth_analyzer,  # NEW
             )
             await self.health_server.start()
+            self.health_server.set_rate_limiter(rate_limiter)
             self.logger.info(
-                "Health server started",
+                "Health server started and rate limiter registered",
                 event_type="health_server_started",
                 port=constants.HEALTH_CHECK_PORT,
             )

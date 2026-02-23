@@ -33,6 +33,12 @@ from strategies.api.metrics_routes import (
     set_depth_analyzer,
 )
 
+try:
+    from petrosa_otel import ConfigRateLimiter, config_rate_limit_middleware
+except ImportError:
+    ConfigRateLimiter = None
+    config_rate_limit_middleware = None
+
 # Prometheus metrics
 STRATEGY_SIGNALS_GENERATED = Counter(
     "strategy_signals_generated_total",
@@ -125,6 +131,11 @@ class HealthServer:
             version=constants.SERVICE_VERSION,
             lifespan=lifespan,
         )
+
+        # Register configuration rate limit middleware
+        if config_rate_limit_middleware:
+            self.app.middleware("http")(config_rate_limit_middleware)
+            self.logger.info("✅ Configuration rate limit middleware registered")
 
         # Instrument FastAPI for OpenTelemetry tracing
         try:
@@ -476,6 +487,11 @@ class HealthServer:
     def is_healthy(self) -> bool:
         """Check if the service is healthy."""
         return self.health_status.get("status") == "healthy"
+
+    def set_rate_limiter(self, limiter) -> None:
+        """Set the global rate limiter instance."""
+        self.app.state.rate_limiter = limiter
+        self.logger.info("✅ Rate limiter instance registered with health app")
 
     def _get_component_metrics(self) -> dict[str, Any]:
         """Get metrics from all service components."""
