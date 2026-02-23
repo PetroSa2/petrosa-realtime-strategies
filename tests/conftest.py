@@ -1,24 +1,22 @@
-import os
-import pytest
-
-# Disable OpenTelemetry auto-initialization during tests
-os.environ['OTEL_NO_AUTO_INIT'] = '1'
-os.environ['OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED'] = 'false'
-
-def pytest_configure(config):
-    """
-    Setup before any tests are run.
-    """
-    os.environ['OTEL_NO_AUTO_INIT'] = '1'
-
 """
 Pytest configuration and fixtures for Petrosa Realtime Strategies tests.
 """
 
+import os
 from unittest.mock import Mock
 
 import pytest
 import structlog
+
+# Disable OpenTelemetry auto-initialization during tests
+os.environ["OTEL_NO_AUTO_INIT"] = "1"
+os.environ["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "false"
+
+
+def pytest_configure(config):
+    """Setup before any tests are run."""
+    os.environ["OTEL_NO_AUTO_INIT"] = "1"
+
 
 # Set up OpenTelemetry tracer provider BEFORE any imports that use it
 # This ensures test spans are captured correctly
@@ -28,7 +26,9 @@ _test_tracer_provider = None
 try:
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export import (
+        SimpleSpanProcessor,
+    )
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
         InMemorySpanExporter,
     )
@@ -40,7 +40,9 @@ try:
         # Provider not set yet, set it up
         _test_span_exporter = InMemorySpanExporter()
         _test_tracer_provider = TracerProvider()
-        _test_tracer_provider.add_span_processor(SimpleSpanProcessor(_test_span_exporter))
+        _test_tracer_provider.add_span_processor(
+            SimpleSpanProcessor(_test_span_exporter)
+        )
         try:
             trace.set_tracer_provider(_test_tracer_provider)
         except Exception:
@@ -48,7 +50,9 @@ try:
             # IMPORTANT: Add exporter to the current provider (the one actually being used)
             _test_tracer_provider = trace.get_tracer_provider()
             if isinstance(_test_tracer_provider, TracerProvider):
-                _test_tracer_provider.add_span_processor(SimpleSpanProcessor(_test_span_exporter))
+                _test_tracer_provider.add_span_processor(
+                    SimpleSpanProcessor(_test_span_exporter)
+                )
 except ImportError:
     # OpenTelemetry not available - skip setup
     pass
