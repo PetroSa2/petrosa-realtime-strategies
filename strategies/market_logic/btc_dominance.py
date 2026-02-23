@@ -16,10 +16,17 @@ from datetime import datetime
 from typing import Any, Optional
 
 import structlog
+from opentelemetry import trace
 
 import constants
 from strategies.models.market_data import MarketDataMessage
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+
+
+# Get tracer for this module
+def get_tracer():
+    """Get tracer, always using current provider."""
+    return trace.get_tracer(__name__)
 
 
 class BitcoinDominanceStrategy:
@@ -71,37 +78,46 @@ class BitcoinDominanceStrategy:
         Returns:
             Signal if dominance conditions are met, None otherwise
         """
-        try:
-            # Update price history (QTZD-style data accumulation)
-            self._update_price_history(market_data)
+        with get_tracer().start_as_current_span("strategy.btc_dominance.process") as span:
+            span.set_attribute("symbol", market_data.symbol)
+            try:
+                # Update price history (QTZD-style data accumulation)
+                self._update_price_history(market_data)
 
-            # Calculate current Bitcoin dominance
-            current_dominance = await self._calculate_btc_dominance()
-            if current_dominance is None:
-                return None
+                # Calculate current Bitcoin dominance
+                current_dominance = await self._calculate_btc_dominance()
+                if current_dominance is None:
+                    span.set_attribute("result", "insufficient_data")
+                    return None
 
-            # Update dominance history (QTZD-style time series)
-            self._update_dominance_history(current_dominance)
+                # Update dominance history (QTZD-style time series)
+                self._update_dominance_history(current_dominance)
 
-            # Generate signal based on dominance analysis
-            signal = await self._generate_dominance_signal(
-                current_dominance, market_data
-            )
-
-            if signal:
-                self.signals_generated += 1
-                self.logger.info(
-                    "Bitcoin dominance signal generated",
-                    signal_type=signal.signal_type,
-                    dominance=current_dominance,
-                    confidence=signal.confidence_score,
+                # Generate signal based on dominance analysis
+                signal = await self._generate_dominance_signal(
+                    current_dominance, market_data
                 )
 
-            return signal
+                if signal:
+                    self.signals_generated += 1
+                    span.set_attribute("result", "signal_generated")
+                    span.set_attribute("signal.type", signal.signal_type.value)
+                    self.logger.info(
+                        "Bitcoin dominance signal generated",
+                        signal_type=signal.signal_type,
+                        dominance=current_dominance,
+                        confidence=signal.confidence_score,
+                    )
+                else:
+                    span.set_attribute("result", "no_signal")
 
-        except Exception as e:
-            self.logger.error("Error processing Bitcoin dominance data", error=str(e))
-            return None
+                return signal
+
+            except Exception as e:
+                self.logger.error("Error processing Bitcoin dominance data", error=str(e))
+                span.record_exception(e)
+                span.set_status(trace.Status(trace.StatusCode.ERROR))
+                return None
 
     def _update_price_history(self, market_data: MarketDataMessage) -> None:
         """Update price history for dominance calculation."""
@@ -138,43 +154,50 @@ class BitcoinDominanceStrategy:
         Simplified calculation using price momentum as proxy for market cap changes.
         In production, this would use actual market cap data.
         """
-        try:
-            # Get recent prices for BTC and major altcoins
-            btc_data = self.price_history.get("BTCUSDT", [])
-            eth_data = self.price_history.get("ETHUSDT", [])
-            bnb_data = self.price_history.get("BNBUSDT", [])
+        with get_tracer().start_as_current_span("strategy.btc_dominance.calculate") as span:
+            try:
+                # Get recent prices for BTC and major altcoins
+                btc_data = self.price_history.get("BTCUSDT", [])
+                eth_data = self.price_history.get("ETHUSDT", [])
+                bnb_data = self.price_history.get("BNBUSDT", [])
 
-            if not btc_data or len(btc_data) < 2:
+                span.set_attribute("data_points.btc", len(btc_data))
+                span.set_attribute("data_points.eth", len(eth_data))
+                span.set_attribute("data_points.bnb", len(bnb_data))
+
+                if not btc_data or len(btc_data) < 2:
+                    return None
+
+                current_time = time.time()
+                window_start = current_time - (self.window_hours * 3600)
+
+                # Calculate price momentum for each asset
+                btc_momentum = self._calculate_momentum(btc_data, window_start)
+                eth_momentum = (
+                    self._calculate_momentum(eth_data, window_start) if eth_data else 0
+                )
+                bnb_momentum = (
+                    self._calculate_momentum(bnb_data, window_start) if bnb_data else 0
+                )
+
+                # Simplified dominance calculation
+                # In reality, this would use actual market caps
+                total_momentum = btc_momentum + eth_momentum + bnb_momentum
+                if total_momentum <= 0:
+                    return None
+
+                # Calculate dominance proxy (normalized between 30-80%)
+                btc_ratio = btc_momentum / total_momentum if total_momentum > 0 else 0.5
+                dominance_proxy = 30 + (btc_ratio * 50)  # Scale to 30-80% range
+
+                self.last_dominance_calculation = dominance_proxy
+                return dominance_proxy
+
+            except Exception as e:
+                self.logger.error("Error calculating BTC dominance", error=str(e))
+                span.record_exception(e)
+                span.set_status(trace.Status(trace.StatusCode.ERROR))
                 return None
-
-            current_time = time.time()
-            window_start = current_time - (self.window_hours * 3600)
-
-            # Calculate price momentum for each asset
-            btc_momentum = self._calculate_momentum(btc_data, window_start)
-            eth_momentum = (
-                self._calculate_momentum(eth_data, window_start) if eth_data else 0
-            )
-            bnb_momentum = (
-                self._calculate_momentum(bnb_data, window_start) if bnb_data else 0
-            )
-
-            # Simplified dominance calculation
-            # In reality, this would use actual market caps
-            total_momentum = btc_momentum + eth_momentum + bnb_momentum
-            if total_momentum <= 0:
-                return None
-
-            # Calculate dominance proxy (normalized between 30-80%)
-            btc_ratio = btc_momentum / total_momentum if total_momentum > 0 else 0.5
-            dominance_proxy = 30 + (btc_ratio * 50)  # Scale to 30-80% range
-
-            self.last_dominance_calculation = dominance_proxy
-            return dominance_proxy
-
-        except Exception as e:
-            self.logger.error("Error calculating BTC dominance", error=str(e))
-            return None
 
     def _calculate_momentum(
         self, price_data: list[dict[str, Any]], window_start: float
