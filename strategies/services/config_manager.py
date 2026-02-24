@@ -43,7 +43,7 @@ class StrategyConfigManager:
 
     def __init__(
         self,
-        mongodb_client: Optional[MongoDBClient] = None,
+        mongodb_client: MongoDBClient | None = None,
         cache_ttl_seconds: int = 60,
     ):
         """
@@ -60,7 +60,7 @@ class StrategyConfigManager:
         self._cache: dict[str, tuple[dict[str, Any], float]] = {}
 
         # Background tasks
-        self._cache_refresh_task: Optional[asyncio.Task] = None
+        self._cache_refresh_task: asyncio.Task | None = None
         self._running = False
 
     async def start(self) -> None:
@@ -119,12 +119,12 @@ class StrategyConfigManager:
                 logger.error(f"Cache refresh loop error: {e}")
                 await asyncio.sleep(10)
 
-    def _make_cache_key(self, strategy_id: str, symbol: Optional[str]) -> str:
+    def _make_cache_key(self, strategy_id: str, symbol: str | None) -> str:
         """Generate cache key for config lookup."""
         symbol_part = symbol or "global"
         return f"{strategy_id}:{symbol_part}"
 
-    def _get_from_cache(self, cache_key: str) -> Optional[dict[str, Any]]:
+    def _get_from_cache(self, cache_key: str) -> dict[str, Any | None]:
         """Get configuration from cache if not expired."""
         if cache_key in self._cache:
             config, timestamp = self._cache[cache_key]
@@ -137,7 +137,7 @@ class StrategyConfigManager:
         self._cache[cache_key] = (config.copy(), time.time())
 
     async def get_config(
-        self, strategy_id: str, symbol: Optional[str] = None
+        self, strategy_id: str, symbol: str | None = None
     ) -> dict[str, Any]:
         """
         Get configuration for a strategy.
@@ -301,10 +301,10 @@ class StrategyConfigManager:
         strategy_id: str,
         parameters: dict[str, Any],
         changed_by: str,
-        symbol: Optional[str] = None,
-        reason: Optional[str] = None,
+        symbol: str | None = None,
+        reason: str | None = None,
         validate_only: bool = False,
-    ) -> tuple[bool, Optional[StrategyConfig], list[str]]:
+    ) -> tuple[bool, StrategyConfig | None, list[str]]:
         """
         Set strategy configuration.
 
@@ -423,10 +423,10 @@ class StrategyConfigManager:
         self,
         strategy_id: str,
         changed_by: str,
-        symbol: Optional[str] = None,
-        target_version: Optional[int] = None,
-        reason: Optional[str] = None,
-    ) -> tuple[bool, Optional[StrategyConfig], list[str]]:
+        symbol: str | None = None,
+        target_version: int | None = None,
+        reason: str | None = None,
+    ) -> tuple[bool, StrategyConfig | None, list[str]]:
         """
         Rollback strategy configuration to a previous version.
 
@@ -489,8 +489,8 @@ class StrategyConfigManager:
         self,
         strategy_id: str,
         changed_by: str,
-        symbol: Optional[str] = None,
-        reason: Optional[str] = None,
+        symbol: str | None = None,
+        reason: str | None = None,
     ) -> tuple[bool, list[str]]:
         """
         Delete strategy configuration.
@@ -603,7 +603,7 @@ class StrategyConfigManager:
     async def get_audit_trail(
         self,
         strategy_id: str,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         limit: int = 100,
     ) -> list[StrategyConfigAudit]:
         """

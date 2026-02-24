@@ -37,11 +37,11 @@ logger = logging.getLogger(__name__)
 class RollbackRequest(BaseModel):
     """Request model for configuration rollback."""
 
-    target_version: Optional[int] = Field(
+    target_version: int | None = Field(
         None, description="Specific version to rollback to"
     )
     changed_by: str = Field(..., description="Who is performing the rollback")
-    reason: Optional[str] = Field(None, description="Reason for rollback")
+    reason: str | None = Field(None, description="Reason for rollback")
 
 
 # Router for configuration endpoints
@@ -70,7 +70,7 @@ router = APIRouter(prefix="/api/v1", tags=["configuration"])
 async def rollback_config(
     request: RollbackRequest,
     strategy_id: str = Path(..., description="Strategy identifier"),
-    symbol: Optional[str] = Query(None, description="Optional symbol filter"),
+    symbol: str | None = Query(None, description="Optional symbol filter"),
 ):
     """Rollback configuration."""
     try:
@@ -115,7 +115,7 @@ async def rollback_config(
 
 
 # Global config manager instance (will be injected on startup)
-_config_manager: Optional[StrategyConfigManager] = None
+_config_manager: StrategyConfigManager | None = None
 
 
 def set_config_manager(manager: StrategyConfigManager) -> None:
@@ -3170,8 +3170,8 @@ SERVICE_URLS = {
 
 async def detect_cross_service_conflicts(
     parameters: dict[str, Any],
-    strategy_id: Optional[str] = None,
-    symbol: Optional[str] = None,
+    strategy_id: str | None = None,
+    symbol: str | None = None,
 ) -> list[CrossServiceConflict]:
     """
     Detect cross-service configuration conflicts.

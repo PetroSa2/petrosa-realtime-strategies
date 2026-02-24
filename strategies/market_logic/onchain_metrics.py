@@ -254,17 +254,17 @@ class OnChainMetricsStrategy:
 
             # Calculate 24-hour growth rates
             if asset_key == "BTC":
-                growth_metrics[
-                    "active_addresses_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("active_addresses", 0),
-                    current.get("active_addresses", 0),
+                growth_metrics["active_addresses_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("active_addresses", 0),
+                        current.get("active_addresses", 0),
+                    )
                 )
-                growth_metrics[
-                    "transaction_volume_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("transaction_volume_btc", 0),
-                    current.get("transaction_volume_btc", 0),
+                growth_metrics["transaction_volume_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("transaction_volume_btc", 0),
+                        current.get("transaction_volume_btc", 0),
+                    )
                 )
                 growth_metrics["hash_rate_24h"] = self._calculate_percentage_change(
                     day_ago.get("hash_rate_eh", 0), current.get("hash_rate_eh", 0)
@@ -278,17 +278,17 @@ class OnChainMetricsStrategy:
                 )  # Positive = net inflow (bearish)
 
             elif asset_key == "ETH":
-                growth_metrics[
-                    "active_addresses_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("active_addresses", 0),
-                    current.get("active_addresses", 0),
+                growth_metrics["active_addresses_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("active_addresses", 0),
+                        current.get("active_addresses", 0),
+                    )
                 )
-                growth_metrics[
-                    "transaction_volume_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("transaction_volume_eth", 0),
-                    current.get("transaction_volume_eth", 0),
+                growth_metrics["transaction_volume_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("transaction_volume_eth", 0),
+                        current.get("transaction_volume_eth", 0),
+                    )
                 )
                 growth_metrics["defi_tvl_24h"] = self._calculate_percentage_change(
                     day_ago.get("defi_tvl_usd", 0), current.get("defi_tvl_usd", 0)

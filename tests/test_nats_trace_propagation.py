@@ -169,9 +169,9 @@ async def test_consumer_extracts_trace_context(
 
     # Verify provider setup and ensure exporter is attached
     current_provider = trace.get_tracer_provider()
-    assert isinstance(
-        current_provider, TracerProvider
-    ), f"Provider should be TracerProvider, got {type(current_provider)}"
+    assert isinstance(current_provider, TracerProvider), (
+        f"Provider should be TracerProvider, got {type(current_provider)}"
+    )
     # Ensure exporter is attached (adding multiple times is safe)
     current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
@@ -216,9 +216,9 @@ async def test_consumer_extracts_trace_context(
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
-    assert (
-        consumer_span is not None
-    ), f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
+    assert consumer_span is not None, (
+        f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
+    )
 
     # Verify trace ID exists (in CI, extract_trace_context may return None)
     actual_trace_id = format(consumer_span.context.trace_id, "032x")
@@ -247,9 +247,9 @@ async def test_consumer_handles_missing_trace_context(
     """
     # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
     current_provider = trace.get_tracer_provider()
-    assert isinstance(
-        current_provider, TracerProvider
-    ), f"Provider should be TracerProvider, got {type(current_provider)}"
+    assert isinstance(current_provider, TracerProvider), (
+        f"Provider should be TracerProvider, got {type(current_provider)}"
+    )
     # Ensure exporter is attached (adding multiple times is safe)
     current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
@@ -277,9 +277,9 @@ async def test_consumer_handles_missing_trace_context(
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
-    assert (
-        consumer_span is not None
-    ), f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
+    assert consumer_span is not None, (
+        f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
+    )
 
 
 @pytest.mark.asyncio
@@ -416,9 +416,9 @@ async def test_end_to_end_trace_propagation(
 
         # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
         current_provider = trace.get_tracer_provider()
-        assert isinstance(
-            current_provider, TracerProvider
-        ), f"Provider should be TracerProvider, got {type(current_provider)}"
+        assert isinstance(current_provider, TracerProvider), (
+            f"Provider should be TracerProvider, got {type(current_provider)}"
+        )
         # Ensure exporter is attached (adding multiple times is safe)
         current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
@@ -451,9 +451,9 @@ async def test_end_to_end_trace_propagation(
         consumer_span = next(
             (s for s in spans if s.name == "process_market_data_message"), None
         )
-        assert (
-            consumer_span is not None
-        ), f"Consumer span should be created. Found spans: {[s.name for s in spans]}"
+        assert consumer_span is not None, (
+            f"Consumer span should be created. Found spans: {[s.name for s in spans]}"
+        )
 
         # Verify trace ID is preserved (consumer span should have same trace ID as root)
         consumer_trace_id = format(consumer_span.context.trace_id, "032x")

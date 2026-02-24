@@ -35,7 +35,7 @@ class DataManagerClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         timeout: int = 30,
         max_retries: int = 3,
     ):
@@ -87,7 +87,7 @@ class DataManagerClient:
 
     # Configuration Management Methods
 
-    async def get_global_config(self, strategy_id: str) -> Optional[dict[str, Any]]:
+    async def get_global_config(self, strategy_id: str) -> dict[str, Any | None]:
         """
         Get global configuration for a strategy.
 
@@ -115,7 +115,7 @@ class DataManagerClient:
 
     async def get_symbol_config(
         self, strategy_id: str, symbol: str
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any | None]:
         """
         Get symbol-specific configuration for a strategy.
 
@@ -146,7 +146,7 @@ class DataManagerClient:
 
     async def upsert_global_config(
         self, strategy_id: str, parameters: dict[str, Any], metadata: dict[str, Any]
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Create or update global configuration.
 
@@ -209,7 +209,7 @@ class DataManagerClient:
         symbol: str,
         parameters: dict[str, Any],
         metadata: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Create or update symbol-specific configuration.
 
@@ -325,7 +325,7 @@ class DataManagerClient:
             )
             return False
 
-    async def create_audit_record(self, audit_data: dict[str, Any]) -> Optional[str]:
+    async def create_audit_record(self, audit_data: dict[str, Any]) -> str | None:
         """
         Create audit trail record for configuration change.
 
@@ -356,7 +356,7 @@ class DataManagerClient:
             return None
 
     async def get_audit_trail(
-        self, strategy_id: str, symbol: Optional[str] = None, limit: int = 100
+        self, strategy_id: str, symbol: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
         """
         Get configuration change history.
@@ -449,9 +449,9 @@ class DataManagerClient:
         self,
         strategy_id: str,
         changed_by: str,
-        symbol: Optional[str] = None,
-        target_version: Optional[int] = None,
-        reason: Optional[str] = None,
+        symbol: str | None = None,
+        target_version: int | None = None,
+        reason: str | None = None,
     ) -> bool:
         """
         Rollback strategy configuration via Data Manager.
@@ -488,7 +488,7 @@ class DataManagerClient:
 
     # Market Data Methods
 
-    async def get_btc_dominance(self) -> Optional[float]:
+    async def get_btc_dominance(self) -> float | None:
         """
         Get current Bitcoin dominance percentage.
 

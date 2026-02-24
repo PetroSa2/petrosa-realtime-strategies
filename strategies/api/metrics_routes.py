@@ -284,12 +284,14 @@ async def get_market_summary():
     """,
 )
 async def get_all_metrics(
-    symbols: str
-    | None = Query(None, description="Comma-separated list of symbols to filter"),
+    symbols: str | None = Query(
+        None, description="Comma-separated list of symbols to filter"
+    ),
     min_pressure: float | None = Query(None, description="Minimum net pressure filter"),
     max_pressure: float | None = Query(None, description="Maximum net pressure filter"),
-    trend: str
-    | None = Query(None, description="Filter by trend (bullish, bearish, neutral)"),
+    trend: str | None = Query(
+        None, description="Filter by trend (bullish, bearish, neutral)"
+    ),
     limit: int = Query(
         50,
         ge=1,

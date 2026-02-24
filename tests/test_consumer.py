@@ -625,24 +625,24 @@ async def test_consumer_signal_to_order_conversion(consumer):
             signal_to_order_span = span
             break
 
-    assert (
-        signal_to_order_span is not None
-    ), "Expected span 'consumer.signal_to_order' to exist"
+    assert signal_to_order_span is not None, (
+        "Expected span 'consumer.signal_to_order' to exist"
+    )
 
     # Verify business context attributes
     attributes = signal_to_order_span.attributes
     assert attributes.get("symbol") == "BTCUSDT", "Expected symbol attribute"
     assert attributes.get("signal.type") == "BUY", "Expected signal.type attribute"
-    assert (
-        attributes.get("signal.strength") == 0.85
-    ), "Expected signal.strength attribute"
-    assert (
-        attributes.get("strategy.name") == "test_strategy"
-    ), "Expected strategy.name attribute"
+    assert attributes.get("signal.strength") == 0.85, (
+        "Expected signal.strength attribute"
+    )
+    assert attributes.get("strategy.name") == "test_strategy", (
+        "Expected strategy.name attribute"
+    )
     assert attributes.get("order.side") == "buy", "Expected order.side attribute"
-    assert (
-        attributes.get("order.quantity_pct") == 0.05
-    ), "Expected order.quantity_pct attribute"
+    assert attributes.get("order.quantity_pct") == 0.05, (
+        "Expected order.quantity_pct attribute"
+    )
     assert attributes.get("order.created") is True, "Expected order.created attribute"
     assert attributes.get("result") == "success", "Expected result attribute"
 

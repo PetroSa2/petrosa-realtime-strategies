@@ -294,10 +294,12 @@ def signal_handler(signum, frame):
 @app.command()
 def run(
     nats_url: str | None = typer.Option(None, "--nats-url", help="NATS server URL"),
-    consumer_topic: str
-    | None = typer.Option(None, "--consumer-topic", help="NATS consumer topic"),
-    publisher_topic: str
-    | None = typer.Option(None, "--publisher-topic", help="NATS publisher topic"),
+    consumer_topic: str | None = typer.Option(
+        None, "--consumer-topic", help="NATS consumer topic"
+    ),
+    publisher_topic: str | None = typer.Option(
+        None, "--publisher-topic", help="NATS publisher topic"
+    ),
     log_level: str = typer.Option(
         constants.LOG_LEVEL, "--log-level", help="Logging level"
     ),
