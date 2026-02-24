@@ -118,8 +118,8 @@ class IcebergDetectorStrategy:
         symbol: str,
         bids: list[tuple[float, float]],
         asks: list[tuple[float, float]],
-        timestamp: Optional[datetime] = None,
-    ) -> Optional[Signal]:
+        timestamp: datetime | None = None,
+    ) -> Signal | None:
         """
         Analyze order book for iceberg patterns and generate signal.
 
@@ -132,9 +132,11 @@ class IcebergDetectorStrategy:
         Returns:
             Signal if iceberg detected near price, None otherwise
         """
-        with get_tracer().start_as_current_span("strategy.iceberg_detector.analyze") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.iceberg_detector.analyze"
+        ) as span:
             span.set_attribute("symbol", symbol)
-            
+
             if timestamp is None:
                 timestamp = datetime.utcnow()
 
@@ -187,13 +189,15 @@ class IcebergDetectorStrategy:
 
     def _generate_signal(
         self, iceberg: IcebergPattern, current_price: float
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """Generate trading signal from iceberg pattern."""
-        with get_tracer().start_as_current_span("strategy.iceberg_detector.generate_signal") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.iceberg_detector.generate_signal"
+        ) as span:
             span.set_attribute("symbol", iceberg.symbol)
             span.set_attribute("iceberg.price", iceberg.price)
             span.set_attribute("iceberg.side", iceberg.side)
-            
+
             # Rate limiting per (symbol, price, side)
             signal_key = (iceberg.symbol, round(iceberg.price, 2), iceberg.side)
             current_time = time.time()

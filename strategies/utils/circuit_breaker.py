@@ -30,7 +30,7 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
         expected_exception: type[Exception] = Exception,
-        logger: Optional[structlog.BoundLogger] = None,
+        logger: structlog.BoundLogger | None = None,
     ):
         """
         Initialize circuit breaker.

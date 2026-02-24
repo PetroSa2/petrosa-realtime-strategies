@@ -35,7 +35,7 @@ class TradeOrderPublisher:
         self,
         nats_url: str,
         topic: str,
-        logger: Optional[structlog.BoundLogger] = None,
+        logger: structlog.BoundLogger | None = None,
     ):
         """Initialize the trade order publisher."""
         self.nats_url = nats_url
@@ -43,7 +43,7 @@ class TradeOrderPublisher:
         self.logger = logger or structlog.get_logger()
 
         # NATS client
-        self.nats_client: Optional[NATSClient] = None
+        self.nats_client: NATSClient | None = None
 
         # Circuit breaker for NATS connection
         self.circuit_breaker = CircuitBreaker(
@@ -181,7 +181,7 @@ class TradeOrderPublisher:
                             self.order_queue.get(), timeout=0.1
                         )
                         orders.append(order)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         # No orders available, continue
                         break
 

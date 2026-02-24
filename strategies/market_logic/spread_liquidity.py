@@ -109,8 +109,8 @@ class SpreadLiquidityStrategy:
         symbol: str,
         bids: list[tuple[float, float]],
         asks: list[tuple[float, float]],
-        timestamp: Optional[datetime] = None,
-    ) -> Optional[Signal]:
+        timestamp: datetime | None = None,
+    ) -> Signal | None:
         """
         Analyze order book spread and generate signal if event detected.
 
@@ -164,7 +164,7 @@ class SpreadLiquidityStrategy:
         bids: list[tuple[float, float]],
         asks: list[tuple[float, float]],
         timestamp: datetime,
-    ) -> Optional[SpreadMetrics]:
+    ) -> SpreadMetrics | None:
         """Calculate spread metrics from order book."""
         try:
             # Best bid/ask
@@ -258,7 +258,7 @@ class SpreadLiquidityStrategy:
 
     def _detect_event(
         self, symbol: str, snapshot: SpreadSnapshot, timestamp: datetime
-    ) -> Optional[SpreadEvent]:
+    ) -> SpreadEvent | None:
         """Detect spread widening or narrowing event."""
         current_time = timestamp.timestamp()
         metrics = snapshot.metrics
@@ -358,7 +358,7 @@ class SpreadLiquidityStrategy:
 
     def _generate_signal(
         self, event: SpreadEvent, snapshot: SpreadSnapshot
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """Generate trading signal from spread event."""
         # Rate limiting
         current_time = time.time()

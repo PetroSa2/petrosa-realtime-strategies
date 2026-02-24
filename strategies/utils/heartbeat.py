@@ -21,7 +21,7 @@ class HeartbeatManager:
         self,
         consumer=None,
         publisher=None,
-        logger: Optional[structlog.BoundLogger] = None,
+        logger: structlog.BoundLogger | None = None,
         enabled: bool = None,
         interval_seconds: int = None,
         include_detailed_stats: bool = None,

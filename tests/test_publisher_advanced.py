@@ -312,7 +312,7 @@ async def test_publisher_publishing_loop_with_orders(publisher):
 
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.1)
-    except (asyncio.TimeoutError, Exception):
+    except (TimeoutError, Exception):
         # Expected: timeout or exception stops the loop for testing
         pass
 
@@ -353,7 +353,7 @@ async def test_publisher_publishing_loop_batch_timeout(publisher):
     publisher.shutdown_event.set()
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Expected: timeout is used to stop the loop for testing
         pass
 
@@ -387,7 +387,7 @@ async def test_publisher_publishing_loop_basic(publisher):
     publisher.shutdown_event.set()
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Expected: timeout is used to stop the loop for testing
         pass
 
@@ -420,7 +420,7 @@ async def test_publisher_publishing_loop_exception_handling(publisher):
     publisher.shutdown_event.set()
     try:
         await asyncio.wait_for(publisher._publishing_loop(), timeout=0.5)
-    except (asyncio.TimeoutError, Exception):
+    except (TimeoutError, Exception):
         # Expected: timeout or exception stops the loop for testing
         pass
 

@@ -30,7 +30,7 @@ class OnChainMetricsStrategy:
     shifts in network usage and adoption.
     """
 
-    def __init__(self, logger: Optional[structlog.BoundLogger] = None):
+    def __init__(self, logger: structlog.BoundLogger | None = None):
         """Initialize the On-Chain Metrics Strategy."""
         self.logger = logger or structlog.get_logger()
 
@@ -67,7 +67,7 @@ class OnChainMetricsStrategy:
 
     async def process_market_data(
         self, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Process market data and generate on-chain based signals.
 
@@ -195,7 +195,7 @@ class OnChainMetricsStrategy:
 
     async def _analyze_onchain_metrics(
         self, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Analyze on-chain metrics and generate fundamental signals.
 
@@ -236,7 +236,7 @@ class OnChainMetricsStrategy:
 
         return signal
 
-    def _calculate_growth_metrics(self, asset_key: str) -> Optional[dict[str, float]]:
+    def _calculate_growth_metrics(self, asset_key: str) -> dict[str, float] | None:
         """Calculate growth rates from historical data."""
         history = self.metrics_history.get(asset_key, [])
 
@@ -254,17 +254,17 @@ class OnChainMetricsStrategy:
 
             # Calculate 24-hour growth rates
             if asset_key == "BTC":
-                growth_metrics[
-                    "active_addresses_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("active_addresses", 0),
-                    current.get("active_addresses", 0),
+                growth_metrics["active_addresses_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("active_addresses", 0),
+                        current.get("active_addresses", 0),
+                    )
                 )
-                growth_metrics[
-                    "transaction_volume_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("transaction_volume_btc", 0),
-                    current.get("transaction_volume_btc", 0),
+                growth_metrics["transaction_volume_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("transaction_volume_btc", 0),
+                        current.get("transaction_volume_btc", 0),
+                    )
                 )
                 growth_metrics["hash_rate_24h"] = self._calculate_percentage_change(
                     day_ago.get("hash_rate_eh", 0), current.get("hash_rate_eh", 0)
@@ -278,17 +278,17 @@ class OnChainMetricsStrategy:
                 )  # Positive = net inflow (bearish)
 
             elif asset_key == "ETH":
-                growth_metrics[
-                    "active_addresses_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("active_addresses", 0),
-                    current.get("active_addresses", 0),
+                growth_metrics["active_addresses_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("active_addresses", 0),
+                        current.get("active_addresses", 0),
+                    )
                 )
-                growth_metrics[
-                    "transaction_volume_24h"
-                ] = self._calculate_percentage_change(
-                    day_ago.get("transaction_volume_eth", 0),
-                    current.get("transaction_volume_eth", 0),
+                growth_metrics["transaction_volume_24h"] = (
+                    self._calculate_percentage_change(
+                        day_ago.get("transaction_volume_eth", 0),
+                        current.get("transaction_volume_eth", 0),
+                    )
                 )
                 growth_metrics["defi_tvl_24h"] = self._calculate_percentage_change(
                     day_ago.get("defi_tvl_usd", 0), current.get("defi_tvl_usd", 0)
@@ -317,7 +317,7 @@ class OnChainMetricsStrategy:
         current_metrics: dict[str, Any],
         growth_metrics: dict[str, float],
         market_data: MarketDataMessage,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Evaluate fundamental conditions and generate signals.
 

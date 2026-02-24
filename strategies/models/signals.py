@@ -6,13 +6,13 @@ signal types, confidence levels, and strategy-specific signals.
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, validator
 
 
-class SignalType(str, Enum):
+class SignalType(StrEnum):
     """Types of trading signals."""
 
     BUY = "BUY"
@@ -20,7 +20,7 @@ class SignalType(str, Enum):
     HOLD = "HOLD"
 
 
-class SignalAction(str, Enum):
+class SignalAction(StrEnum):
     """Actions to take based on signals."""
 
     OPEN_LONG = "OPEN_LONG"
@@ -30,7 +30,7 @@ class SignalAction(str, Enum):
     HOLD = "HOLD"
 
 
-class SignalConfidence(str, Enum):
+class SignalConfidence(StrEnum):
     """Confidence levels for signals."""
 
     HIGH = "HIGH"
@@ -199,7 +199,7 @@ class SignalAggregation(BaseModel):
         return sum(scores) / len(scores)
 
     @property
-    def consensus_signal_type(self) -> Optional[SignalType]:
+    def consensus_signal_type(self) -> SignalType | None:
         """Get consensus signal type (most common)."""
         if not self.strategy_signals:
             return None
@@ -251,7 +251,7 @@ class SignalMetrics(BaseModel):
         default=0.0, description="Average processing time"
     )
     signal_generation_rate: float = Field(default=0.0, description="Signals per second")
-    last_signal_timestamp: Optional[datetime] = Field(
+    last_signal_timestamp: datetime | None = Field(
         default=None, description="Last signal timestamp"
     )
     metadata: dict[str, Any] = Field(

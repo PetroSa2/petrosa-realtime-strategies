@@ -13,16 +13,16 @@ class APIResponse(BaseModel):
     """Standard API response wrapper."""
 
     success: bool = Field(..., description="Whether operation succeeded")
-    data: Optional[Any] = Field(None, description="Response data")
-    error: Optional[dict[str, Any]] = Field(None, description="Error details if failed")
-    metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    data: Any | None = Field(None, description="Response data")
+    error: dict[str, Any] | None = Field(None, description="Error details if failed")
+    metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
 
 class ConfigResponse(BaseModel):
     """Configuration response model."""
 
     strategy_id: str = Field(..., description="Strategy identifier")
-    symbol: Optional[str] = Field(None, description="Trading symbol (None for global)")
+    symbol: str | None = Field(None, description="Trading symbol (None for global)")
     parameters: dict[str, Any] = Field(..., description="Configuration parameters")
     version: int = Field(..., description="Configuration version")
     source: str = Field(
@@ -31,8 +31,8 @@ class ConfigResponse(BaseModel):
     is_override: bool = Field(
         ..., description="Whether this is a symbol-specific override"
     )
-    created_at: Optional[str] = Field(None, description="Creation timestamp")
-    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+    created_at: str | None = Field(None, description="Creation timestamp")
+    updated_at: str | None = Field(None, description="Last update timestamp")
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -44,9 +44,7 @@ class ConfigUpdateRequest(BaseModel):
     changed_by: str = Field(
         ..., description="Who is making this change (e.g., 'llm_agent_v1', 'admin')"
     )
-    reason: Optional[str] = Field(
-        None, description="Reason for the configuration change"
-    )
+    reason: str | None = Field(None, description="Reason for the configuration change")
     validate_only: bool = Field(
         False, description="If true, only validate parameters without saving"
     )
@@ -59,9 +57,9 @@ class ParameterSchemaItem(BaseModel):
     type: str = Field(..., description="Data type (int, float, bool, str, list)")
     description: str = Field(..., description="What this parameter controls")
     default: Any = Field(..., description="Default value")
-    min: Optional[float] = Field(None, description="Minimum value (for numeric)")
-    max: Optional[float] = Field(None, description="Maximum value (for numeric)")
-    allowed_values: Optional[list[Any]] = Field(
+    min: float | None = Field(None, description="Minimum value (for numeric)")
+    max: float | None = Field(None, description="Maximum value (for numeric)")
+    allowed_values: list[Any] | None = Field(
         None, description="Allowed values (for enums)"
     )
     example: Any = Field(..., description="Example valid value")
@@ -85,17 +83,17 @@ class AuditTrailItem(BaseModel):
 
     id: str = Field(..., description="Audit record ID")
     strategy_id: str = Field(..., description="Strategy identifier")
-    symbol: Optional[str] = Field(None, description="Symbol (None for global)")
+    symbol: str | None = Field(None, description="Symbol (None for global)")
     action: str = Field(..., description="Type of change made")
-    old_parameters: Optional[dict[str, Any]] = Field(
+    old_parameters: dict[str, Any] | None = Field(
         None, description="Previous parameter values"
     )
-    new_parameters: Optional[dict[str, Any]] = Field(
+    new_parameters: dict[str, Any] | None = Field(
         None, description="New parameter values"
     )
     changed_by: str = Field(..., description="Who/what made the change")
     changed_at: str = Field(..., description="When the change occurred")
-    reason: Optional[str] = Field(None, description="Reason for the change")
+    reason: str | None = Field(None, description="Reason for the change")
 
 
 # -------------------------------------------------------------------------
@@ -112,7 +110,7 @@ class ValidationError(BaseModel):
         ...,
         description="Error code (e.g., 'INVALID_TYPE', 'OUT_OF_RANGE', 'UNKNOWN_PARAMETER')",
     )
-    suggested_value: Optional[Any] = Field(
+    suggested_value: Any | None = Field(
         None, description="Suggested correct value if applicable"
     )
 
@@ -194,11 +192,11 @@ class ConfigValidationRequest(BaseModel):
     parameters: dict[str, Any] = Field(
         ..., description="Configuration parameters to validate"
     )
-    strategy_id: Optional[str] = Field(
+    strategy_id: str | None = Field(
         None,
         description="Strategy identifier (required for strategy config validation)",
     )
-    symbol: Optional[str] = Field(
+    symbol: str | None = Field(
         None, description="Trading symbol (optional, for symbol-specific validation)"
     )
 

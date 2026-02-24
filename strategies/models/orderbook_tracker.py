@@ -39,7 +39,7 @@ class LevelHistory:
 
     # Pattern detection
     refill_count: int = 0
-    last_refill_time: Optional[float] = None
+    last_refill_time: float | None = None
     avg_refill_speed_seconds: float = 0.0
 
     # Volume statistics
@@ -139,7 +139,7 @@ class OrderBookTracker:
         symbol: str,
         bids: list[tuple[float, float]],
         asks: list[tuple[float, float]],
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ) -> None:
         """
         Update tracker with new orderbook snapshot.
@@ -320,7 +320,7 @@ class OrderBookTracker:
 
     def _check_iceberg_pattern(
         self, symbol: str, price: float, history: LevelHistory
-    ) -> Optional[IcebergPattern]:
+    ) -> IcebergPattern | None:
         """Check if level exhibits iceberg pattern."""
         current_time = time.time()
         persistence = current_time - history.first_seen

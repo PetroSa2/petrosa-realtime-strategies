@@ -31,8 +31,13 @@ from strategies.utils.telemetry import (  # noqa: E402
 )
 
 # Initialize OpenTelemetry as early as possible
+ConfigRateLimiter = None
+
 try:
-    from petrosa_otel import setup_telemetry  # noqa: E402
+    from petrosa_otel import (
+        ConfigRateLimiter,
+        setup_telemetry,
+    )
 
     if not os.getenv("OTEL_NO_AUTO_INIT"):
         setup_telemetry(
@@ -69,10 +74,10 @@ class StrategiesService:
         except Exception as e:
             print(f"⚠️  Failed to attach OTLP handler: {e}")
 
-        self.consumer: Optional[NATSConsumer] = None
-        self.publisher: Optional[TradeOrderPublisher] = None
-        self.health_server: Optional[HealthServer] = None
-        self.heartbeat_manager: Optional[HeartbeatManager] = None
+        self.consumer: NATSConsumer | None = None
+        self.publisher: TradeOrderPublisher | None = None
+        self.health_server: HealthServer | None = None
+        self.heartbeat_manager: HeartbeatManager | None = None
         self.config_manager = None
         self.depth_analyzer = None
         self.shutdown_event = asyncio.Event()
@@ -110,6 +115,19 @@ class StrategiesService:
                 cache_ttl_seconds=60,
             )
 
+            # Initialize and set configuration rate limiter
+            rate_limiter = None
+            if ConfigRateLimiter is not None:
+                rate_limiter = ConfigRateLimiter(
+                    mongodb_client=mongodb_client,
+                    service_name="realtime-strategies",
+                    per_agent_limit=int(os.getenv("CONFIG_RATE_LIMIT_PER_AGENT", "10")),
+                    cooldown_seconds=int(
+                        os.getenv("CONFIG_RATE_LIMIT_COOLDOWN", "300")
+                    ),
+                )
+            self.logger.info("Configuration rate limiter initialized")
+
             # Initialize depth analyzer for market metrics
             self.depth_analyzer = DepthAnalyzer(
                 history_window_seconds=900,  # 15 minutes
@@ -135,8 +153,9 @@ class StrategiesService:
                 depth_analyzer=self.depth_analyzer,  # NEW
             )
             await self.health_server.start()
+            self.health_server.set_rate_limiter(rate_limiter)
             self.logger.info(
-                "Health server started",
+                "Health server started and rate limiter registered",
                 event_type="health_server_started",
                 port=constants.HEALTH_CHECK_PORT,
             )
@@ -280,11 +299,11 @@ def signal_handler(signum, frame):
 
 @app.command()
 def run(
-    nats_url: Optional[str] = typer.Option(None, "--nats-url", help="NATS server URL"),
-    consumer_topic: Optional[str] = typer.Option(
+    nats_url: str | None = typer.Option(None, "--nats-url", help="NATS server URL"),
+    consumer_topic: str | None = typer.Option(
         None, "--consumer-topic", help="NATS consumer topic"
     ),
-    publisher_topic: Optional[str] = typer.Option(
+    publisher_topic: str | None = typer.Option(
         None, "--publisher-topic", help="NATS publisher topic"
     ),
     log_level: str = typer.Option(

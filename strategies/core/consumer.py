@@ -67,7 +67,7 @@ class NATSConsumer:
         consumer_name: str,
         consumer_group: str,
         publisher: TradeOrderPublisher,
-        logger: Optional[structlog.BoundLogger] = None,
+        logger: structlog.BoundLogger | None = None,
         depth_analyzer=None,
     ):
         """Initialize the NATS consumer."""
@@ -80,8 +80,8 @@ class NATSConsumer:
         self.depth_analyzer = depth_analyzer
 
         # NATS client and subscription
-        self.nats_client: Optional[NATSClient] = None
-        self.subscription: Optional[Subscription] = None
+        self.nats_client: NATSClient | None = None
+        self.subscription: Subscription | None = None
 
         # Circuit breaker for NATS connection
         self.circuit_breaker = CircuitBreaker(
@@ -124,9 +124,9 @@ class NATSConsumer:
             )
 
         if constants.STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
-            self.market_logic_strategies[
-                "cross_exchange_spread"
-            ] = CrossExchangeSpreadStrategy(logger=self.logger)
+            self.market_logic_strategies["cross_exchange_spread"] = (
+                CrossExchangeSpreadStrategy(logger=self.logger)
+            )
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -148,9 +148,9 @@ class NATSConsumer:
         # Initialize microstructure strategies
         self.microstructure_strategies = {}
         if constants.STRATEGY_ENABLED_SPREAD_LIQUIDITY:
-            self.microstructure_strategies[
-                "spread_liquidity"
-            ] = SpreadLiquidityStrategy()
+            self.microstructure_strategies["spread_liquidity"] = (
+                SpreadLiquidityStrategy()
+            )
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -159,9 +159,9 @@ class NATSConsumer:
             )
 
         if constants.STRATEGY_ENABLED_ICEBERG_DETECTOR:
-            self.microstructure_strategies[
-                "iceberg_detector"
-            ] = IcebergDetectorStrategy()
+            self.microstructure_strategies["iceberg_detector"] = (
+                IcebergDetectorStrategy()
+            )
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -386,13 +386,19 @@ class NATSConsumer:
                         if hasattr(market_data, "stream") and market_data.stream:
                             stream_value = str(market_data.stream)
                             # Only process if it's a valid string with "@" separator (not a MagicMock representation)
-                            if stream_value and "@" in stream_value and not stream_value.startswith("<"):
+                            if (
+                                stream_value
+                                and "@" in stream_value
+                                and not stream_value.startswith("<")
+                            ):
                                 stream_parts = stream_value.split("@")
                                 if len(stream_parts) > 1:
                                     # Extract interval from stream (e.g., "100ms", "1s", "5m")
                                     interval = stream_parts[-1]
                                     if interval and interval.strip():
-                                        span.set_attribute("market_data.interval", interval)
+                                        span.set_attribute(
+                                            "market_data.interval", interval
+                                        )
                     except (AttributeError, TypeError):
                         # Ignore errors when stream is not available or is a mock object
                         pass
@@ -453,7 +459,7 @@ class NATSConsumer:
 
     def _parse_market_data(
         self, message_data: dict[str, Any]
-    ) -> Optional[MarketDataMessage]:
+    ) -> MarketDataMessage | None:
         """Parse and validate market data message."""
         try:
             # Extract stream and data
@@ -482,7 +488,7 @@ class NATSConsumer:
 
     def _transform_binance_data(
         self, stream: str, data: dict[str, Any]
-    ) -> Optional[Union[DepthUpdate, TradeData, TickerData]]:
+    ) -> Union[DepthUpdate, TradeData, TickerData] | None:
         """Transform raw Binance WebSocket data to expected format."""
         try:
             stream_type = stream.split("@")[1] if "@" in stream else None
@@ -511,7 +517,7 @@ class NATSConsumer:
             )
             return None
 
-    def _transform_depth_data(self, data: dict[str, Any]) -> Optional[DepthUpdate]:
+    def _transform_depth_data(self, data: dict[str, Any]) -> DepthUpdate | None:
         """Transform depth data to DepthUpdate model."""
         try:
             # Extract symbol from the data if available, otherwise use a default
@@ -543,7 +549,7 @@ class NATSConsumer:
             self.logger.error("Failed to transform depth data", error=str(e), data=data)
             return None
 
-    def _transform_trade_data(self, data: dict[str, Any]) -> Optional[TradeData]:
+    def _transform_trade_data(self, data: dict[str, Any]) -> TradeData | None:
         """Transform trade data to TradeData model."""
         try:
             # Map Binance trade fields to our model
@@ -564,7 +570,7 @@ class NATSConsumer:
             self.logger.error("Failed to transform trade data", error=str(e), data=data)
             return None
 
-    def _transform_ticker_data(self, data: dict[str, Any]) -> Optional[TickerData]:
+    def _transform_ticker_data(self, data: dict[str, Any]) -> TickerData | None:
         """Transform ticker data to TickerData model."""
         try:
             return TickerData(
@@ -890,8 +896,8 @@ class NATSConsumer:
                 price=current_price,
                 stop_loss=stop_loss,
                 take_profit=take_profit,
-                sl_pct=f"{stop_loss_pct*100:.2f}%",
-                tp_pct=f"{take_profit_pct*100:.2f}%",
+                sl_pct=f"{stop_loss_pct * 100:.2f}%",
+                tp_pct=f"{take_profit_pct * 100:.2f}%",
             )
 
             return order

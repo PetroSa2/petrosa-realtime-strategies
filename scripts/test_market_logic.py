@@ -117,7 +117,7 @@ async def test_cross_exchange_spread_strategy():
     if signals:
         print(f"  ✅ {len(signals)} Arbitrage Signals Generated:")
         for i, signal in enumerate(signals):
-            print(f"    Signal {i+1}:")
+            print(f"    Signal {i + 1}:")
             print(f"      Symbol: {signal.symbol}")
             print(f"      Type: {signal.signal_type}")
             print(f"      Action: {signal.signal_action}")

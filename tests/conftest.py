@@ -1,18 +1,3 @@
-import os
-import pytest
-
-# Disable OpenTelemetry auto-initialization during tests
-os.environ['OTEL_NO_AUTO_INIT'] = '1'
-os.environ['OTEL_SDK_DISABLED'] = 'true'
-os.environ['OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED'] = 'false'
-
-def pytest_configure(config):
-    """
-    Setup before any tests are run.
-    """
-    os.environ['OTEL_NO_AUTO_INIT'] = '1'
-    os.environ['OTEL_SDK_DISABLED'] = 'true'
-
 """
 Pytest configuration and fixtures for Petrosa Realtime Strategies tests.
 """
@@ -23,14 +8,16 @@ from unittest.mock import Mock
 import pytest
 import structlog
 
-# Disable OpenTelemetry auto-initialization during tests
+# Disable OpenTelemetry auto-initialization during tests (must be set first)
 os.environ["OTEL_NO_AUTO_INIT"] = "1"
+os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "false"
 
 
 def pytest_configure(config):
     """Setup before any tests are run."""
     os.environ["OTEL_NO_AUTO_INIT"] = "1"
+    os.environ["OTEL_SDK_DISABLED"] = "true"
 
 
 # Set up OpenTelemetry tracer provider BEFORE any imports that use it
@@ -62,7 +49,6 @@ try:
             trace.set_tracer_provider(_test_tracer_provider)
         except Exception:
             # Provider already set by another import, use current one
-            # IMPORTANT: Add exporter to the current provider (the one actually being used)
             _test_tracer_provider = trace.get_tracer_provider()
             if isinstance(_test_tracer_provider, TracerProvider):
                 _test_tracer_provider.add_span_processor(

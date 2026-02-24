@@ -102,10 +102,10 @@ def test_strategy_metrics():
 
 def main():
     """Run all compatibility tests."""
-    print(f"\n{Colors.BOLD}{'='*70}")
+    print(f"\n{Colors.BOLD}{'=' * 70}")
     print("  REALTIME STRATEGIES - CONFIGURATION COMPATIBILITY TEST")
     print("  Verifying backward compatibility with existing strategies")
-    print(f"{'='*70}{Colors.END}\n")
+    print(f"{'=' * 70}{Colors.END}\n")
 
     results = []
 
@@ -123,9 +123,9 @@ def main():
     results.append(test_strategy_metrics())
 
     # Summary
-    print(f"\n{Colors.BOLD}{'='*70}")
+    print(f"\n{Colors.BOLD}{'=' * 70}")
     print("  TEST SUMMARY")
-    print(f"{'='*70}{Colors.END}\n")
+    print(f"{'=' * 70}{Colors.END}\n")
 
     passed = sum(results)
     total = len(results)

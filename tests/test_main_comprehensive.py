@@ -54,9 +54,10 @@ def mock_components():
 @pytest.fixture
 def service(mock_components):
     """Create service with mock components."""
-    with patch("strategies.main.setup_logging") as mock_logger, patch(
-        "strategies.main.constants"
-    ) as mock_constants:
+    with (
+        patch("strategies.main.setup_logging") as mock_logger,
+        patch("strategies.main.constants") as mock_constants,
+    ):
         mock_logger.return_value = MagicMock()
         mock_constants.LOG_LEVEL = "INFO"
         mock_constants.SERVICE_NAME = "test-service"
@@ -91,15 +92,17 @@ def test_service_initialization(service):
 @pytest.mark.asyncio
 async def test_start_success(service, mock_components):
     """Test successful service start."""
-    with patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo, patch(
-        "strategies.services.config_manager.StrategyConfigManager"
-    ) as mock_config_mgr, patch(
-        "strategies.services.depth_analyzer.DepthAnalyzer"
-    ) as mock_depth, patch("strategies.main.HealthServer") as mock_health, patch(
-        "strategies.main.TradeOrderPublisher"
-    ) as mock_publisher, patch("strategies.main.NATSConsumer") as mock_consumer, patch(
-        "strategies.main.HeartbeatManager"
-    ) as mock_heartbeat:
+    with (
+        patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo,
+        patch(
+            "strategies.services.config_manager.StrategyConfigManager"
+        ) as mock_config_mgr,
+        patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth,
+        patch("strategies.main.HealthServer") as mock_health,
+        patch("strategies.main.TradeOrderPublisher") as mock_publisher,
+        patch("strategies.main.NATSConsumer") as mock_consumer,
+        patch("strategies.main.HeartbeatManager") as mock_heartbeat,
+    ):
         # Setup mocks
         mock_mongo.return_value = MagicMock()
         mock_config_mgr.return_value = mock_components["config_manager"]
@@ -196,9 +199,11 @@ def test_cli_run_command():
     """Test CLI run command."""
     runner = CliRunner()
 
-    with patch("strategies.main.StrategiesService") as mock_service_class, patch(
-        "strategies.main.signal"
-    ) as mock_signal, patch("strategies.main.asyncio.run") as mock_asyncio_run:
+    with (
+        patch("strategies.main.StrategiesService") as mock_service_class,
+        patch("strategies.main.signal") as mock_signal,
+        patch("strategies.main.asyncio.run") as mock_asyncio_run,
+    ):
         mock_service = MagicMock()
         mock_service_class.return_value = mock_service
         mock_asyncio_run.side_effect = KeyboardInterrupt()
@@ -215,10 +220,11 @@ def test_cli_run_command_with_options():
     """Test CLI run command with options."""
     runner = CliRunner()
 
-    with patch("strategies.main.StrategiesService") as mock_service_class, patch(
-        "strategies.main.signal"
-    ) as mock_signal, patch("strategies.main.asyncio.run") as mock_asyncio_run, patch(
-        "strategies.main.os.environ", {}
+    with (
+        patch("strategies.main.StrategiesService") as mock_service_class,
+        patch("strategies.main.signal") as mock_signal,
+        patch("strategies.main.asyncio.run") as mock_asyncio_run,
+        patch("strategies.main.os.environ", {}),
     ):
         mock_service = MagicMock()
         mock_service_class.return_value = mock_service
@@ -251,9 +257,11 @@ def test_cli_run_command_service_failure():
     """Test CLI run command with service failure."""
     runner = CliRunner()
 
-    with patch("strategies.main.StrategiesService") as mock_service_class, patch(
-        "strategies.main.signal"
-    ) as mock_signal, patch("strategies.main.asyncio.run") as mock_asyncio_run:
+    with (
+        patch("strategies.main.StrategiesService") as mock_service_class,
+        patch("strategies.main.signal") as mock_signal,
+        patch("strategies.main.asyncio.run") as mock_asyncio_run,
+    ):
         mock_service = MagicMock()
         mock_service_class.return_value = mock_service
         mock_asyncio_run.side_effect = Exception("Service failed")
@@ -268,9 +276,10 @@ def test_cli_health_command_success():
     """Test CLI health command success."""
     runner = CliRunner()
 
-    with patch("requests.get") as mock_get, patch(
-        "strategies.main.constants"
-    ) as mock_constants:
+    with (
+        patch("requests.get") as mock_get,
+        patch("strategies.main.constants") as mock_constants,
+    ):
         mock_constants.HEALTH_CHECK_PORT = 8080
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -288,9 +297,10 @@ def test_cli_health_command_unhealthy():
     """Test CLI health command with unhealthy service."""
     runner = CliRunner()
 
-    with patch("requests.get") as mock_get, patch(
-        "strategies.main.constants"
-    ) as mock_constants:
+    with (
+        patch("requests.get") as mock_get,
+        patch("strategies.main.constants") as mock_constants,
+    ):
         mock_constants.HEALTH_CHECK_PORT = 8080
         mock_response = MagicMock()
         mock_response.status_code = 503
@@ -306,9 +316,10 @@ def test_cli_health_command_connection_error():
     """Test CLI health command with connection error."""
     runner = CliRunner()
 
-    with patch("requests.get") as mock_get, patch(
-        "strategies.main.constants"
-    ) as mock_constants:
+    with (
+        patch("requests.get") as mock_get,
+        patch("strategies.main.constants") as mock_constants,
+    ):
         mock_constants.HEALTH_CHECK_PORT = 8080
         mock_get.side_effect = Exception("Connection failed")
 
@@ -364,9 +375,10 @@ def test_cli_heartbeat_command_success():
     """Test CLI heartbeat command success."""
     runner = CliRunner()
 
-    with patch("requests.get") as mock_get, patch(
-        "strategies.main.constants"
-    ) as mock_constants:
+    with (
+        patch("requests.get") as mock_get,
+        patch("strategies.main.constants") as mock_constants,
+    ):
         mock_constants.HEALTH_CHECK_PORT = 8080
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -396,9 +408,10 @@ def test_cli_heartbeat_command_failure():
     """Test CLI heartbeat command failure."""
     runner = CliRunner()
 
-    with patch("requests.get") as mock_get, patch(
-        "strategies.main.constants"
-    ) as mock_constants:
+    with (
+        patch("requests.get") as mock_get,
+        patch("strategies.main.constants") as mock_constants,
+    ):
         mock_constants.HEALTH_CHECK_PORT = 8080
         mock_get.side_effect = Exception("Connection failed")
 
@@ -459,15 +472,17 @@ def test_project_root_path_addition():
 @pytest.mark.asyncio
 async def test_service_startup_sequence(service, mock_components):
     """Test the complete service startup sequence."""
-    with patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo, patch(
-        "strategies.services.config_manager.StrategyConfigManager"
-    ) as mock_config_mgr, patch(
-        "strategies.services.depth_analyzer.DepthAnalyzer"
-    ) as mock_depth, patch("strategies.main.HealthServer") as mock_health, patch(
-        "strategies.main.TradeOrderPublisher"
-    ) as mock_publisher, patch("strategies.main.NATSConsumer") as mock_consumer, patch(
-        "strategies.main.HeartbeatManager"
-    ) as mock_heartbeat:
+    with (
+        patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo,
+        patch(
+            "strategies.services.config_manager.StrategyConfigManager"
+        ) as mock_config_mgr,
+        patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth,
+        patch("strategies.main.HealthServer") as mock_health,
+        patch("strategies.main.TradeOrderPublisher") as mock_publisher,
+        patch("strategies.main.NATSConsumer") as mock_consumer,
+        patch("strategies.main.HeartbeatManager") as mock_heartbeat,
+    ):
         # Setup mocks
         mock_mongo.return_value = MagicMock()
         mock_config_mgr.return_value = mock_components["config_manager"]

@@ -14,7 +14,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import constants
 from strategies.db.mongodb_client import MongoDBClient
@@ -43,7 +43,7 @@ class StrategyConfigManager:
 
     def __init__(
         self,
-        mongodb_client: Optional[MongoDBClient] = None,
+        mongodb_client: MongoDBClient | None = None,
         cache_ttl_seconds: int = 60,
     ):
         """
@@ -60,7 +60,7 @@ class StrategyConfigManager:
         self._cache: dict[str, tuple[dict[str, Any], float]] = {}
 
         # Background tasks
-        self._cache_refresh_task: Optional[asyncio.Task] = None
+        self._cache_refresh_task: asyncio.Task | None = None
         self._running = False
 
     async def start(self) -> None:
@@ -119,12 +119,12 @@ class StrategyConfigManager:
                 logger.error(f"Cache refresh loop error: {e}")
                 await asyncio.sleep(10)
 
-    def _make_cache_key(self, strategy_id: str, symbol: Optional[str]) -> str:
+    def _make_cache_key(self, strategy_id: str, symbol: str | None) -> str:
         """Generate cache key for config lookup."""
         symbol_part = symbol or "global"
         return f"{strategy_id}:{symbol_part}"
 
-    def _get_from_cache(self, cache_key: str) -> Optional[dict[str, Any]]:
+    def _get_from_cache(self, cache_key: str) -> dict[str, Any | None]:
         """Get configuration from cache if not expired."""
         if cache_key in self._cache:
             config, timestamp = self._cache[cache_key]
@@ -137,7 +137,7 @@ class StrategyConfigManager:
         self._cache[cache_key] = (config.copy(), time.time())
 
     async def get_config(
-        self, strategy_id: str, symbol: Optional[str] = None
+        self, strategy_id: str, symbol: str | None = None
     ) -> dict[str, Any]:
         """
         Get configuration for a strategy.
@@ -301,10 +301,10 @@ class StrategyConfigManager:
         strategy_id: str,
         parameters: dict[str, Any],
         changed_by: str,
-        symbol: Optional[str] = None,
-        reason: Optional[str] = None,
+        symbol: str | None = None,
+        reason: str | None = None,
         validate_only: bool = False,
-    ) -> tuple[bool, Optional[StrategyConfig], list[str]]:
+    ) -> tuple[bool, StrategyConfig | None, list[str]]:
         """
         Set strategy configuration.
 
@@ -419,12 +419,78 @@ class StrategyConfigManager:
             logger.error(f"Error setting config: {e}")
             return False, None, [str(e)]
 
+    async def rollback_config(
+        self,
+        strategy_id: str,
+        changed_by: str,
+        symbol: str | None = None,
+        target_version: int | None = None,
+        reason: str | None = None,
+    ) -> tuple[bool, StrategyConfig | None, list[str]]:
+        """
+        Rollback strategy configuration to a previous version.
+
+        Args:
+            strategy_id: Strategy identifier
+            changed_by: Who is performing the rollback
+            symbol: Optional symbol for symbol-specific config
+            target_version: Optional specific version to rollback to
+            reason: Optional reason for the rollback
+
+        Returns:
+            Tuple of (success, config, errors)
+        """
+        if not self.mongodb_client or not self.mongodb_client.is_connected:
+            return (
+                False,
+                None,
+                ["MongoDB not available - cannot rollback configuration"],
+            )
+
+        try:
+            # If using Data Manager proxy
+            if self.mongodb_client.use_data_manager:
+                success = await self.mongodb_client.data_manager_client.rollback_strategy_config(
+                    strategy_id=strategy_id,
+                    changed_by=changed_by,
+                    symbol=symbol,
+                    target_version=target_version,
+                    reason=reason,
+                )
+                if success:
+                    # Invalidate cache
+                    cache_key = self._make_cache_key(strategy_id, symbol)
+                    if cache_key in self._cache:
+                        del self._cache[cache_key]
+
+                    # Get the new config
+                    result = await self.get_config(strategy_id, symbol)
+                    config = StrategyConfig(
+                        strategy_id=strategy_id,
+                        symbol=symbol,
+                        parameters=result.get("parameters", {}),
+                        version=result.get("version", 0),
+                        created_by=changed_by,
+                    )
+                    return True, config, []
+                else:
+                    return False, None, ["Rollback failed in Data Manager service"]
+
+            return (
+                False,
+                None,
+                ["Direct database rollback not implemented (deprecated)"],
+            )
+        except Exception as e:
+            logger.error(f"Error rolling back config: {e}")
+            return False, None, [str(e)]
+
     async def delete_config(
         self,
         strategy_id: str,
         changed_by: str,
-        symbol: Optional[str] = None,
-        reason: Optional[str] = None,
+        symbol: str | None = None,
+        reason: str | None = None,
     ) -> tuple[bool, list[str]]:
         """
         Delete strategy configuration.
@@ -537,7 +603,7 @@ class StrategyConfigManager:
     async def get_audit_trail(
         self,
         strategy_id: str,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         limit: int = 100,
     ) -> list[StrategyConfigAudit]:
         """

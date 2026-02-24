@@ -65,7 +65,7 @@ async def test_consumer_processing_loop_exception(consumer):
         consumer.shutdown_event.set()
         try:
             await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-        except (asyncio.TimeoutError, Exception):
+        except (TimeoutError, Exception):
             pass
 
 

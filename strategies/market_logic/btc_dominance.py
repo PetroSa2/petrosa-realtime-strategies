@@ -37,7 +37,7 @@ class BitcoinDominanceStrategy:
     for rotating between Bitcoin and altcoins based on dominance trends.
     """
 
-    def __init__(self, logger: Optional[structlog.BoundLogger] = None):
+    def __init__(self, logger: structlog.BoundLogger | None = None):
         """Initialize the Bitcoin Dominance Strategy."""
         self.logger = logger or structlog.get_logger()
 
@@ -53,8 +53,8 @@ class BitcoinDominanceStrategy:
         # State tracking (QTZD-style data accumulation)
         self.price_history: dict[str, list[dict[str, Any]]] = {}
         self.dominance_history: list[dict[str, Any]] = []
-        self.last_signal_time: Optional[datetime] = None
-        self.last_dominance_calculation: Optional[float] = None
+        self.last_signal_time: datetime | None = None
+        self.last_dominance_calculation: float | None = None
 
         # Strategy metrics
         self.signals_generated = 0
@@ -68,7 +68,7 @@ class BitcoinDominanceStrategy:
 
     async def process_market_data(
         self, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Process market data and generate dominance-based signals.
 
@@ -78,7 +78,9 @@ class BitcoinDominanceStrategy:
         Returns:
             Signal if dominance conditions are met, None otherwise
         """
-        with get_tracer().start_as_current_span("strategy.btc_dominance.process") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.btc_dominance.process"
+        ) as span:
             span.set_attribute("symbol", market_data.symbol)
             try:
                 # Update price history (QTZD-style data accumulation)
@@ -114,7 +116,9 @@ class BitcoinDominanceStrategy:
                 return signal
 
             except Exception as e:
-                self.logger.error("Error processing Bitcoin dominance data", error=str(e))
+                self.logger.error(
+                    "Error processing Bitcoin dominance data", error=str(e)
+                )
                 span.record_exception(e)
                 span.set_status(trace.Status(trace.StatusCode.ERROR))
                 return None
@@ -147,14 +151,16 @@ class BitcoinDominanceStrategy:
                 if entry["timestamp"] > cutoff_time
             ]
 
-    async def _calculate_btc_dominance(self) -> Optional[float]:
+    async def _calculate_btc_dominance(self) -> float | None:
         """
         Calculate Bitcoin dominance from available price data.
 
         Simplified calculation using price momentum as proxy for market cap changes.
         In production, this would use actual market cap data.
         """
-        with get_tracer().start_as_current_span("strategy.btc_dominance.calculate") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.btc_dominance.calculate"
+        ) as span:
             try:
                 # Get recent prices for BTC and major altcoins
                 btc_data = self.price_history.get("BTCUSDT", [])
@@ -240,7 +246,7 @@ class BitcoinDominanceStrategy:
 
     async def _generate_dominance_signal(
         self, current_dominance: float, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Generate trading signals based on dominance analysis.
 
