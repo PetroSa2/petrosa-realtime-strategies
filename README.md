@@ -16,8 +16,9 @@ A high-performance, horizontally scalable trading signal service that processes 
 |---------|---------|-------|--------|--------|
 | **petrosa-socket-client** | Real-time WebSocket data ingestion | Binance WebSocket API | NATS: `binance.websocket.data` | Real-time Processing |
 | **petrosa-binance-data-extractor** | Historical data extraction & gap filling | Binance REST API | MySQL (klines, funding rates, trades) | Batch Processing |
-| **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | MySQL klines data | NATS: `signals.trading` | Signal Generation |
-| **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.websocket.data` | NATS: `signals.trading` | **YOU ARE HERE** |
+| **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | MySQL klines data | NATS: `intent.trading.*` | Signal Generation |
+| **petrosa-cio** | Centralized orchestrator & gatekeeper | NATS: `intent.>` | NATS: `signals.trading` | Interception Layer |
+| **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.websocket.data` | NATS: `intent.trading.*` | **YOU ARE HERE** |
 | **petrosa-tradeengine** | Order execution & trade management | NATS: `signals.trading` | Binance Orders API, MongoDB audit | Order Execution |
 | **petrosa_k8s** | Centralized infrastructure | Kubernetes manifests | Cluster resources | Infrastructure |
 
@@ -57,8 +58,15 @@ A high-performance, horizontally scalable trading signal service that processes 
 │ • Generate   │
 │   signals    │
 └──────┬───────┘
-       │ NATS: signals.trading
+       │ NATS Topic: intent.trading.*
        │
+       ▼
+┌──────────────────────────────────────────────┐
+│                petrosa-cio                   │
+│             (Interception Layer)             │
+│   [intent.>]  ──▶  [signals.trading]         │
+└──────┬───────────────────────────────────────┘
+       │ Approved Signal
        ▼
 ┌──────────────────────┐
 │   Trade Engine       │
@@ -77,7 +85,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 2. **Ticker Messages** - 24hr ticker updates
 3. **Depth Messages** - Order book depth (top 20 levels)
 
-**Published Topic:** `signals.trading`
+**Published Topic:** `intent.trading.*` (Intercepted by CIO)
 
 **Message Format (Output):**
 ```json
