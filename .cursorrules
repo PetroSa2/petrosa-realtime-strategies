@@ -22,7 +22,7 @@ Additionally, this service exposes a **Runtime Configuration API** for live para
 - **Ecosystem Architecture**: See master § System Architecture Overview → Signal Generation Layer
 - **Work Tracking**: See master § Centralized Work Tracking with GitHub Projects
 - **GitHub CLI Profile**: See master § Prerequisites & Installation → GitHub CLI Profile Configuration (CRITICAL: Always use `yurisa2` profile)
-- **NATS Topics**: See master § NATS Message Bus → `binance.websocket.data` (input), `signals.trading` (output)
+- **NATS Topics**: See master § NATS Message Bus → `binance.websocket.data` (input), `intent.trading.*` (output)
 - **Deployment Patterns**: See master § Realtime Strategies Configuration
 - **Scaling Strategy**: See master § Deployment Patterns (horizontal scaling via NATS consumer groups)
 - **Runtime Configuration**: See master § Configuration Management
@@ -440,7 +440,7 @@ curl http://localhost:8080/api/v1/strategies/orderbook_skew/config | jq '.parame
 
 #### 1. Signals Not Generated
 
-**Symptom**: No signals published to `signals.trading`
+**Symptom**: No signals published to `intent.trading.*`
 
 **Check**:
 ```bash
@@ -505,7 +505,7 @@ env:
 ```bash
 # NATS configuration
 NATS_CONSUMER_TOPIC="binance.websocket.data"
-NATS_PUBLISHER_TOPIC="signals.trading"
+NATS_PUBLISHER_TOPIC="intent.trading.*"
 NATS_CONSUMER_GROUP="realtime-strategies-group"  # CRITICAL for load balancing
 
 # Trading symbols
