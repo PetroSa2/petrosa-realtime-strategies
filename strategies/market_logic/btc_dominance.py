@@ -78,7 +78,9 @@ class BitcoinDominanceStrategy:
         Returns:
             Signal if dominance conditions are met, None otherwise
         """
-        with get_tracer().start_as_current_span("strategy.btc_dominance.process") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.btc_dominance.process"
+        ) as span:
             span.set_attribute("symbol", market_data.symbol)
             try:
                 # Update price history (QTZD-style data accumulation)
@@ -114,7 +116,9 @@ class BitcoinDominanceStrategy:
                 return signal
 
             except Exception as e:
-                self.logger.error("Error processing Bitcoin dominance data", error=str(e))
+                self.logger.error(
+                    "Error processing Bitcoin dominance data", error=str(e)
+                )
                 span.record_exception(e)
                 span.set_status(trace.Status(trace.StatusCode.ERROR))
                 return None
@@ -154,7 +158,9 @@ class BitcoinDominanceStrategy:
         Simplified calculation using price momentum as proxy for market cap changes.
         In production, this would use actual market cap data.
         """
-        with get_tracer().start_as_current_span("strategy.btc_dominance.calculate") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.btc_dominance.calculate"
+        ) as span:
             try:
                 # Get recent prices for BTC and major altcoins
                 btc_data = self.price_history.get("BTCUSDT", [])

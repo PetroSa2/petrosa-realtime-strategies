@@ -100,13 +100,11 @@ async def test_list_strategies_error(client, setup_config_manager):
 @pytest.mark.asyncio
 async def test_get_strategy_schema_success(client):
     """Test successful schema retrieval."""
-    with patch(
-        "strategies.api.config_routes.get_parameter_schema"
-    ) as mock_schema, patch(
-        "strategies.api.config_routes.get_strategy_defaults"
-    ) as mock_defaults, patch(
-        "strategies.api.config_routes.get_strategy_metadata"
-    ) as mock_metadata:
+    with (
+        patch("strategies.api.config_routes.get_parameter_schema") as mock_schema,
+        patch("strategies.api.config_routes.get_strategy_defaults") as mock_defaults,
+        patch("strategies.api.config_routes.get_strategy_metadata") as mock_metadata,
+    ):
         mock_defaults.return_value = {"param1": 10, "param2": "test"}
         mock_schema.return_value = {
             "param1": {
@@ -157,11 +155,10 @@ async def test_get_strategy_schema_error(client):
 @pytest.mark.asyncio
 async def test_get_strategy_defaults_success(client):
     """Test successful defaults retrieval."""
-    with patch(
-        "strategies.api.config_routes.get_strategy_defaults"
-    ) as mock_defaults, patch(
-        "strategies.api.config_routes.get_strategy_metadata"
-    ) as mock_metadata:
+    with (
+        patch("strategies.api.config_routes.get_strategy_defaults") as mock_defaults,
+        patch("strategies.api.config_routes.get_strategy_metadata") as mock_metadata,
+    ):
         mock_defaults.return_value = {"param1": 10, "param2": "test"}
         mock_metadata.return_value = {"name": "Test Strategy"}
 

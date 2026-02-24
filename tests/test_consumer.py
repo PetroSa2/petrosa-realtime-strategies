@@ -165,12 +165,19 @@ async def test_consumer_process_market_data_unknown_type(consumer):
     )
 
     # Mock the properties to return False for all types using PropertyMock
-    with patch.object(
-        MarketDataMessage, "is_depth", new_callable=PropertyMock, return_value=False
-    ), patch.object(
-        MarketDataMessage, "is_trade", new_callable=PropertyMock, return_value=False
-    ), patch.object(
-        MarketDataMessage, "is_ticker", new_callable=PropertyMock, return_value=False
+    with (
+        patch.object(
+            MarketDataMessage, "is_depth", new_callable=PropertyMock, return_value=False
+        ),
+        patch.object(
+            MarketDataMessage, "is_trade", new_callable=PropertyMock, return_value=False
+        ),
+        patch.object(
+            MarketDataMessage,
+            "is_ticker",
+            new_callable=PropertyMock,
+            return_value=False,
+        ),
     ):
         # Create new instance with mocked properties
         market_data_mock = MarketDataMessage(
@@ -584,7 +591,9 @@ async def test_consumer_signal_to_order_conversion(consumer):
         except Exception:
             # Provider already set by another test, use current one
             if isinstance(trace.get_tracer_provider(), TracerProvider):
-                trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(span_exporter))
+                trace.get_tracer_provider().add_span_processor(
+                    SimpleSpanProcessor(span_exporter)
+                )
 
     signal = Signal(
         symbol="BTCUSDT",
@@ -616,16 +625,24 @@ async def test_consumer_signal_to_order_conversion(consumer):
             signal_to_order_span = span
             break
 
-    assert signal_to_order_span is not None, "Expected span 'consumer.signal_to_order' to exist"
+    assert (
+        signal_to_order_span is not None
+    ), "Expected span 'consumer.signal_to_order' to exist"
 
     # Verify business context attributes
     attributes = signal_to_order_span.attributes
     assert attributes.get("symbol") == "BTCUSDT", "Expected symbol attribute"
     assert attributes.get("signal.type") == "BUY", "Expected signal.type attribute"
-    assert attributes.get("signal.strength") == 0.85, "Expected signal.strength attribute"
-    assert attributes.get("strategy.name") == "test_strategy", "Expected strategy.name attribute"
+    assert (
+        attributes.get("signal.strength") == 0.85
+    ), "Expected signal.strength attribute"
+    assert (
+        attributes.get("strategy.name") == "test_strategy"
+    ), "Expected strategy.name attribute"
     assert attributes.get("order.side") == "buy", "Expected order.side attribute"
-    assert attributes.get("order.quantity_pct") == 0.05, "Expected order.quantity_pct attribute"
+    assert (
+        attributes.get("order.quantity_pct") == 0.05
+    ), "Expected order.quantity_pct attribute"
     assert attributes.get("order.created") is True, "Expected order.created attribute"
     assert attributes.get("result") == "success", "Expected result attribute"
 

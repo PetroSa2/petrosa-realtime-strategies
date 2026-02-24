@@ -386,13 +386,19 @@ class NATSConsumer:
                         if hasattr(market_data, "stream") and market_data.stream:
                             stream_value = str(market_data.stream)
                             # Only process if it's a valid string with "@" separator (not a MagicMock representation)
-                            if stream_value and "@" in stream_value and not stream_value.startswith("<"):
+                            if (
+                                stream_value
+                                and "@" in stream_value
+                                and not stream_value.startswith("<")
+                            ):
                                 stream_parts = stream_value.split("@")
                                 if len(stream_parts) > 1:
                                     # Extract interval from stream (e.g., "100ms", "1s", "5m")
                                     interval = stream_parts[-1]
                                     if interval and interval.strip():
-                                        span.set_attribute("market_data.interval", interval)
+                                        span.set_attribute(
+                                            "market_data.interval", interval
+                                        )
                     except (AttributeError, TypeError):
                         # Ignore errors when stream is not available or is a mock object
                         pass
@@ -890,8 +896,8 @@ class NATSConsumer:
                 price=current_price,
                 stop_loss=stop_loss,
                 take_profit=take_profit,
-                sl_pct=f"{stop_loss_pct*100:.2f}%",
-                tp_pct=f"{take_profit_pct*100:.2f}%",
+                sl_pct=f"{stop_loss_pct * 100:.2f}%",
+                tp_pct=f"{take_profit_pct * 100:.2f}%",
             )
 
             return order

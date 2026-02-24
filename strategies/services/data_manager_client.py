@@ -470,7 +470,7 @@ class DataManagerClient:
             payload = {
                 "changed_by": changed_by,
                 "target_version": target_version,
-                "reason": reason
+                "reason": reason,
             }
 
             url = f"/api/v1/config/rollback/strategies/{strategy_id}"
@@ -479,9 +479,7 @@ class DataManagerClient:
                 params["symbol"] = symbol
 
             # Use the internal _client which handles base_url and auth
-            response = await self._client.post(
-                url, json=payload, params=params
-            )
+            response = await self._client.post(url, json=payload, params=params)
 
             return response is not None
         except Exception as e:

@@ -64,9 +64,7 @@ class StrategyConfigAudit(BaseModel):
     """
 
     id: str | None = Field(None, description="Audit record ID")
-    config_id: str | None = Field(
-        None, description="Configuration ID that was changed"
-    )
+    config_id: str | None = Field(None, description="Configuration ID that was changed")
     strategy_id: str = Field(..., description="Strategy identifier")
     symbol: str | None = Field(None, description="Symbol (None for global)")
     action: Literal["CREATE", "UPDATE", "DELETE"] = Field(

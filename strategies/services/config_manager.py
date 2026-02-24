@@ -441,7 +441,11 @@ class StrategyConfigManager:
             Tuple of (success, config, errors)
         """
         if not self.mongodb_client or not self.mongodb_client.is_connected:
-            return False, None, ["MongoDB not available - cannot rollback configuration"]
+            return (
+                False,
+                None,
+                ["MongoDB not available - cannot rollback configuration"],
+            )
 
         try:
             # If using Data Manager proxy
@@ -451,7 +455,7 @@ class StrategyConfigManager:
                     changed_by=changed_by,
                     symbol=symbol,
                     target_version=target_version,
-                    reason=reason
+                    reason=reason,
                 )
                 if success:
                     # Invalidate cache
@@ -466,13 +470,17 @@ class StrategyConfigManager:
                         symbol=symbol,
                         parameters=result.get("parameters", {}),
                         version=result.get("version", 0),
-                        created_by=changed_by
+                        created_by=changed_by,
                     )
                     return True, config, []
                 else:
                     return False, None, ["Rollback failed in Data Manager service"]
 
-            return False, None, ["Direct database rollback not implemented (deprecated)"]
+            return (
+                False,
+                None,
+                ["Direct database rollback not implemented (deprecated)"],
+            )
         except Exception as e:
             logger.error(f"Error rolling back config: {e}")
             return False, None, [str(e)]

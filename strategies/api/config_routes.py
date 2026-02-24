@@ -33,10 +33,13 @@ from strategies.services.config_manager import StrategyConfigManager
 
 logger = logging.getLogger(__name__)
 
+
 class RollbackRequest(BaseModel):
     """Request model for configuration rollback."""
 
-    target_version: Optional[int] = Field(None, description="Specific version to rollback to")
+    target_version: Optional[int] = Field(
+        None, description="Specific version to rollback to"
+    )
     changed_by: str = Field(..., description="Who is performing the rollback")
     reason: Optional[str] = Field(None, description="Reason for rollback")
 
@@ -109,6 +112,7 @@ async def rollback_config(
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
+
 
 # Global config manager instance (will be injected on startup)
 _config_manager: Optional[StrategyConfigManager] = None
@@ -3156,7 +3160,9 @@ async def validate_config(request: ConfigValidationRequest):
 
 # Service URLs for cross-service conflict detection
 SERVICE_URLS = {
-    "tradeengine": os.getenv("TRADEENGINE_URL", "http://petrosa-tradeengine-service:80"),
+    "tradeengine": os.getenv(
+        "TRADEENGINE_URL", "http://petrosa-tradeengine-service:80"
+    ),
     "data-manager": os.getenv("DATA_MANAGER_URL", "http://petrosa-data-manager:80"),
     "ta-bot": os.getenv("TA_BOT_URL", "http://petrosa-ta-bot-service:80"),
 }

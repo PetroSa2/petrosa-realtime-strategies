@@ -132,7 +132,9 @@ class IcebergDetectorStrategy:
         Returns:
             Signal if iceberg detected near price, None otherwise
         """
-        with get_tracer().start_as_current_span("strategy.iceberg_detector.analyze") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.iceberg_detector.analyze"
+        ) as span:
             span.set_attribute("symbol", symbol)
 
             if timestamp is None:
@@ -189,7 +191,9 @@ class IcebergDetectorStrategy:
         self, iceberg: IcebergPattern, current_price: float
     ) -> Signal | None:
         """Generate trading signal from iceberg pattern."""
-        with get_tracer().start_as_current_span("strategy.iceberg_detector.generate_signal") as span:
+        with get_tracer().start_as_current_span(
+            "strategy.iceberg_detector.generate_signal"
+        ) as span:
             span.set_attribute("symbol", iceberg.symbol)
             span.set_attribute("iceberg.price", iceberg.price)
             span.set_attribute("iceberg.side", iceberg.side)

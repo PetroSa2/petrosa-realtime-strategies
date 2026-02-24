@@ -72,9 +72,12 @@ def test_mongodb_client_init_direct_mode():
 
 def test_mongodb_client_init_data_manager_mode(mock_data_manager_client):
     """Test MongoDB client initialization in Data Manager mode."""
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
 
@@ -96,9 +99,12 @@ def test_mongodb_client_init_data_manager_unavailable():
 @pytest.mark.asyncio
 async def test_connect_data_manager_mode(mock_data_manager_client):
     """Test connection in Data Manager mode."""
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.connect()
@@ -160,9 +166,12 @@ async def test_connect_direct_mode_unexpected_error():
 @pytest.mark.asyncio
 async def test_disconnect_data_manager_mode(mock_data_manager_client):
     """Test disconnection in Data Manager mode."""
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         client._connected = True
@@ -272,9 +281,12 @@ async def test_get_global_config_data_manager_mode(mock_data_manager_client):
     mock_config = {"strategy_id": "test", "parameters": {"param1": "value1"}}
     mock_data_manager_client.get_global_config.return_value = mock_config
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.get_global_config("test_strategy")
@@ -309,9 +321,12 @@ async def test_set_global_config_data_manager_mode(mock_data_manager_client):
     config_data = {"strategy_id": "test", "parameters": {"param1": "value1"}}
     mock_data_manager_client.upsert_global_config.return_value = True
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.upsert_global_config(
@@ -382,9 +397,12 @@ async def test_delete_global_config_data_manager_mode(mock_data_manager_client):
     """Test delete global config in Data Manager mode."""
     mock_data_manager_client.delete_global_config.return_value = True
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.delete_global_config("test_strategy")
@@ -422,9 +440,12 @@ async def test_get_symbol_config_data_manager_mode(mock_data_manager_client):
     }
     mock_data_manager_client.get_symbol_config.return_value = mock_config
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.get_symbol_config("test_strategy", "BTCUSDT")
@@ -467,9 +488,12 @@ async def test_set_symbol_config_data_manager_mode(mock_data_manager_client):
     }
     mock_data_manager_client.upsert_symbol_config.return_value = True
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.upsert_symbol_config(
@@ -520,9 +544,12 @@ async def test_delete_symbol_config_data_manager_mode(mock_data_manager_client):
     """Test delete symbol config in Data Manager mode."""
     mock_data_manager_client.delete_symbol_config.return_value = True
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.delete_symbol_config("test_strategy", "BTCUSDT")
@@ -556,9 +583,12 @@ async def test_get_audit_trail_data_manager_mode(mock_data_manager_client):
     mock_audit = [{"id": "1", "strategy_id": "test", "action": "update"}]
     mock_data_manager_client.get_audit_trail.return_value = mock_audit
 
-    with patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True), patch(
-        "strategies.db.mongodb_client.DataManagerClient",
-        return_value=mock_data_manager_client,
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
     ):
         client = MongoDBClient(use_data_manager=True)
         result = await client.get_audit_trail("test_strategy", "BTCUSDT", 10)

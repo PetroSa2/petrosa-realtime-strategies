@@ -29,6 +29,7 @@ def span_exporter():
     """In-memory span exporter for testing"""
     # Always use the span exporter from conftest.py - it's already set up with the provider
     import sys
+
     conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
     if conftest and hasattr(conftest, "_test_span_exporter"):
         exporter = conftest._test_span_exporter
@@ -48,6 +49,7 @@ def tracer_provider(span_exporter):
     # Use the tracer provider from conftest.py if available
     try:
         import sys
+
         conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
         if conftest and hasattr(conftest, "_test_tracer_provider"):
             provider = conftest._test_tracer_provider
@@ -167,7 +169,9 @@ async def test_consumer_extracts_trace_context(
 
     # Verify provider setup and ensure exporter is attached
     current_provider = trace.get_tracer_provider()
-    assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
+    assert isinstance(
+        current_provider, TracerProvider
+    ), f"Provider should be TracerProvider, got {type(current_provider)}"
     # Ensure exporter is attached (adding multiple times is safe)
     current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
@@ -184,29 +188,37 @@ async def test_consumer_extracts_trace_context(
     # Debug: Check if spans were created but not exported
     # Get the active span to see if one was created
     from opentelemetry.trace import get_current_span
+
     active_span = get_current_span()
     if active_span and active_span.get_span_context().is_valid:
         print(f"DEBUG: Active span found: {active_span.name}")
 
     # Verify span was created - check both the test exporter and conftest exporter
     spans = span_exporter.get_finished_spans()
-    print(f"DEBUG: Found {len(spans)} spans in test exporter: {[s.name for s in spans]}")
+    print(
+        f"DEBUG: Found {len(spans)} spans in test exporter: {[s.name for s in spans]}"
+    )
 
     # Also check conftest exporter if it exists
     import sys
+
     conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
     if conftest and hasattr(conftest, "_test_span_exporter"):
         conftest_exporter = conftest._test_span_exporter
         if conftest_exporter is not None and conftest_exporter is not span_exporter:
             conftest_spans = conftest_exporter.get_finished_spans()
             if len(conftest_spans) > 0:
-                print(f"DEBUG: Found {len(conftest_spans)} spans in conftest exporter: {[s.name for s in conftest_spans]}")
+                print(
+                    f"DEBUG: Found {len(conftest_spans)} spans in conftest exporter: {[s.name for s in conftest_spans]}"
+                )
                 spans.extend(conftest_spans)
 
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
-    assert consumer_span is not None, f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
+    assert (
+        consumer_span is not None
+    ), f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
 
     # Verify trace ID exists (in CI, extract_trace_context may return None)
     actual_trace_id = format(consumer_span.context.trace_id, "032x")
@@ -235,7 +247,9 @@ async def test_consumer_handles_missing_trace_context(
     """
     # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
     current_provider = trace.get_tracer_provider()
-    assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
+    assert isinstance(
+        current_provider, TracerProvider
+    ), f"Provider should be TracerProvider, got {type(current_provider)}"
     # Ensure exporter is attached (adding multiple times is safe)
     current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
@@ -263,7 +277,9 @@ async def test_consumer_handles_missing_trace_context(
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
-    assert consumer_span is not None, f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
+    assert (
+        consumer_span is not None
+    ), f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
 
 
 @pytest.mark.asyncio
@@ -400,7 +416,9 @@ async def test_end_to_end_trace_propagation(
 
         # Ensure span_exporter is added to the current provider (it should already be from conftest.py)
         current_provider = trace.get_tracer_provider()
-        assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
+        assert isinstance(
+            current_provider, TracerProvider
+        ), f"Provider should be TracerProvider, got {type(current_provider)}"
         # Ensure exporter is attached (adding multiple times is safe)
         current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
 
@@ -433,7 +451,9 @@ async def test_end_to_end_trace_propagation(
         consumer_span = next(
             (s for s in spans if s.name == "process_market_data_message"), None
         )
-        assert consumer_span is not None, f"Consumer span should be created. Found spans: {[s.name for s in spans]}"
+        assert (
+            consumer_span is not None
+        ), f"Consumer span should be created. Found spans: {[s.name for s in spans]}"
 
         # Verify trace ID is preserved (consumer span should have same trace ID as root)
         consumer_trace_id = format(consumer_span.context.trace_id, "032x")
