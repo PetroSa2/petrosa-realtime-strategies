@@ -100,7 +100,7 @@ def consumer(mock_publisher):
 def publisher():
     """Create publisher instance for testing"""
     publisher = TradeOrderPublisher(
-        nats_url="nats://test:4222", topic="signals.trading"
+        nats_url="nats://test:4222", topic="intent.trading.*"
     )
     publisher.nats_client = MagicMock()
     publisher.nats_client.publish = AsyncMock()
@@ -424,7 +424,7 @@ async def test_end_to_end_trace_propagation(
 
         # Now simulate consumer receiving the message
         # Create NATS message from published data
-        consumer_msg = create_nats_message(published_data, subject="signals.trading")
+        consumer_msg = create_nats_message(published_data, subject="intent.trading.*")
 
         # Mock the parse and process methods for consumer
         consumer._parse_market_data = MagicMock(

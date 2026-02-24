@@ -128,7 +128,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │  │                                                            │     │
 │  │  • NATS Consumer (binance.websocket.data)                │     │
 │  │  • Signal Processor (stateless)                          │     │
-│  │  • NATS Publisher (signals.trading)                      │     │
+│  │  • NATS Publisher (intent.trading.*)                     │     │
 │  │  • Health Server (HTTP:8080)                             │     │
 │  │  • Heartbeat Manager (periodic stats)                    │     │
 │  └──────┬───────────────────────────────────────────────────┘     │
@@ -207,7 +207,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │  │  • Validate signal completeness                          │     │
 │  │  • Check confidence threshold (>= 0.6)                   │     │
 │  │  • Add risk management levels                            │     │
-│  │  • Publish to signals.trading topic                      │     │
+│  │  • Publish to intent.trading.* topic (CIO intercepted)    │     │
 │  │  • Increment metrics                                     │     │
 │  └──────────────────────────────────────────────────────────┘     │
 │                                                                      │
@@ -897,7 +897,7 @@ For complete documentation, examples, and troubleshooting, see the [TA Bot Confi
 | `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
 | `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string (fallback) |
 | `NATS_CONSUMER_TOPIC` | `binance.websocket.data` | Input topic |
-| `NATS_PUBLISHER_TOPIC` | `signals.trading` | Output topic |
+| `NATS_PUBLISHER_TOPIC` | `intent.trading.*` | Output topic (Intercepted by CIO) |
 | `NATS_CONSUMER_GROUP` | `realtime-strategies-group` | Consumer group for load balancing |
 | `TRADING_SYMBOLS` | `BTCUSDT,ETHUSDT,BNBUSDT` | Symbols to process |
 | `STRATEGY_ENABLED_ORDERBOOK_SKEW` | `true` | Enable order book strategy |
@@ -939,7 +939,7 @@ spec:
         - name: NATS_CONSUMER_TOPIC
           value: "binance.websocket.data"
         - name: NATS_PUBLISHER_TOPIC
-          value: "signals.trading"
+          value: "intent.trading.*"
         - name: NATS_CONSUMER_GROUP
           value: "realtime-strategies-group"  # CRITICAL for load balancing
         resources:
