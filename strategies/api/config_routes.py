@@ -7,7 +7,7 @@ All endpoints are LLM-compatible and include detailed documentation.
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query, status

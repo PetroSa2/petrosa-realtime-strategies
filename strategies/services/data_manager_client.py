@@ -7,7 +7,7 @@ for configuration management and market data access.
 
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from data_manager_client import DataManagerClient as BaseDataManagerClient
 from data_manager_client.exceptions import ConnectionError
