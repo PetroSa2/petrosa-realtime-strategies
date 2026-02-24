@@ -16,9 +16,9 @@ class StrategyConfig(BaseModel):
     either global (applied to all symbols) or symbol-specific.
     """
 
-    id: Optional[str] = Field(None, description="Configuration ID")
+    id: str | None = Field(None, description="Configuration ID")
     strategy_id: str = Field(..., description="Strategy identifier")
-    symbol: Optional[str] = Field(
+    symbol: str | None = Field(
         None, description="Trading symbol (None for global configs)"
     )
     parameters: dict[str, Any] = Field(
@@ -63,26 +63,26 @@ class StrategyConfigAudit(BaseModel):
     Tracks who changed what, when, and why for full accountability.
     """
 
-    id: Optional[str] = Field(None, description="Audit record ID")
-    config_id: Optional[str] = Field(
+    id: str | None = Field(None, description="Audit record ID")
+    config_id: str | None = Field(
         None, description="Configuration ID that was changed"
     )
     strategy_id: str = Field(..., description="Strategy identifier")
-    symbol: Optional[str] = Field(None, description="Symbol (None for global)")
+    symbol: str | None = Field(None, description="Symbol (None for global)")
     action: Literal["CREATE", "UPDATE", "DELETE"] = Field(
         ..., description="Type of change made"
     )
-    old_parameters: Optional[dict[str, Any]] = Field(
+    old_parameters: dict[str, Any] | None = Field(
         None, description="Previous parameter values"
     )
-    new_parameters: Optional[dict[str, Any]] = Field(
+    new_parameters: dict[str, Any] | None = Field(
         None, description="New parameter values"
     )
     changed_by: str = Field(..., description="Who/what made the change")
     changed_at: datetime = Field(
         default_factory=datetime.utcnow, description="When the change occurred"
     )
-    reason: Optional[str] = Field(None, description="Reason for the change")
+    reason: str | None = Field(None, description="Reason for the change")
 
     class Config:
         json_schema_extra = {
@@ -112,9 +112,9 @@ class ParameterSchema(BaseModel):
     type: str = Field(..., description="Data type (int, float, bool, str)")
     description: str = Field(..., description="What this parameter controls")
     default: Any = Field(..., description="Default value")
-    min: Optional[float] = Field(None, description="Minimum value (for numeric)")
-    max: Optional[float] = Field(None, description="Maximum value (for numeric)")
-    allowed_values: Optional[list[Any]] = Field(
+    min: float | None = Field(None, description="Minimum value (for numeric)")
+    max: float | None = Field(None, description="Maximum value (for numeric)")
+    allowed_values: list[Any] | None = Field(
         None, description="Allowed values (for enums)"
     )
     example: Any = Field(..., description="Example valid value")
@@ -174,4 +174,4 @@ class ConfigSource(BaseModel):
         False, description="Whether this is a symbol-specific override"
     )
     cache_hit: bool = Field(False, description="Whether this was served from cache")
-    load_time_ms: Optional[float] = Field(None, description="Time taken to load config")
+    load_time_ms: float | None = Field(None, description="Time taken to load config")

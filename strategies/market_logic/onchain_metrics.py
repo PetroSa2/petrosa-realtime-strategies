@@ -30,7 +30,7 @@ class OnChainMetricsStrategy:
     shifts in network usage and adoption.
     """
 
-    def __init__(self, logger: Optional[structlog.BoundLogger] = None):
+    def __init__(self, logger: structlog.BoundLogger | None = None):
         """Initialize the On-Chain Metrics Strategy."""
         self.logger = logger or structlog.get_logger()
 
@@ -67,7 +67,7 @@ class OnChainMetricsStrategy:
 
     async def process_market_data(
         self, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Process market data and generate on-chain based signals.
 
@@ -195,7 +195,7 @@ class OnChainMetricsStrategy:
 
     async def _analyze_onchain_metrics(
         self, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Analyze on-chain metrics and generate fundamental signals.
 
@@ -236,7 +236,7 @@ class OnChainMetricsStrategy:
 
         return signal
 
-    def _calculate_growth_metrics(self, asset_key: str) -> Optional[dict[str, float]]:
+    def _calculate_growth_metrics(self, asset_key: str) -> dict[str, float] | None:
         """Calculate growth rates from historical data."""
         history = self.metrics_history.get(asset_key, [])
 
@@ -317,7 +317,7 @@ class OnChainMetricsStrategy:
         current_metrics: dict[str, Any],
         growth_metrics: dict[str, float],
         market_data: MarketDataMessage,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Evaluate fundamental conditions and generate signals.
 

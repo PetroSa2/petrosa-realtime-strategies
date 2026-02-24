@@ -67,7 +67,7 @@ class NATSConsumer:
         consumer_name: str,
         consumer_group: str,
         publisher: TradeOrderPublisher,
-        logger: Optional[structlog.BoundLogger] = None,
+        logger: structlog.BoundLogger | None = None,
         depth_analyzer=None,
     ):
         """Initialize the NATS consumer."""
@@ -80,8 +80,8 @@ class NATSConsumer:
         self.depth_analyzer = depth_analyzer
 
         # NATS client and subscription
-        self.nats_client: Optional[NATSClient] = None
-        self.subscription: Optional[Subscription] = None
+        self.nats_client: NATSClient | None = None
+        self.subscription: Subscription | None = None
 
         # Circuit breaker for NATS connection
         self.circuit_breaker = CircuitBreaker(
@@ -453,7 +453,7 @@ class NATSConsumer:
 
     def _parse_market_data(
         self, message_data: dict[str, Any]
-    ) -> Optional[MarketDataMessage]:
+    ) -> MarketDataMessage | None:
         """Parse and validate market data message."""
         try:
             # Extract stream and data
@@ -482,7 +482,7 @@ class NATSConsumer:
 
     def _transform_binance_data(
         self, stream: str, data: dict[str, Any]
-    ) -> Optional[Union[DepthUpdate, TradeData, TickerData]]:
+    ) -> Union[DepthUpdate, TradeData, TickerData] | None:
         """Transform raw Binance WebSocket data to expected format."""
         try:
             stream_type = stream.split("@")[1] if "@" in stream else None
@@ -511,7 +511,7 @@ class NATSConsumer:
             )
             return None
 
-    def _transform_depth_data(self, data: dict[str, Any]) -> Optional[DepthUpdate]:
+    def _transform_depth_data(self, data: dict[str, Any]) -> DepthUpdate | None:
         """Transform depth data to DepthUpdate model."""
         try:
             # Extract symbol from the data if available, otherwise use a default
@@ -543,7 +543,7 @@ class NATSConsumer:
             self.logger.error("Failed to transform depth data", error=str(e), data=data)
             return None
 
-    def _transform_trade_data(self, data: dict[str, Any]) -> Optional[TradeData]:
+    def _transform_trade_data(self, data: dict[str, Any]) -> TradeData | None:
         """Transform trade data to TradeData model."""
         try:
             # Map Binance trade fields to our model
@@ -564,7 +564,7 @@ class NATSConsumer:
             self.logger.error("Failed to transform trade data", error=str(e), data=data)
             return None
 
-    def _transform_ticker_data(self, data: dict[str, Any]) -> Optional[TickerData]:
+    def _transform_ticker_data(self, data: dict[str, Any]) -> TickerData | None:
         """Transform ticker data to TickerData model."""
         try:
             return TickerData(

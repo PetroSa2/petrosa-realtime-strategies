@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/metrics", tags=["market-metrics"])
 
 # Global depth analyzer instance (injected on startup)
-_depth_analyzer: Optional[DepthAnalyzer] = None
+_depth_analyzer: DepthAnalyzer | None = None
 
 
 def set_depth_analyzer(analyzer: DepthAnalyzer) -> None:

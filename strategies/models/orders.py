@@ -6,13 +6,13 @@ order types, sides, and position management.
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, validator
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     """Types of orders supported."""
 
     MARKET = "MARKET"
@@ -21,14 +21,14 @@ class OrderType(str, Enum):
     STOP_LIMIT = "STOP_LIMIT"
 
 
-class OrderSide(str, Enum):
+class OrderSide(StrEnum):
     """Order sides."""
 
     BUY = "BUY"
     SELL = "SELL"
 
 
-class TimeInForce(str, Enum):
+class TimeInForce(StrEnum):
     """Time in force options."""
 
     GTC = "GTC"  # Good Till Canceled
@@ -36,7 +36,7 @@ class TimeInForce(str, Enum):
     FOK = "FOK"  # Fill or Kill
 
 
-class PositionType(str, Enum):
+class PositionType(StrEnum):
     """Position types for futures trading."""
 
     LONG = "LONG"
@@ -51,10 +51,10 @@ class TradeOrder(BaseModel):
     side: OrderSide = Field(..., description="Order side")
     order_type: OrderType = Field(..., description="Order type")
     quantity: float = Field(..., gt=0, description="Order quantity")
-    price: Optional[float] = Field(
+    price: float | None = Field(
         None, gt=0, description="Order price (required for LIMIT orders)"
     )
-    stop_price: Optional[float] = Field(
+    stop_price: float | None = Field(
         None, gt=0, description="Stop price (for STOP orders)"
     )
     time_in_force: TimeInForce = Field(
@@ -231,9 +231,9 @@ class OrderStatus(BaseModel):
     order_type: OrderType = Field(..., description="Order type")
     quantity: float = Field(..., description="Order quantity")
     filled_quantity: float = Field(default=0.0, description="Filled quantity")
-    price: Optional[float] = Field(None, description="Order price")
-    average_price: Optional[float] = Field(None, description="Average fill price")
-    stop_price: Optional[float] = Field(None, description="Stop price")
+    price: float | None = Field(None, description="Order price")
+    average_price: float | None = Field(None, description="Average fill price")
+    stop_price: float | None = Field(None, description="Stop price")
     time_in_force: TimeInForce = Field(..., description="Time in force")
     position_type: PositionType = Field(..., description="Position type")
     leverage: int = Field(..., description="Leverage")
@@ -303,7 +303,7 @@ class OrderMetrics(BaseModel):
         default=0.0, description="Average processing time"
     )
     order_submission_rate: float = Field(default=0.0, description="Orders per second")
-    last_order_timestamp: Optional[datetime] = Field(
+    last_order_timestamp: datetime | None = Field(
         default=None, description="Last order timestamp"
     )
     total_order_value: float = Field(default=0.0, description="Total order value")

@@ -37,7 +37,7 @@ class BitcoinDominanceStrategy:
     for rotating between Bitcoin and altcoins based on dominance trends.
     """
 
-    def __init__(self, logger: Optional[structlog.BoundLogger] = None):
+    def __init__(self, logger: structlog.BoundLogger | None = None):
         """Initialize the Bitcoin Dominance Strategy."""
         self.logger = logger or structlog.get_logger()
 
@@ -53,8 +53,8 @@ class BitcoinDominanceStrategy:
         # State tracking (QTZD-style data accumulation)
         self.price_history: dict[str, list[dict[str, Any]]] = {}
         self.dominance_history: list[dict[str, Any]] = []
-        self.last_signal_time: Optional[datetime] = None
-        self.last_dominance_calculation: Optional[float] = None
+        self.last_signal_time: datetime | None = None
+        self.last_dominance_calculation: float | None = None
 
         # Strategy metrics
         self.signals_generated = 0
@@ -68,7 +68,7 @@ class BitcoinDominanceStrategy:
 
     async def process_market_data(
         self, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Process market data and generate dominance-based signals.
 
@@ -147,7 +147,7 @@ class BitcoinDominanceStrategy:
                 if entry["timestamp"] > cutoff_time
             ]
 
-    async def _calculate_btc_dominance(self) -> Optional[float]:
+    async def _calculate_btc_dominance(self) -> float | None:
         """
         Calculate Bitcoin dominance from available price data.
 
@@ -240,7 +240,7 @@ class BitcoinDominanceStrategy:
 
     async def _generate_dominance_signal(
         self, current_dominance: float, market_data: MarketDataMessage
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Generate trading signals based on dominance analysis.
 

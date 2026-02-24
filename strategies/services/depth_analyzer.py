@@ -61,8 +61,8 @@ class DepthMetrics:
     total_levels: int
 
     # Support/Resistance Levels (strongest levels by volume)
-    strongest_bid_level: Optional[tuple[float, float]]  # (price, volume)
-    strongest_ask_level: Optional[tuple[float, float]]
+    strongest_bid_level: tuple[float, float] | None  # (price, volume)
+    strongest_ask_level: tuple[float, float] | None
 
 
 @dataclass
@@ -138,7 +138,7 @@ class DepthAnalyzer:
         symbol: str,
         bids: list[tuple[float, float]],  # [(price, quantity), ...]
         asks: list[tuple[float, float]],
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ) -> DepthMetrics:
         """
         Analyze order book depth and calculate metrics.
@@ -247,7 +247,7 @@ class DepthAnalyzer:
 
         return metrics
 
-    def get_current_metrics(self, symbol: str) -> Optional[DepthMetrics]:
+    def get_current_metrics(self, symbol: str) -> DepthMetrics | None:
         """Get current metrics for a symbol."""
         return self._current_metrics.get(symbol)
 
@@ -257,7 +257,7 @@ class DepthAnalyzer:
 
     def get_pressure_history(
         self, symbol: str, timeframe: str = "5m"
-    ) -> Optional[MarketPressureHistory]:
+    ) -> MarketPressureHistory | None:
         """
         Get historical market pressure data.
 

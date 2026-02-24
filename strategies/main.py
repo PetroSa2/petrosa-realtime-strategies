@@ -72,10 +72,10 @@ class StrategiesService:
         except Exception as e:
             print(f"⚠️  Failed to attach OTLP handler: {e}")
 
-        self.consumer: Optional[NATSConsumer] = None
-        self.publisher: Optional[TradeOrderPublisher] = None
-        self.health_server: Optional[HealthServer] = None
-        self.heartbeat_manager: Optional[HeartbeatManager] = None
+        self.consumer: NATSConsumer | None = None
+        self.publisher: TradeOrderPublisher | None = None
+        self.health_server: HealthServer | None = None
+        self.heartbeat_manager: HeartbeatManager | None = None
         self.config_manager = None
         self.depth_analyzer = None
         self.shutdown_event = asyncio.Event()
@@ -293,11 +293,11 @@ def signal_handler(signum, frame):
 
 @app.command()
 def run(
-    nats_url: Optional[str] = typer.Option(None, "--nats-url", help="NATS server URL"),
-    consumer_topic: Optional[str] = typer.Option(
+    nats_url: str | None = typer.Option(None, "--nats-url", help="NATS server URL"),
+    consumer_topic: str | None = typer.Option(
         None, "--consumer-topic", help="NATS consumer topic"
     ),
-    publisher_topic: Optional[str] = typer.Option(
+    publisher_topic: str | None = typer.Option(
         None, "--publisher-topic", help="NATS publisher topic"
     ),
     log_level: str = typer.Option(

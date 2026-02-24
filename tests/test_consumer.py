@@ -270,7 +270,7 @@ async def test_consumer_processing_loop_basic(consumer):
 
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Expected: timeout is used to stop the loop for testing
         pass
 
@@ -286,7 +286,7 @@ async def test_consumer_processing_loop_exception(consumer):
 
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except (asyncio.TimeoutError, Exception):
+    except (TimeoutError, Exception):
         # Expected: timeout or exception stops the loop for testing
         pass
 
@@ -404,7 +404,7 @@ async def test_consumer_processing_loop_with_messages(consumer):
 
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Expected: timeout is used to stop the loop for testing
         pass
 
@@ -420,7 +420,7 @@ async def test_consumer_processing_loop_timeout(consumer):
 
     try:
         await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Expected: timeout is used to stop the loop for testing
         pass
 

@@ -31,7 +31,7 @@ class CrossExchangeSpreadStrategy:
     profitable arbitrage opportunities with minimal risk.
     """
 
-    def __init__(self, logger: Optional[structlog.BoundLogger] = None):
+    def __init__(self, logger: structlog.BoundLogger | None = None):
         """Initialize the Cross-Exchange Spread Strategy."""
         self.logger = logger or structlog.get_logger()
 
@@ -66,7 +66,7 @@ class CrossExchangeSpreadStrategy:
 
     async def process_market_data(
         self, market_data: MarketDataMessage
-    ) -> Optional[list[Signal]]:
+    ) -> list[Signal] | None:
         """
         Process market data and generate spread-based arbitrage signals.
 
@@ -191,7 +191,7 @@ class CrossExchangeSpreadStrategy:
 
     async def _generate_spread_signals(
         self, market_data: MarketDataMessage
-    ) -> Optional[list[Signal]]:
+    ) -> list[Signal] | None:
         """
         Generate arbitrage signals based on cross-exchange spreads.
 

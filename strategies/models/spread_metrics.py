@@ -72,9 +72,9 @@ class SpreadSnapshot:
     metrics: SpreadMetrics
 
     # Comparative metrics (vs recent history)
-    spread_ratio: Optional[float] = None  # current_spread / avg_spread
-    spread_velocity: Optional[float] = None  # rate of change (% per second)
-    persistence_seconds: Optional[float] = None  # time above/below threshold
+    spread_ratio: float | None = None  # current_spread / avg_spread
+    spread_velocity: float | None = None  # rate of change (% per second)
+    persistence_seconds: float | None = None  # time above/below threshold
 
     # Context flags
     is_widening: bool = False  # Spread increasing rapidly
@@ -82,7 +82,7 @@ class SpreadSnapshot:
     is_abnormal: bool = False  # Spread significantly different from avg
 
     # Depth analysis
-    depth_reduction_pct: Optional[float] = None  # % reduction vs avg depth
+    depth_reduction_pct: float | None = None  # % reduction vs avg depth
 
 
 @dataclass

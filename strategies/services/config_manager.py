@@ -458,7 +458,7 @@ class StrategyConfigManager:
                     cache_key = self._make_cache_key(strategy_id, symbol)
                     if cache_key in self._cache:
                         del self._cache[cache_key]
-                    
+
                     # Get the new config
                     result = await self.get_config(strategy_id, symbol)
                     config = StrategyConfig(

@@ -46,8 +46,8 @@ class MongoDBClient:
 
     def __init__(
         self,
-        uri: Optional[str] = None,
-        database: Optional[str] = None,
+        uri: str | None = None,
+        database: str | None = None,
         max_pool_size: int = 10,
         min_pool_size: int = 1,
         timeout_ms: int = 5000,
@@ -83,8 +83,8 @@ class MongoDBClient:
         self.min_pool_size = min_pool_size
         self.timeout_ms = timeout_ms
 
-        self.client: Optional[AsyncIOMotorClient] = None
-        self.database: Optional[AsyncIOMotorDatabase] = None
+        self.client: AsyncIOMotorClient | None = None
+        self.database: AsyncIOMotorDatabase | None = None
         self._connected = False
 
     async def connect(self) -> bool:
@@ -195,7 +195,7 @@ class MongoDBClient:
             logger.error(f"MongoDB health check failed: {e}")
             return False
 
-    async def get_global_config(self, strategy_id: str) -> Optional[dict[str, Any]]:
+    async def get_global_config(self, strategy_id: str) -> dict[str, Any] | None:
         """
         Get global configuration for a strategy.
 
@@ -222,7 +222,7 @@ class MongoDBClient:
 
     async def get_symbol_config(
         self, strategy_id: str, symbol: str
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get symbol-specific configuration for a strategy.
 
@@ -252,7 +252,7 @@ class MongoDBClient:
 
     async def upsert_global_config(
         self, strategy_id: str, parameters: dict[str, Any], metadata: dict[str, Any]
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Create or update global configuration.
 
@@ -311,7 +311,7 @@ class MongoDBClient:
         symbol: str,
         parameters: dict[str, Any],
         metadata: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Create or update symbol-specific configuration.
 
@@ -431,7 +431,7 @@ class MongoDBClient:
             )
             return False
 
-    async def create_audit_record(self, audit_data: dict[str, Any]) -> Optional[str]:
+    async def create_audit_record(self, audit_data: dict[str, Any]) -> str | None:
         """
         Create audit trail record for configuration change.
 
@@ -457,7 +457,7 @@ class MongoDBClient:
             return None
 
     async def get_audit_trail(
-        self, strategy_id: str, symbol: Optional[str] = None, limit: int = 100
+        self, strategy_id: str, symbol: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
         """
         Get configuration change history.

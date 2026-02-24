@@ -99,7 +99,7 @@ class RealtimeStrategyMetrics:
         yield metrics.Observation(self._consumer_lag_value)
 
     def record_message_processed(
-        self, symbol: str, message_type: str, strategy: Optional[str] = None
+        self, symbol: str, message_type: str, strategy: str | None = None
     ):
         """
         Record a processed message.
@@ -128,7 +128,7 @@ class RealtimeStrategyMetrics:
         self.message_types.add(1, attributes={"type": message_type})
 
     def record_strategy_latency(
-        self, strategy: str, latency_ms: float, symbol: Optional[str] = None
+        self, strategy: str, latency_ms: float, symbol: str | None = None
     ):
         """
         Record strategy execution latency.
@@ -179,7 +179,7 @@ class RealtimeStrategyMetrics:
             },
         )
 
-    def record_error(self, error_type: str, strategy: Optional[str] = None):
+    def record_error(self, error_type: str, strategy: str | None = None):
         """
         Record an error.
 
@@ -224,7 +224,7 @@ class RealtimeStrategyMetrics:
 
 
 # Global metrics instance (initialized by consumer)
-_metrics: Optional[RealtimeStrategyMetrics] = None
+_metrics: RealtimeStrategyMetrics | None = None
 
 
 def initialize_metrics() -> RealtimeStrategyMetrics:
@@ -240,7 +240,7 @@ def initialize_metrics() -> RealtimeStrategyMetrics:
     return _metrics
 
 
-def get_metrics() -> Optional[RealtimeStrategyMetrics]:
+def get_metrics() -> RealtimeStrategyMetrics | None:
     """
     Get global metrics instance.
 
@@ -268,7 +268,7 @@ class MetricsContext:
         self,
         strategy: str,
         symbol: str,
-        metrics: Optional[RealtimeStrategyMetrics] = None,
+        metrics: RealtimeStrategyMetrics | None = None,
     ):
         """
         Initialize metrics context.
@@ -281,7 +281,7 @@ class MetricsContext:
         self.strategy = strategy
         self.symbol = symbol
         self.metrics = metrics or get_metrics()
-        self.start_time: Optional[float] = None
+        self.start_time: float | None = None
         self.signal_recorded = False
 
     def __enter__(self):

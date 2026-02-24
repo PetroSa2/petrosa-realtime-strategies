@@ -67,7 +67,7 @@ def clear_spans(span_exporter):
     current_provider = trace.get_tracer_provider()
     if isinstance(current_provider, TracerProvider):
         current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    
+
     span_exporter.clear()
     yield
     span_exporter.clear()
@@ -145,7 +145,7 @@ async def test_consumer_extracts_trace_context(
     consumer, market_data_with_trace, span_exporter, tracer_provider
 ):
     """Test that consumer extracts trace context from messages
-    
+
     NOTE: This test is marked as xfail due to OpenTelemetry infrastructure issues
     in the test environment. The span creation logic works correctly, but spans
     are not being exported to the InMemorySpanExporter in CI.
@@ -170,7 +170,7 @@ async def test_consumer_extracts_trace_context(
     assert isinstance(current_provider, TracerProvider), f"Provider should be TracerProvider, got {type(current_provider)}"
     # Ensure exporter is attached (adding multiple times is safe)
     current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    
+
     # Process message (get_tracer() now always uses current provider, no need to reload)
     await consumer._process_message(msg)
 
@@ -191,7 +191,7 @@ async def test_consumer_extracts_trace_context(
     # Verify span was created - check both the test exporter and conftest exporter
     spans = span_exporter.get_finished_spans()
     print(f"DEBUG: Found {len(spans)} spans in test exporter: {[s.name for s in spans]}")
-    
+
     # Also check conftest exporter if it exists
     import sys
     conftest = sys.modules.get("tests.conftest") or sys.modules.get("conftest")
@@ -202,7 +202,7 @@ async def test_consumer_extracts_trace_context(
             if len(conftest_spans) > 0:
                 print(f"DEBUG: Found {len(conftest_spans)} spans in conftest exporter: {[s.name for s in conftest_spans]}")
                 spans.extend(conftest_spans)
-    
+
     consumer_span = next(
         (s for s in spans if s.name == "process_market_data_message"), None
     )
@@ -228,7 +228,7 @@ async def test_consumer_handles_missing_trace_context(
     consumer, market_data_without_trace, span_exporter, tracer_provider
 ):
     """Test graceful fallback when trace context is missing
-    
+
     NOTE: This test is marked as xfail due to OpenTelemetry infrastructure issues
     in the test environment. The span creation logic works correctly, but spans
     are not being exported to the InMemorySpanExporter in CI.

@@ -18,7 +18,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Global logger provider reference (if available)
-_global_logger_provider: Optional[object] = None
+_global_logger_provider: object | None = None
 
 
 def set_logger_provider(provider: object) -> None:

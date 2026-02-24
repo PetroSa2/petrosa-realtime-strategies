@@ -74,7 +74,7 @@ class HealthServer:
     def __init__(
         self,
         port: int = 8080,
-        logger: Optional[structlog.BoundLogger] = None,
+        logger: structlog.BoundLogger | None = None,
         consumer=None,
         publisher=None,
         heartbeat_manager=None,
