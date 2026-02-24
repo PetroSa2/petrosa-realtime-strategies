@@ -31,6 +31,8 @@ from strategies.utils.telemetry import (  # noqa: E402
 )
 
 # Initialize OpenTelemetry as early as possible
+ConfigRateLimiter = None
+
 try:
     from petrosa_otel import (
         ConfigRateLimiter,
@@ -114,12 +116,16 @@ class StrategiesService:
             )
 
             # Initialize and set configuration rate limiter
-            rate_limiter = ConfigRateLimiter(
-                mongodb_client=mongodb_client,
-                service_name="realtime-strategies",
-                per_agent_limit=int(os.getenv("CONFIG_RATE_LIMIT_PER_AGENT", "10")),
-                cooldown_seconds=int(os.getenv("CONFIG_RATE_LIMIT_COOLDOWN", "300")),
-            )
+            rate_limiter = None
+            if ConfigRateLimiter is not None:
+                rate_limiter = ConfigRateLimiter(
+                    mongodb_client=mongodb_client,
+                    service_name="realtime-strategies",
+                    per_agent_limit=int(os.getenv("CONFIG_RATE_LIMIT_PER_AGENT", "10")),
+                    cooldown_seconds=int(
+                        os.getenv("CONFIG_RATE_LIMIT_COOLDOWN", "300")
+                    ),
+                )
             self.logger.info("Configuration rate limiter initialized")
 
             # Initialize depth analyzer for market metrics
