@@ -363,7 +363,9 @@ class SpreadLiquidityStrategy:
         self, event_type: str, snapshot: SpreadSnapshot, persistence: float
     ) -> float:
         """Calculate signal confidence based on event strength."""
-        with tracer.start_as_current_span("spread_liquidity.calculate_confidence") as span:
+        with tracer.start_as_current_span(
+            "spread_liquidity.calculate_confidence"
+        ) as span:
             span.set_attribute("event_type", event_type)
             span.set_attribute("persistence_seconds", persistence)
             span.set_attribute("spread_ratio", snapshot.spread_ratio)
@@ -374,7 +376,9 @@ class SpreadLiquidityStrategy:
 
             if event_type == "narrowing":
                 # Stronger signal with higher ratio and longer persistence
-                confidence += (snapshot.spread_ratio - self.spread_ratio_threshold) * 0.05
+                confidence += (
+                    snapshot.spread_ratio - self.spread_ratio_threshold
+                ) * 0.05
                 confidence += min(
                     0.10, persistence / 300.0 * 0.10
                 )  # Up to +0.10 for 5min persistence
@@ -439,7 +443,9 @@ class SpreadLiquidityStrategy:
             span.set_attribute("confidence_level", confidence_level.value)
 
             # Calculate risk management levels
-            with tracer.start_as_current_span("spread_liquidity.calculate_risk_management") as risk_span:
+            with tracer.start_as_current_span(
+                "spread_liquidity.calculate_risk_management"
+            ) as risk_span:
                 risk_span.set_attribute("symbol", event.symbol)
                 risk_span.set_attribute("signal_type", signal_type.value)
                 risk_span.set_attribute("mid_price", metrics.mid_price)
@@ -457,7 +463,16 @@ class SpreadLiquidityStrategy:
 
                 risk_span.set_attribute("stop_loss", stop_loss)
                 risk_span.set_attribute("take_profit", take_profit)
-                risk_span.set_attribute("risk_reward_ratio", (take_profit - metrics.mid_price) / (metrics.mid_price - stop_loss) if signal_type == SignalType.BUY else (metrics.mid_price - take_profit) / (stop_loss - metrics.mid_price))
+                if signal_type == SignalType.BUY:
+                    numerator = take_profit - metrics.mid_price
+                    denominator = metrics.mid_price - stop_loss
+                else:
+                    numerator = metrics.mid_price - take_profit
+                    denominator = stop_loss - metrics.mid_price
+
+                risk_reward_ratio = numerator / denominator if denominator > 0 else 0.0
+                risk_span.set_attribute("risk_reward_ratio", risk_reward_ratio)
+                risk_span.set_attribute("risk_reward_ratio_valid", denominator > 0)
 
             # Create signal with all required fields
             signal = Signal(

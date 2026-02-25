@@ -193,7 +193,7 @@ class BitcoinDominanceStrategy:
                     return None
 
                 # Calculate dominance proxy (normalized between 30-80%)
-                btc_ratio = btc_momentum / total_momentum if total_momentum > 0 else 0.5
+                btc_ratio = btc_momentum / total_momentum
                 dominance_proxy = 30 + (btc_ratio * 50)  # Scale to 30-80% range
 
                 self.last_dominance_calculation = dominance_proxy

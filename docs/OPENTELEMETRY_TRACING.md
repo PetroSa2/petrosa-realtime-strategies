@@ -95,7 +95,7 @@ Use dot-separated hierarchical names: `{module}.{operation}`
 
 **Examples:**
 - `spread_liquidity.analyze` - Main analysis operation
-- `spread_liquidity.calculate_spread_metrics` - Sub-operation
+- `spread_liquidity.calculate_confidence` - Sub-operation
 - `spread_liquidity.generate_signal` - Signal generation
 - `consumer.signal_to_order` - Signal conversion
 - `consumer.calculate_risk_management` - Risk calculation
@@ -285,9 +285,9 @@ The following spans should be visible in Grafana:
 
 **Signal Generation:**
 - `spread_liquidity.analyze`
-- `spread_liquidity.calculate_spread_metrics`
+- `spread_liquidity.calculate_confidence`
 - `spread_liquidity.generate_signal`
-- `btc_dominance.process_market_data`
+- `strategy.btc_dominance.process`
 - `btc_dominance.generate_signal`
 - `cross_exchange_spread.process_market_data`
 - `cross_exchange_spread.generate_spread_signals`
@@ -296,12 +296,9 @@ The following spans should be visible in Grafana:
 
 **Risk Management:**
 - `consumer.signal_to_order`
-- `consumer.calculate_risk_management`
 - `spread_liquidity.calculate_risk_management`
 
 **External Operations:**
-- `cross_exchange_spread.fetch_external_prices`
-- `cross_exchange_spread.fetch_price.{exchange}`
 - `onchain_metrics.fetch_metrics`
 
 ## Best Practices
@@ -344,4 +341,3 @@ The following spans should be visible in Grafana:
 - [OpenTelemetry Python Documentation](https://opentelemetry.io/docs/instrumentation/python/)
 - [OpenTelemetry Span API](https://opentelemetry-python.readthedocs.io/en/latest/api/trace.html)
 - [Grafana Tempo Documentation](https://grafana.com/docs/tempo/latest/)
-
