@@ -124,9 +124,9 @@ class NATSConsumer:
             )
 
         if constants.STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
-            self.market_logic_strategies["cross_exchange_spread"] = (
-                CrossExchangeSpreadStrategy(logger=self.logger)
-            )
+            self.market_logic_strategies[
+                "cross_exchange_spread"
+            ] = CrossExchangeSpreadStrategy(logger=self.logger)
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -148,9 +148,9 @@ class NATSConsumer:
         # Initialize microstructure strategies
         self.microstructure_strategies = {}
         if constants.STRATEGY_ENABLED_SPREAD_LIQUIDITY:
-            self.microstructure_strategies["spread_liquidity"] = (
-                SpreadLiquidityStrategy()
-            )
+            self.microstructure_strategies[
+                "spread_liquidity"
+            ] = SpreadLiquidityStrategy()
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -159,9 +159,9 @@ class NATSConsumer:
             )
 
         if constants.STRATEGY_ENABLED_ICEBERG_DETECTOR:
-            self.microstructure_strategies["iceberg_detector"] = (
-                IcebergDetectorStrategy()
-            )
+            self.microstructure_strategies[
+                "iceberg_detector"
+            ] = IcebergDetectorStrategy()
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -416,7 +416,10 @@ class NATSConsumer:
                         time.time() - start_time
                     ) * 1000  # Convert to milliseconds
 
-                    # Update processing time metrics
+                    # Record NATS message processing latency
+                    self.metrics.record_message_latency(processing_time, message_type)
+
+                    # Update processing time metrics (legacy internal tracking)
                     self._update_processing_metrics(processing_time)
 
                     # Record message processed with OpenTelemetry metrics
@@ -642,6 +645,9 @@ class NATSConsumer:
                 # Analyze and store metrics
                 metrics = self.depth_analyzer.analyze_depth(symbol, bids, asks)
 
+                # Record market metrics processed
+                self.metrics.record_market_metrics_processed(symbol, "depth")
+
                 self.logger.debug(
                     "Depth data analyzed",
                     symbol=symbol,
@@ -675,7 +681,9 @@ class NATSConsumer:
                         if signal:
                             # Record signal in metrics
                             ctx.record_signal(
-                                signal.signal_action.value, signal.confidence_score
+                                signal.signal_type.value,
+                                signal.confidence_score,
+                                signal.signal_action.value,
                             )
 
                             # Publish signal
@@ -732,7 +740,9 @@ class NATSConsumer:
                             signal = await strategy.process_market_data(market_data)
                             if signal:
                                 ctx.record_signal(
-                                    signal.signal_type, signal.confidence_score
+                                    signal.signal_type.value,
+                                    signal.confidence_score,
+                                    signal.signal_action.value,
                                 )
                                 signals_to_publish.append(signal)
 
@@ -743,12 +753,16 @@ class NATSConsumer:
                                 if isinstance(signals, list):
                                     for sig in signals:
                                         ctx.record_signal(
-                                            sig.signal_type, sig.confidence_score
+                                            sig.signal_type.value,
+                                            sig.confidence_score,
+                                            sig.signal_action.value,
                                         )
                                     signals_to_publish.extend(signals)
                                 else:
                                     ctx.record_signal(
-                                        signals.signal_type, signals.confidence_score
+                                        signals.signal_type.value,
+                                        signals.confidence_score,
+                                        signals.signal_action.value,
                                     )
                                     signals_to_publish.append(signals)
 
@@ -757,7 +771,9 @@ class NATSConsumer:
                             signal = await strategy.process_market_data(market_data)
                             if signal:
                                 ctx.record_signal(
-                                    signal.signal_type, signal.confidence_score
+                                    signal.signal_type.value,
+                                    signal.confidence_score,
+                                    signal.signal_action.value,
                                 )
                                 signals_to_publish.append(signal)
 

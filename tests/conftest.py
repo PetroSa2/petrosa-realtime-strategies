@@ -19,6 +19,8 @@ def pytest_configure(config):
     """Setup before any tests are run."""
     os.environ["OTEL_NO_AUTO_INIT"] = "1"
     # os.environ["OTEL_SDK_DISABLED"] = "true"  # Should be false for tests that verify spans
+
+
 os.environ["OTEL_SDK_DISABLED"] = "false"
 
 
