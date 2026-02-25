@@ -17,10 +17,14 @@ from typing import Any, Optional
 
 import aiohttp
 import structlog
+from opentelemetry import trace
 
 import constants
 from strategies.models.market_data import MarketDataMessage
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+
+# OpenTelemetry tracer for manual spans
+tracer = trace.get_tracer(__name__)
 
 
 class CrossExchangeSpreadStrategy:
@@ -76,32 +80,40 @@ class CrossExchangeSpreadStrategy:
         Returns:
             List of signals if arbitrage opportunities found, None otherwise
         """
-        try:
-            # Update Binance price from WebSocket (primary exchange)
-            await self._update_binance_price(market_data)
+        with tracer.start_as_current_span("cross_exchange_spread.process_market_data") as span:
+            span.set_attribute("symbol", market_data.symbol or "UNKNOWN")
+            try:
+                # Update Binance price from WebSocket (primary exchange)
+                await self._update_binance_price(market_data)
 
-            # Fetch prices from other exchanges (QTZD-style external data)
-            await self._fetch_external_exchange_prices()
+                # Fetch prices from other exchanges (QTZD-style external data)
+                await self._fetch_external_exchange_prices()
 
-            # Calculate spreads and generate signals
-            signals = await self._generate_spread_signals(market_data)
+                # Calculate spreads and generate signals
+                signals = await self._generate_spread_signals(market_data)
 
-            if signals:
-                self.signals_generated += len(signals)
-                self.arbitrage_opportunities_found += 1
-                self.logger.info(
-                    "Cross-exchange arbitrage signals generated",
-                    signal_count=len(signals),
-                    symbol=market_data.symbol,
+                if signals:
+                    self.signals_generated += len(signals)
+                    self.arbitrage_opportunities_found += 1
+                    span.set_attribute("result", "signals_generated")
+                    span.set_attribute("signal_count", len(signals))
+                    self.logger.info(
+                        "Cross-exchange arbitrage signals generated",
+                        signal_count=len(signals),
+                        symbol=market_data.symbol,
+                    )
+                else:
+                    span.set_attribute("result", "no_signals")
+
+                return signals if signals else None
+
+            except Exception as e:
+                span.set_attribute("error", str(e))
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                self.logger.error(
+                    "Error processing cross-exchange spread data", error=str(e)
                 )
-
-            return signals if signals else None
-
-        except Exception as e:
-            self.logger.error(
-                "Error processing cross-exchange spread data", error=str(e)
-            )
-            return None
+                return None
 
     async def _update_binance_price(self, market_data: MarketDataMessage) -> None:
         """Update Binance price from WebSocket data."""
@@ -197,98 +209,111 @@ class CrossExchangeSpreadStrategy:
 
         Uses QTZD-style spread analysis and threshold logic.
         """
-        symbol = market_data.symbol
-        signals = []
+        with tracer.start_as_current_span("cross_exchange_spread.generate_spread_signals") as span:
+            span.set_attribute("symbol", market_data.symbol)
+            symbol = market_data.symbol
+            signals = []
 
-        # Get prices from all exchanges for this symbol
-        exchange_prices = self._get_exchange_prices(symbol)
+            # Get prices from all exchanges for this symbol
+            exchange_prices = self._get_exchange_prices(symbol)
 
-        if len(exchange_prices) < 2:
-            return None  # Need at least 2 exchanges
+            if len(exchange_prices) < 2:
+                span.set_attribute("result", "insufficient_exchanges")
+                return None  # Need at least 2 exchanges
 
-        # Find highest and lowest prices (QTZD-style min/max analysis)
-        highest_exchange = max(
-            exchange_prices, key=lambda x: exchange_prices[x]["price"]
-        )
-        lowest_exchange = min(
-            exchange_prices, key=lambda x: exchange_prices[x]["price"]
-        )
+            # Find highest and lowest prices (QTZD-style min/max analysis)
+            highest_exchange = max(
+                exchange_prices, key=lambda x: exchange_prices[x]["price"]
+            )
+            lowest_exchange = min(
+                exchange_prices, key=lambda x: exchange_prices[x]["price"]
+            )
 
-        highest_price = exchange_prices[highest_exchange]["price"]
-        lowest_price = exchange_prices[lowest_exchange]["price"]
+            highest_price = exchange_prices[highest_exchange]["price"]
+            lowest_price = exchange_prices[lowest_exchange]["price"]
 
-        # Calculate spread percentage
-        spread_percent = ((highest_price - lowest_price) / lowest_price) * 100
+            # Calculate spread percentage
+            spread_percent = ((highest_price - lowest_price) / lowest_price) * 100
+            span.set_attribute("spread_percent", spread_percent)
+            span.set_attribute("highest_exchange", highest_exchange)
+            span.set_attribute("lowest_exchange", lowest_exchange)
 
-        # Update spread history (QTZD-style time series tracking)
-        self._update_spread_history(
-            symbol, spread_percent, highest_exchange, lowest_exchange
-        )
+            # Update spread history (QTZD-style time series tracking)
+            self._update_spread_history(
+                symbol, spread_percent, highest_exchange, lowest_exchange
+            )
 
-        # Generate signal if spread exceeds threshold (QTZD-style threshold logic)
-        if spread_percent >= self.spread_threshold:
-            # Rate limiting (QTZD-style minimum intervals)
-            signal_key = f"{symbol}_{highest_exchange}_{lowest_exchange}"
-            if self._should_generate_signal(signal_key):
-                # Calculate confidence based on spread size
-                confidence_score = min(
-                    0.95, spread_percent / 2.0
-                )  # Higher spread = higher confidence
+            # Generate signal if spread exceeds threshold (QTZD-style threshold logic)
+            if spread_percent >= self.spread_threshold:
+                # Rate limiting (QTZD-style minimum intervals)
+                signal_key = f"{symbol}_{highest_exchange}_{lowest_exchange}"
+                if self._should_generate_signal(signal_key):
+                    # Calculate confidence based on spread size
+                    confidence_score = min(
+                        0.95, spread_percent / 2.0
+                    )  # Higher spread = higher confidence
 
-                # Create buy signal for lower-priced exchange
-                buy_signal = self._create_arbitrage_signal(
-                    signal_type=SignalType.BUY,
-                    action=SignalAction.OPEN_LONG,
-                    symbol=symbol,
-                    confidence_score=confidence_score,
-                    reasoning=f"Arbitrage buy on {lowest_exchange}: {spread_percent:.2f}% spread",
-                    market_data=market_data,
-                    exchange=lowest_exchange,
-                    price=lowest_price,
-                    metadata={
-                        "spread_percent": spread_percent,
-                        "buy_exchange": lowest_exchange,
-                        "sell_exchange": highest_exchange,
-                        "buy_price": lowest_price,
-                        "sell_price": highest_price,
-                        "potential_profit": spread_percent,
-                        "arbitrage_type": "cross_exchange",
-                        "position_size_usdt": min(
-                            self.max_position_size,
-                            self.max_position_size * confidence_score,
-                        ),
-                    },
-                )
+                    # Create buy signal for lower-priced exchange
+                    buy_signal = self._create_arbitrage_signal(
+                        signal_type=SignalType.BUY,
+                        action=SignalAction.OPEN_LONG,
+                        symbol=symbol,
+                        confidence_score=confidence_score,
+                        reasoning=f"Arbitrage buy on {lowest_exchange}: {spread_percent:.2f}% spread",
+                        market_data=market_data,
+                        exchange=lowest_exchange,
+                        price=lowest_price,
+                        metadata={
+                            "spread_percent": spread_percent,
+                            "buy_exchange": lowest_exchange,
+                            "sell_exchange": highest_exchange,
+                            "buy_price": lowest_price,
+                            "sell_price": highest_price,
+                            "potential_profit": spread_percent,
+                            "arbitrage_type": "cross_exchange",
+                            "position_size_usdt": min(
+                                self.max_position_size,
+                                self.max_position_size * confidence_score,
+                            ),
+                        },
+                    )
 
-                # Create sell signal for higher-priced exchange
-                sell_signal = self._create_arbitrage_signal(
-                    signal_type=SignalType.SELL,
-                    action=SignalAction.OPEN_SHORT,
-                    symbol=symbol,
-                    confidence_score=confidence_score,
-                    reasoning=f"Arbitrage sell on {highest_exchange}: {spread_percent:.2f}% spread",
-                    market_data=market_data,
-                    exchange=highest_exchange,
-                    price=highest_price,
-                    metadata={
-                        "spread_percent": spread_percent,
-                        "buy_exchange": lowest_exchange,
-                        "sell_exchange": highest_exchange,
-                        "buy_price": lowest_price,
-                        "sell_price": highest_price,
-                        "potential_profit": spread_percent,
-                        "arbitrage_type": "cross_exchange",
-                        "position_size_usdt": min(
-                            self.max_position_size,
-                            self.max_position_size * confidence_score,
-                        ),
-                    },
-                )
+                    # Create sell signal for higher-priced exchange
+                    sell_signal = self._create_arbitrage_signal(
+                        signal_type=SignalType.SELL,
+                        action=SignalAction.OPEN_SHORT,
+                        symbol=symbol,
+                        confidence_score=confidence_score,
+                        reasoning=f"Arbitrage sell on {highest_exchange}: {spread_percent:.2f}% spread",
+                        market_data=market_data,
+                        exchange=highest_exchange,
+                        price=highest_price,
+                        metadata={
+                            "spread_percent": spread_percent,
+                            "buy_exchange": lowest_exchange,
+                            "sell_exchange": highest_exchange,
+                            "buy_price": lowest_price,
+                            "sell_price": highest_price,
+                            "potential_profit": spread_percent,
+                            "arbitrage_type": "cross_exchange",
+                            "position_size_usdt": min(
+                                self.max_position_size,
+                                self.max_position_size * confidence_score,
+                            ),
+                        },
+                    )
 
-                signals.extend([buy_signal, sell_signal])
-                self.last_signal_times[signal_key] = datetime.utcnow()
+                    signals.extend([buy_signal, sell_signal])
+                    self.last_signal_times[signal_key] = datetime.utcnow()
+                    span.set_attribute("result", "signals_generated")
+                    span.set_attribute("signal_count", len(signals))
+                else:
+                    span.set_attribute("result", "rate_limited")
+            else:
+                span.set_attribute("result", "spread_below_threshold")
+                span.set_attribute("spread_threshold", self.spread_threshold)
 
-        return signals if signals else None
+            return signals if signals else None
 
     def _get_exchange_prices(self, symbol: str) -> dict[str, dict[str, Any]]:
         """Get current prices from all exchanges for a symbol."""

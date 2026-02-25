@@ -16,10 +16,14 @@ from datetime import datetime
 from typing import Any, Optional
 
 import structlog
+from opentelemetry import trace
 
 import constants
 from strategies.models.market_data import MarketDataMessage
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+
+# OpenTelemetry tracer for manual spans
+tracer = trace.get_tracer(__name__)
 
 
 class OnChainMetricsStrategy:
@@ -79,30 +83,42 @@ class OnChainMetricsStrategy:
         Returns:
             Signal if on-chain conditions are met, None otherwise
         """
-        try:
-            current_time = time.time()
+        with tracer.start_as_current_span("onchain_metrics.process_market_data") as span:
+            span.set_attribute("symbol", market_data.symbol or "UNKNOWN")
+            try:
+                current_time = time.time()
 
-            # Fetch on-chain metrics periodically (QTZD-style batch processing)
-            if current_time - self.last_fetch_time > self.fetch_interval:
-                await self._fetch_onchain_metrics()
-                self.last_fetch_time = current_time
+                # Fetch on-chain metrics periodically (QTZD-style batch processing)
+                if current_time - self.last_fetch_time > self.fetch_interval:
+                    with tracer.start_as_current_span("onchain_metrics.fetch_metrics") as fetch_span:
+                        fetch_span.set_attribute("time_since_last_fetch", current_time - self.last_fetch_time)
+                        await self._fetch_onchain_metrics()
+                        self.last_fetch_time = current_time
+                        fetch_span.set_attribute("result", "metrics_fetched")
 
-            # Generate signals based on cached metrics
-            signal = await self._analyze_onchain_metrics(market_data)
+                # Generate signals based on cached metrics
+                signal = await self._analyze_onchain_metrics(market_data)
 
-            if signal:
-                self.signals_generated += 1
-                self.logger.info(
-                    "On-chain metrics signal generated",
-                    signal_type=signal.signal_type,
-                    symbol=market_data.symbol,
-                )
+                if signal:
+                    self.signals_generated += 1
+                    span.set_attribute("result", "signal_generated")
+                    span.set_attribute("signal_type", signal.signal_type.value)
+                    span.set_attribute("signal_confidence", signal.confidence_score)
+                    self.logger.info(
+                        "On-chain metrics signal generated",
+                        signal_type=signal.signal_type,
+                        symbol=market_data.symbol,
+                    )
+                else:
+                    span.set_attribute("result", "no_signal")
 
-            return signal
+                return signal
 
-        except Exception as e:
-            self.logger.error("Error processing on-chain metrics", error=str(e))
-            return None
+            except Exception as e:
+                span.set_attribute("error", str(e))
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                self.logger.error("Error processing on-chain metrics", error=str(e))
+                return None
 
     async def _fetch_onchain_metrics(self) -> None:
         """
@@ -201,40 +217,53 @@ class OnChainMetricsStrategy:
 
         Uses QTZD-style threshold analysis and rate limiting.
         """
-        symbol = market_data.symbol
+        with tracer.start_as_current_span("onchain_metrics.analyze_metrics") as span:
+            span.set_attribute("symbol", market_data.symbol)
+            symbol = market_data.symbol
 
-        # Determine which asset metrics to use
-        if symbol.startswith("BTC"):
-            asset_metrics = self.metrics_cache.get("BTC")
-            asset_key = "BTC"
-        elif symbol.startswith("ETH"):
-            asset_metrics = self.metrics_cache.get("ETH")
-            asset_key = "ETH"
-        else:
-            return None  # Only support BTC/ETH for now
+            # Determine which asset metrics to use
+            if symbol.startswith("BTC"):
+                asset_metrics = self.metrics_cache.get("BTC")
+                asset_key = "BTC"
+            elif symbol.startswith("ETH"):
+                asset_metrics = self.metrics_cache.get("ETH")
+                asset_key = "ETH"
+            else:
+                span.set_attribute("result", "unsupported_symbol")
+                return None  # Only support BTC/ETH for now
 
-        if not asset_metrics:
-            return None
+            span.set_attribute("asset_key", asset_key)
 
-        # Rate limiting (QTZD-style minimum intervals)
-        signal_key = f"{asset_key}_onchain"
-        if not self._should_generate_signal(signal_key):
-            return None
+            if not asset_metrics:
+                span.set_attribute("result", "no_asset_metrics")
+                return None
 
-        # Calculate growth rates
-        growth_metrics = self._calculate_growth_metrics(asset_key)
-        if not growth_metrics:
-            return None
+            # Rate limiting (QTZD-style minimum intervals)
+            signal_key = f"{asset_key}_onchain"
+            if not self._should_generate_signal(signal_key):
+                span.set_attribute("result", "rate_limited")
+                return None
 
-        # Analyze metrics for signals (QTZD-style threshold logic)
-        signal = self._evaluate_fundamental_conditions(
-            asset_key, asset_metrics, growth_metrics, market_data
-        )
+            # Calculate growth rates
+            growth_metrics = self._calculate_growth_metrics(asset_key)
+            if not growth_metrics:
+                span.set_attribute("result", "no_growth_metrics")
+                return None
 
-        if signal:
-            self.last_signal_times[signal_key] = datetime.utcnow()
+            # Analyze metrics for signals (QTZD-style threshold logic)
+            signal = self._evaluate_fundamental_conditions(
+                asset_key, asset_metrics, growth_metrics, market_data
+            )
 
-        return signal
+            if signal:
+                self.last_signal_times[signal_key] = datetime.utcnow()
+                span.set_attribute("result", "signal_generated")
+                span.set_attribute("signal_type", signal.signal_type.value)
+                span.set_attribute("confidence_score", signal.confidence_score)
+            else:
+                span.set_attribute("result", "no_signal")
+
+            return signal
 
     def _calculate_growth_metrics(self, asset_key: str) -> dict[str, float] | None:
         """Calculate growth rates from historical data."""
