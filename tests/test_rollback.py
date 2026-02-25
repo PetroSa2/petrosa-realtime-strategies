@@ -1,5 +1,5 @@
 """
-Tests for configuration rollback in TA Bot.
+Tests for configuration rollback in Realtime Strategies.
 """
 
 from datetime import datetime
