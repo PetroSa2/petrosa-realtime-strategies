@@ -388,6 +388,71 @@ class DataManagerClient:
             self._logger.error(f"Error fetching audit trail for {strategy_id}: {e}")
             return []
 
+    async def get_audit_record_by_id(self, audit_id: str) -> dict[str, Any] | None:
+        """
+        Get a specific audit record by its ID.
+
+        Args:
+            audit_id: Audit record unique identifier
+
+        Returns:
+            Audit record or None if not found
+        """
+        try:
+            result = await self._client.query(
+                database="mongodb",
+                collection="strategy_config_audit",
+                filter={"_id": audit_id},
+                limit=1,
+            )
+
+            if result.get("data") and len(result["data"]) > 0:
+                return result["data"][0]
+            return None
+
+        except Exception as e:
+            self._logger.error(f"Error fetching audit record {audit_id}: {e}")
+            return None
+
+    async def get_audit_record_by_version(
+        self, strategy_id: str, version: int, symbol: str | None = None
+    ) -> dict[str, Any] | None:
+        """
+        Get a specific audit record by its version.
+
+        Args:
+            strategy_id: Strategy identifier
+            version: Version number
+            symbol: Optional symbol filter
+
+        Returns:
+            Audit record or None if not found
+        """
+        try:
+            filter_dict = {
+                "strategy_id": strategy_id,
+                "new_parameters.version": version,
+            }
+            if symbol:
+                filter_dict["symbol"] = symbol
+
+            result = await self._client.query(
+                database="mongodb",
+                collection="strategy_config_audit",
+                filter=filter_dict,
+                limit=1,
+            )
+
+            if result.get("data") and len(result["data"]) > 0:
+                return result["data"][0]
+            return None
+
+        except Exception as e:
+            self._logger.error(
+                f"Error fetching audit record for {strategy_id} v{version}: {e}"
+            )
+            return None
+
     async def list_all_strategy_ids(self) -> list[str]:
         """
         Get list of all strategy IDs with configurations.

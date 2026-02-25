@@ -384,9 +384,14 @@ class StrategyConfigManager:
                 symbol=symbol,
                 action="UPDATE" if existing_config else "CREATE",
                 old_parameters=(
-                    existing_config.get("parameters") if existing_config else None
+                    {
+                        **existing_config.get("parameters"),
+                        "version": existing_config.get("version"),
+                    }
+                    if existing_config and existing_config.get("parameters")
+                    else None
                 ),
-                new_parameters=parameters,
+                new_parameters={**parameters, "version": version},
                 changed_by=changed_by,
                 changed_at=now,
                 reason=reason,
@@ -432,6 +437,7 @@ class StrategyConfigManager:
         changed_by: str,
         symbol: str | None = None,
         target_version: int | None = None,
+        rollback_id: str | None = None,
         reason: str | None = None,
     ) -> tuple[bool, StrategyConfig | None, list[str]]:
         """
@@ -442,60 +448,84 @@ class StrategyConfigManager:
             changed_by: Who is performing the rollback
             symbol: Optional symbol for symbol-specific config
             target_version: Optional specific version to rollback to
+            rollback_id: Optional specific audit ID to rollback to
             reason: Optional reason for the rollback
 
         Returns:
             Tuple of (success, config, errors)
         """
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
-            return (
-                False,
-                None,
-                ["MongoDB not available - cannot rollback configuration"],
-            )
+        # Determine configuration to restore
+        config_to_restore = None
 
-        try:
-            # If using Data Manager proxy
-            if self.mongodb_client.use_data_manager:
-                success = await self.mongodb_client.data_manager_client.rollback_strategy_config(
-                    strategy_id=strategy_id,
-                    changed_by=changed_by,
-                    symbol=symbol,
-                    target_version=target_version,
-                    reason=reason,
+        if rollback_id:
+            config_to_restore = await self.get_config_by_id(strategy_id, rollback_id)
+            if not config_to_restore:
+                return (
+                    False,
+                    None,
+                    [
+                        f"Configuration with ID {rollback_id} not found for strategy {strategy_id}"
+                    ],
                 )
-                if success:
-                    # Invalidate cache
-                    cache_key = self._make_cache_key(strategy_id, symbol)
-                    if cache_key in self._cache:
-                        del self._cache[cache_key]
-
-                    # Record configuration change metric
-                    metrics = initialize_metrics()
-                    if metrics:
-                        metrics.record_config_change(strategy_id, symbol, "ROLLBACK")
-
-                    # Get the new config
-                    result = await self.get_config(strategy_id, symbol)
-                    config = StrategyConfig(
-                        strategy_id=strategy_id,
-                        symbol=symbol,
-                        parameters=result.get("parameters", {}),
-                        version=result.get("version", 0),
-                        created_by=changed_by,
-                    )
-                    return True, config, []
-                else:
-                    return False, None, ["Rollback failed in Data Manager service"]
-
-            return (
-                False,
-                None,
-                ["Direct database rollback not implemented (deprecated)"],
+        elif target_version is not None:
+            if target_version < 1:
+                return False, None, ["Invalid version number (must be >= 1)"]
+            config_to_restore = await self.get_config_by_version(
+                strategy_id, target_version, symbol
             )
-        except Exception as e:
-            logger.error(f"Error rolling back config: {e}")
-            return False, None, [str(e)]
+            if not config_to_restore:
+                return (
+                    False,
+                    None,
+                    [
+                        f"Configuration version {target_version} not found for {strategy_id}"
+                    ],
+                )
+        else:
+            # Default to previous
+            config_to_restore = await self.get_previous_config(strategy_id, symbol)
+            if not config_to_restore:
+                return (
+                    False,
+                    None,
+                    [
+                        f"No previous configuration found for {strategy_id} to rollback to"
+                    ],
+                )
+
+        # Ensure we don't persist metadata like "version" as strategy parameters
+        clean_parameters = (
+            {k: v for k, v in config_to_restore.items() if k != "version"}
+            if isinstance(config_to_restore, dict)
+            else config_to_restore
+        )
+
+        # Perform rollback using set_config
+        rollback_reason = (
+            reason
+            or f"Rollback to {'version ' + str(target_version) if target_version is not None else ('ID ' + rollback_id if rollback_id else 'previous')}"
+        )
+
+        success, config, errors = await self.set_config(
+            strategy_id=strategy_id,
+            parameters=clean_parameters,
+            changed_by=changed_by,
+            symbol=symbol,
+            reason=rollback_reason,
+        )
+
+        # Explicit cache invalidation on success
+        if success:
+            cache_key = self._make_cache_key(strategy_id, symbol)
+            if cache_key in self._cache:
+                del self._cache[cache_key]
+
+            # Record configuration change metric
+            metrics = initialize_metrics()
+            if metrics:
+                metrics.record_config_change(strategy_id, symbol, "ROLLBACK")
+
+        return success, config, errors
 
     async def delete_config(
         self,
@@ -548,7 +578,10 @@ class StrategyConfigManager:
                     "strategy_id": strategy_id,
                     "symbol": symbol,
                     "action": "DELETE",
-                    "old_parameters": existing_config.get("parameters"),
+                    "old_parameters": {
+                        **existing_config.get("parameters"),
+                        "version": existing_config.get("version"),
+                    },
                     "new_parameters": None,
                     "changed_by": changed_by,
                     "changed_at": datetime.utcnow(),
@@ -668,3 +701,132 @@ class StrategyConfigManager:
         """Force immediate cache invalidation."""
         self._cache.clear()
         logger.info("Configuration cache cleared")
+
+    async def get_previous_config(
+        self, strategy_id: str, symbol: str | None = None
+    ) -> dict[str, Any] | None:
+        """
+        Get the immediately preceding configuration version.
+
+        Args:
+            strategy_id: Strategy identifier
+            symbol: Optional symbol filter
+
+        Returns:
+            Dictionary of configuration values or None if no history exists
+        """
+        history = await self.get_audit_history(strategy_id, symbol, limit=2)
+        if len(history) < 1:
+            return None
+
+        latest = history[0]
+        prev_params: dict[str, Any] | None = None
+
+        # If the latest action is an UPDATE, use the previous parameters
+        if latest.action == "UPDATE" and latest.old_parameters:
+            # Copy to avoid mutating the stored audit record
+            prev_params = dict(latest.old_parameters)
+
+        # Otherwise, if we have at least two records, fall back to the
+        # parameters from the immediately preceding audit entry.
+        elif len(history) >= 2 and history[1].new_parameters:
+            # Copy to avoid mutating the stored audit record
+            prev_params = dict(history[1].new_parameters)
+
+        if prev_params is None:
+            return None
+
+        # Ensure we return parameters consistently without version metadata.
+        # We strip it here for consistency since new_parameters includes it.
+        return {k: v for k, v in prev_params.items() if k != "version"}
+
+    async def get_audit_history(
+        self, strategy_id: str, symbol: str | None = None, limit: int = 100
+    ) -> list[StrategyConfigAudit]:
+        """
+        Get configuration change history. Alias for get_audit_trail.
+
+        Args:
+            strategy_id: Strategy identifier
+            symbol: Optional symbol filter
+            limit: Maximum number of records to return
+
+        Returns:
+            List of audit records
+        """
+        return await self.get_audit_trail(strategy_id, symbol, limit)
+
+    async def get_config_by_version(
+        self, strategy_id: str, version: int, symbol: str | None = None
+    ) -> dict[str, Any] | None:
+        """
+        Get a specific configuration version from audit history.
+
+        Args:
+            version: Version number to find
+            strategy_id: Strategy identifier
+            symbol: Optional symbol filter
+
+        Returns:
+            Dictionary of configuration values or None if not found
+        """
+        if version < 1:
+            return None
+
+        if not self.mongodb_client or not self.mongodb_client.is_connected:
+            return None
+
+        # Direct database lookup by version
+        record = await self.mongodb_client.get_audit_record_by_version(
+            strategy_id, version, symbol
+        )
+        if record:
+            params = record.get("new_parameters")
+            if params:
+                return {k: v for k, v in params.items() if k != "version"}
+
+        # Fallback to searching history (only if not using Data Manager)
+        if not self.mongodb_client.use_data_manager:
+            history = await self.get_audit_trail(strategy_id, symbol, limit=1000)
+            for record in history:
+                if (
+                    record.new_parameters
+                    and record.new_parameters.get("version") == version
+                ):
+                    return {
+                        k: v for k, v in record.new_parameters.items() if k != "version"
+                    }
+
+        return None
+
+    async def get_config_by_id(
+        self, strategy_id: str, audit_id: str
+    ) -> dict[str, Any] | None:
+        """
+        Get a specific configuration from a specific audit record.
+
+        Args:
+            strategy_id: Strategy identifier (for security validation)
+            audit_id: Audit record unique identifier
+
+        Returns:
+            Dictionary of configuration values or None if not found
+        """
+        if not self.mongodb_client or not self.mongodb_client.is_connected:
+            return None
+
+        # Direct database lookup by ID
+        record = await self.mongodb_client.get_audit_record_by_id(audit_id)
+        if record:
+            # Explicit security validation to ensure audit record belongs to requested strategy
+            if record.get("strategy_id") != strategy_id:
+                logger.warning(
+                    f"Security: Audit ID {audit_id} belongs to {record.get('strategy_id')}, not {strategy_id}"
+                )
+                return None
+
+            params = record.get("new_parameters")
+            if params:
+                return {k: v for k, v in params.items() if k != "version"}
+
+        return None
