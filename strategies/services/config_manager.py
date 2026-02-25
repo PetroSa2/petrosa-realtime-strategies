@@ -25,6 +25,7 @@ from strategies.market_logic.defaults import (
     validate_parameters,
 )
 from strategies.models.strategy_config import StrategyConfig, StrategyConfigAudit
+from strategies.utils.metrics import initialize_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -408,6 +409,12 @@ class StrategyConfigManager:
             if cache_key in self._cache:
                 del self._cache[cache_key]
 
+            # Record configuration change metric
+            metrics = initialize_metrics()
+            if metrics:
+                action = "UPDATE" if existing_config else "CREATE"
+                metrics.record_config_change(strategy_id, symbol, action)
+
             logger.info(
                 f"Config updated: {strategy_id}"
                 f"{' (' + symbol + ')' if symbol else ''} by {changed_by}"
@@ -462,6 +469,11 @@ class StrategyConfigManager:
                     cache_key = self._make_cache_key(strategy_id, symbol)
                     if cache_key in self._cache:
                         del self._cache[cache_key]
+
+                    # Record configuration change metric
+                    metrics = initialize_metrics()
+                    if metrics:
+                        metrics.record_config_change(strategy_id, symbol, "ROLLBACK")
 
                     # Get the new config
                     result = await self.get_config(strategy_id, symbol)
@@ -548,6 +560,11 @@ class StrategyConfigManager:
             cache_key = self._make_cache_key(strategy_id, symbol)
             if cache_key in self._cache:
                 del self._cache[cache_key]
+
+            # Record configuration change metric
+            metrics = initialize_metrics()
+            if metrics:
+                metrics.record_config_change(strategy_id, symbol, "DELETE")
 
             logger.info(
                 f"Config deleted: {strategy_id}"

@@ -80,7 +80,9 @@ class CrossExchangeSpreadStrategy:
         Returns:
             List of signals if arbitrage opportunities found, None otherwise
         """
-        with tracer.start_as_current_span("cross_exchange_spread.process_market_data") as span:
+        with tracer.start_as_current_span(
+            "cross_exchange_spread.process_market_data"
+        ) as span:
             span.set_attribute("symbol", market_data.symbol or "UNKNOWN")
             try:
                 # Update Binance price from WebSocket (primary exchange)
@@ -209,7 +211,9 @@ class CrossExchangeSpreadStrategy:
 
         Uses QTZD-style spread analysis and threshold logic.
         """
-        with tracer.start_as_current_span("cross_exchange_spread.generate_spread_signals") as span:
+        with tracer.start_as_current_span(
+            "cross_exchange_spread.generate_spread_signals"
+        ) as span:
             span.set_attribute("symbol", market_data.symbol)
             symbol = market_data.symbol
             signals = []

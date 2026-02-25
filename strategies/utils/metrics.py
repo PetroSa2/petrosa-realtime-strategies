@@ -38,11 +38,18 @@ class RealtimeStrategyMetrics:
         """
         self.meter = get_meter(meter_name)
 
-        # Message processing counter
+        # NATS message processing counter
         self.messages_processed = self.meter.create_counter(
             name="realtime.messages.processed",
-            description="Total number of messages processed",
+            description="Total number of NATS messages processed",
             unit="1",
+        )
+
+        # NATS message processing latency histogram
+        self.message_latency = self.meter.create_histogram(
+            name="realtime.message.processing_latency",
+            description="NATS message processing latency in milliseconds",
+            unit="ms",
         )
 
         # Strategy execution latency histogram
@@ -89,6 +96,20 @@ class RealtimeStrategyMetrics:
             unit="1",
         )
 
+        # Configuration change counter
+        self.config_changes = self.meter.create_counter(
+            name="realtime.config.changes",
+            description="Total number of strategy configuration changes",
+            unit="1",
+        )
+
+        # Market metrics processing counter
+        self.market_metrics_processed = self.meter.create_counter(
+            name="realtime.market_metrics.processed",
+            description="Total number of market metrics (depth, pressure) calculated",
+            unit="1",
+        )
+
     def _get_consumer_lag(self, options: metrics.CallbackOptions):
         """
         Callback for observable gauge to get current consumer lag.
@@ -127,6 +148,18 @@ class RealtimeStrategyMetrics:
         """
         self.message_types.add(1, attributes={"type": message_type})
 
+    def record_message_latency(self, latency_ms: float, message_type: str):
+        """
+        Record NATS message processing latency.
+
+        Args:
+            latency_ms: Latency in milliseconds
+            message_type: Type of message ("depth", "trade", "ticker")
+        """
+        self.message_latency.record(
+            latency_ms, attributes={"message_type": message_type}
+        )
+
     def record_strategy_latency(
         self, strategy: str, latency_ms: float, symbol: str | None = None
     ):
@@ -158,7 +191,12 @@ class RealtimeStrategyMetrics:
         )
 
     def record_signal_generated(
-        self, strategy: str, signal_type: str, symbol: str, confidence: float
+        self,
+        strategy: str,
+        signal_type: str,
+        symbol: str,
+        confidence: float,
+        action: str | None = None,
     ):
         """
         Record a generated signal.
@@ -168,15 +206,49 @@ class RealtimeStrategyMetrics:
             signal_type: Signal type ("buy", "sell", "hold")
             symbol: Trading symbol
             confidence: Signal confidence (0.0-1.0)
+            action: Specific action (optional)
         """
-        self.signals_generated.add(
-            1,
-            attributes={
-                "strategy": strategy,
-                "signal_type": signal_type.lower(),
-                "symbol": symbol,
-                "confidence_bucket": self._get_confidence_bucket(confidence),
-            },
+        attributes = {
+            "strategy": strategy,
+            "signal_type": signal_type.lower(),
+            "symbol": symbol,
+            "confidence_bucket": self._get_confidence_bucket(confidence),
+        }
+        if action:
+            attributes["action"] = action
+
+        self.signals_generated.add(1, attributes=attributes)
+
+    def record_config_change(self, strategy_id: str, symbol: str | None, action: str):
+        """
+        Record a configuration change.
+
+        Args:
+            strategy_id: Strategy identifier
+            symbol: Trading symbol (optional)
+            action: Action type ("CREATE", "UPDATE", "DELETE", "ROLLBACK")
+        """
+        attributes = {
+            "strategy_id": strategy_id,
+            "action": action,
+        }
+        if symbol:
+            attributes["symbol"] = symbol
+        else:
+            attributes["symbol"] = "global"
+
+        self.config_changes.add(1, attributes=attributes)
+
+    def record_market_metrics_processed(self, symbol: str, metric_type: str = "depth"):
+        """
+        Record market metrics calculation.
+
+        Args:
+            symbol: Trading symbol
+            metric_type: Type of metric ("depth", "pressure", etc.)
+        """
+        self.market_metrics_processed.add(
+            1, attributes={"symbol": symbol, "metric_type": metric_type}
         )
 
     def record_error(self, error_type: str, strategy: str | None = None):
@@ -261,7 +333,11 @@ class MetricsContext:
 
             # Record signal if generated
             if signal:
-                ctx.record_signal(signal.signal_action.value, signal.confidence_score)
+                ctx.record_signal(
+                    signal.signal_type.value,
+                    signal.confidence_score,
+                    signal.signal_action.value
+                )
     """
 
     def __init__(
@@ -315,16 +391,19 @@ class MetricsContext:
         # Don't suppress exceptions
         return False
 
-    def record_signal(self, signal_type: str, confidence: float):
+    def record_signal(
+        self, signal_type: str, confidence: float, action: str | None = None
+    ):
         """
         Record signal generation.
 
         Args:
             signal_type: Signal type ("buy", "sell", "hold")
             confidence: Signal confidence (0.0-1.0)
+            action: Specific action (optional)
         """
         if self.metrics:
             self.metrics.record_signal_generated(
-                self.strategy, signal_type, self.symbol, confidence
+                self.strategy, signal_type, self.symbol, confidence, action
             )
             self.signal_recorded = True

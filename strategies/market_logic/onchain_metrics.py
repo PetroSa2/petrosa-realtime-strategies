@@ -83,15 +83,21 @@ class OnChainMetricsStrategy:
         Returns:
             Signal if on-chain conditions are met, None otherwise
         """
-        with tracer.start_as_current_span("onchain_metrics.process_market_data") as span:
+        with tracer.start_as_current_span(
+            "onchain_metrics.process_market_data"
+        ) as span:
             span.set_attribute("symbol", market_data.symbol or "UNKNOWN")
             try:
                 current_time = time.time()
 
                 # Fetch on-chain metrics periodically (QTZD-style batch processing)
                 if current_time - self.last_fetch_time > self.fetch_interval:
-                    with tracer.start_as_current_span("onchain_metrics.fetch_metrics") as fetch_span:
-                        fetch_span.set_attribute("time_since_last_fetch", current_time - self.last_fetch_time)
+                    with tracer.start_as_current_span(
+                        "onchain_metrics.fetch_metrics"
+                    ) as fetch_span:
+                        fetch_span.set_attribute(
+                            "time_since_last_fetch", current_time - self.last_fetch_time
+                        )
                         await self._fetch_onchain_metrics()
                         self.last_fetch_time = current_time
                         fetch_span.set_attribute("result", "metrics_fetched")
@@ -283,17 +289,17 @@ class OnChainMetricsStrategy:
 
             # Calculate 24-hour growth rates
             if asset_key == "BTC":
-                growth_metrics["active_addresses_24h"] = (
-                    self._calculate_percentage_change(
-                        day_ago.get("active_addresses", 0),
-                        current.get("active_addresses", 0),
-                    )
+                growth_metrics[
+                    "active_addresses_24h"
+                ] = self._calculate_percentage_change(
+                    day_ago.get("active_addresses", 0),
+                    current.get("active_addresses", 0),
                 )
-                growth_metrics["transaction_volume_24h"] = (
-                    self._calculate_percentage_change(
-                        day_ago.get("transaction_volume_btc", 0),
-                        current.get("transaction_volume_btc", 0),
-                    )
+                growth_metrics[
+                    "transaction_volume_24h"
+                ] = self._calculate_percentage_change(
+                    day_ago.get("transaction_volume_btc", 0),
+                    current.get("transaction_volume_btc", 0),
                 )
                 growth_metrics["hash_rate_24h"] = self._calculate_percentage_change(
                     day_ago.get("hash_rate_eh", 0), current.get("hash_rate_eh", 0)
@@ -307,17 +313,17 @@ class OnChainMetricsStrategy:
                 )  # Positive = net inflow (bearish)
 
             elif asset_key == "ETH":
-                growth_metrics["active_addresses_24h"] = (
-                    self._calculate_percentage_change(
-                        day_ago.get("active_addresses", 0),
-                        current.get("active_addresses", 0),
-                    )
+                growth_metrics[
+                    "active_addresses_24h"
+                ] = self._calculate_percentage_change(
+                    day_ago.get("active_addresses", 0),
+                    current.get("active_addresses", 0),
                 )
-                growth_metrics["transaction_volume_24h"] = (
-                    self._calculate_percentage_change(
-                        day_ago.get("transaction_volume_eth", 0),
-                        current.get("transaction_volume_eth", 0),
-                    )
+                growth_metrics[
+                    "transaction_volume_24h"
+                ] = self._calculate_percentage_change(
+                    day_ago.get("transaction_volume_eth", 0),
+                    current.get("transaction_volume_eth", 0),
                 )
                 growth_metrics["defi_tvl_24h"] = self._calculate_percentage_change(
                     day_ago.get("defi_tvl_usd", 0), current.get("defi_tvl_usd", 0)
