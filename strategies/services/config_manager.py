@@ -773,42 +773,29 @@ class StrategyConfigManager:
         if version < 1:
             return None
 
-        # Direct MongoDB optimization
-        if (
-            self.mongodb_client
-            and self.mongodb_client.is_connected
-            and not self.mongodb_client.use_data_manager
-        ):
-            try:
-                query = {
-                    "strategy_id": strategy_id,
-                    "new_parameters.version": version,
-                }
-                if symbol:
-                    query["symbol"] = symbol
+        if not self.mongodb_client or not self.mongodb_client.is_connected:
+            return None
 
-                cursor = self.mongodb_client.database.strategy_config_audit.find(
-                    query
-                ).limit(1)
-                records = await cursor.to_list(length=1)
-                if records:
-                    params = records[0].get("new_parameters")
-                    return {k: v for k, v in params.items() if k != "version"}
-                return None
-            except Exception as e:
-                logger.error(f"Error fetching version {version} for {strategy_id}: {e}")
-                return None
+        # Direct database lookup by version
+        record = await self.mongodb_client.get_audit_record_by_version(
+            strategy_id, version, symbol
+        )
+        if record:
+            params = record.get("new_parameters")
+            if params:
+                return {k: v for k, v in params.items() if k != "version"}
 
-        # Data Manager or Fallback
-        history = await self.get_audit_trail(strategy_id, symbol, limit=1000)
-        for record in history:
-            if (
-                record.new_parameters
-                and record.new_parameters.get("version") == version
-            ):
-                return {
-                    k: v for k, v in record.new_parameters.items() if k != "version"
-                }
+        # Fallback to searching history (only if not using Data Manager)
+        if not self.mongodb_client.use_data_manager:
+            history = await self.get_audit_trail(strategy_id, symbol, limit=1000)
+            for record in history:
+                if (
+                    record.new_parameters
+                    and record.new_parameters.get("version") == version
+                ):
+                    return {
+                        k: v for k, v in record.new_parameters.items() if k != "version"
+                    }
 
         return None
 
@@ -825,16 +812,21 @@ class StrategyConfigManager:
         Returns:
             Dictionary of configuration values or None if not found
         """
-        # Search history for the ID
-        history = await self.get_audit_trail(strategy_id, limit=1000)
-        for record in history:
-            if record.id == audit_id:
-                # Explicit security validation to ensure audit record belongs to requested strategy
-                if record.strategy_id != strategy_id:
-                    logger.warning(
-                        f"Security: Audit ID {audit_id} belongs to {record.strategy_id}, not {strategy_id}"
-                    )
-                    return None
-                return {k: v for k, v in record.new_parameters.items() if k != "version"}
+        if not self.mongodb_client or not self.mongodb_client.is_connected:
+            return None
+
+        # Direct database lookup by ID
+        record = await self.mongodb_client.get_audit_record_by_id(audit_id)
+        if record:
+            # Explicit security validation to ensure audit record belongs to requested strategy
+            if record.get("strategy_id") != strategy_id:
+                logger.warning(
+                    f"Security: Audit ID {audit_id} belongs to {record.get('strategy_id')}, not {strategy_id}"
+                )
+                return None
+
+            params = record.get("new_parameters")
+            if params:
+                return {k: v for k, v in params.items() if k != "version"}
 
         return None

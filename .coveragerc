@@ -7,12 +7,9 @@ omit =
     strategies/health/server.py
     strategies/main.py
     # API routes - require full app context
-    strategies/api/config_routes.py
     strategies/api/metrics_routes.py
     # Heartbeat - background service
     strategies/utils/heartbeat.py
-    # Service config manager - complex integration
-    strategies/services/config_manager.py
 
 [report]
 exclude_lines =

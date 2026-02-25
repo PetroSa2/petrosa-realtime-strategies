@@ -496,6 +496,71 @@ class MongoDBClient:
             logger.error(f"Error fetching audit trail for {strategy_id}: {e}")
             return []
 
+    async def get_audit_record_by_id(self, audit_id: str) -> dict[str, Any] | None:
+        """
+        Get a specific audit record by its ID.
+
+        Args:
+            audit_id: Audit record unique identifier
+
+        Returns:
+            Audit record or None if not found
+        """
+        if self.use_data_manager:
+            return await self.data_manager_client.get_audit_record_by_id(audit_id)
+
+        if not self._connected:
+            return None
+
+        try:
+            from bson import ObjectId
+
+            # Handle both string IDs and ObjectId if passed
+            query_id = ObjectId(audit_id) if isinstance(audit_id, str) else audit_id
+            record = await self.database.strategy_config_audit.find_one({"_id": query_id})
+            return record
+        except Exception as e:
+            logger.debug(f"Error fetching audit record {audit_id}: {e}")
+            return None
+
+    async def get_audit_record_by_version(
+        self, strategy_id: str, version: int, symbol: str | None = None
+    ) -> dict[str, Any] | None:
+        """
+        Get a specific audit record by its version.
+
+        Args:
+            strategy_id: Strategy identifier
+            version: Version number
+            symbol: Optional symbol filter
+
+        Returns:
+            Audit record or None if not found
+        """
+        if self.use_data_manager:
+            return await self.data_manager_client.get_audit_record_by_version(
+                strategy_id, version, symbol
+            )
+
+        if not self._connected:
+            return None
+
+        try:
+            query = {
+                "strategy_id": strategy_id,
+                "new_parameters.version": version,
+            }
+            if symbol:
+                query["symbol"] = symbol
+
+            record = await self.database.strategy_config_audit.find_one(query)
+            return record
+        except Exception as e:
+            logger.debug(
+                f"Error fetching audit record for {strategy_id} v{version}: {e}"
+            )
+            return None
+
     async def list_all_strategy_ids(self) -> list[str]:
         """
         Get list of all strategy IDs with configurations.
