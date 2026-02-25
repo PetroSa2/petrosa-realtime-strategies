@@ -40,7 +40,10 @@ class RollbackRequest(BaseModel):
     """Request model for configuration rollback."""
 
     target_version: int | None = Field(
-        None, description="Specific version to rollback to"
+        None, ge=1, description="Specific version number to rollback to (must be >= 1)"
+    )
+    rollback_id: str | None = Field(
+        None, description="Specific audit record ID to rollback to"
     )
     changed_by: str = Field(..., description="Who is performing the rollback")
     reason: str | None = Field(None, description="Reason for rollback")
@@ -57,7 +60,7 @@ router = APIRouter(prefix="/api/v1", tags=["configuration"])
     description="""
     **For LLM Agents**: Revert strategy configuration to a previous version.
 
-    Reverts global or symbol-specific settings.
+    Reverts global or symbol-specific settings. Supports rollback by version number or specific audit ID.
 
     **Example Request**: `POST /api/v1/strategies/orderbook_skew/rollback?symbol=BTCUSDT`
     ```json
@@ -82,6 +85,7 @@ async def rollback_config(
             changed_by=request.changed_by,
             symbol=symbol.upper() if symbol else None,
             target_version=request.target_version,
+            rollback_id=request.rollback_id,
             reason=request.reason,
         )
 
@@ -114,6 +118,24 @@ async def rollback_config(
         return APIResponse(
             success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
         )
+
+
+@router.post(
+    "/strategies/{strategy_id}/restore",
+    response_model=APIResponse,
+    summary="Restore strategy configuration",
+    description="""
+    **For LLM Agents**: Restore a specific previous version of the strategy configuration.
+    Alias for the rollback endpoint.
+    """,
+)
+async def restore_config(
+    request: RollbackRequest,
+    strategy_id: str = Path(..., description="Strategy identifier"),
+    symbol: str | None = Query(None, description="Optional symbol filter"),
+):
+    """Restore configuration."""
+    return await rollback_config(request, strategy_id, symbol)
 
 
 # Global config manager instance (will be injected on startup)
