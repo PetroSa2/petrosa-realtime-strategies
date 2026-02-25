@@ -31,7 +31,7 @@ def publisher(mock_nats_client):
     """Create a publisher instance with mocked NATS client."""
     publisher = TradeOrderPublisher(
         nats_url="nats://test:4222",
-        topic="signals.trading",
+        topic="intent.trading.*",
     )
 
     # Replace the NATS client with mock
@@ -65,7 +65,7 @@ async def test_publish_signal_success(publisher, mock_nats_client):
     call_args = mock_nats_client.publish.call_args
 
     # Check subject
-    assert call_args.kwargs["subject"] == "signals.trading"
+    assert call_args.kwargs["subject"] == "intent.trading.*"
 
     # Check payload
     payload = call_args.kwargs["payload"].decode()

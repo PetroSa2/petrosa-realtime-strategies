@@ -16,8 +16,9 @@ A high-performance, horizontally scalable trading signal service that processes 
 |---------|---------|-------|--------|--------|
 | **petrosa-socket-client** | Real-time WebSocket data ingestion | Binance WebSocket API | NATS: `binance.websocket.data` | Real-time Processing |
 | **petrosa-binance-data-extractor** | Historical data extraction & gap filling | Binance REST API | MySQL (klines, funding rates, trades) | Batch Processing |
-| **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | MySQL klines data | NATS: `signals.trading` | Signal Generation |
-| **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.websocket.data` | NATS: `signals.trading` | **YOU ARE HERE** |
+| **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | MySQL klines data | NATS: `intent.trading.*` | Signal Generation |
+| **petrosa-cio** | Centralized orchestrator & gatekeeper | NATS: `intent.>` | NATS: `signals.trading` | Interception Layer |
+| **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.websocket.data` | NATS: `intent.trading.*` | **YOU ARE HERE** |
 | **petrosa-tradeengine** | Order execution & trade management | NATS: `signals.trading` | Binance Orders API, MongoDB audit | Order Execution |
 | **petrosa_k8s** | Centralized infrastructure | Kubernetes manifests | Cluster resources | Infrastructure |
 
@@ -57,8 +58,15 @@ A high-performance, horizontally scalable trading signal service that processes 
 │ • Generate   │
 │   signals    │
 └──────┬───────┘
-       │ NATS: signals.trading
+       │ NATS Topic: intent.trading.*
        │
+       ▼
+┌──────────────────────────────────────────────┐
+│                petrosa-cio                   │
+│             (Interception Layer)             │
+│   [intent.>]  ──▶  [signals.trading]         │
+└──────┬───────────────────────────────────────┘
+       │ Approved Signal
        ▼
 ┌──────────────────────┐
 │   Trade Engine       │
@@ -77,7 +85,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 2. **Ticker Messages** - 24hr ticker updates
 3. **Depth Messages** - Order book depth (top 20 levels)
 
-**Published Topic:** `signals.trading`
+**Published Topic:** `intent.trading.*` (Intercepted by CIO)
 
 **Message Format (Output):**
 ```json
@@ -120,7 +128,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │  │                                                            │     │
 │  │  • NATS Consumer (binance.websocket.data)                │     │
 │  │  • Signal Processor (stateless)                          │     │
-│  │  • NATS Publisher (signals.trading)                      │     │
+│  │  • NATS Publisher (intent.trading.*)                     │     │
 │  │  • Health Server (HTTP:8080)                             │     │
 │  │  • Heartbeat Manager (periodic stats)                    │     │
 │  └──────┬───────────────────────────────────────────────────┘     │
@@ -199,7 +207,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │  │  • Validate signal completeness                          │     │
 │  │  • Check confidence threshold (>= 0.6)                   │     │
 │  │  • Add risk management levels                            │     │
-│  │  • Publish to signals.trading topic                      │     │
+│  │  • Publish to intent.trading.* topic (CIO intercepted)    │     │
 │  │  • Increment metrics                                     │     │
 │  └──────────────────────────────────────────────────────────┘     │
 │                                                                      │
@@ -889,7 +897,7 @@ For complete documentation, examples, and troubleshooting, see the [TA Bot Confi
 | `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
 | `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string (fallback) |
 | `NATS_CONSUMER_TOPIC` | `binance.websocket.data` | Input topic |
-| `NATS_PUBLISHER_TOPIC` | `signals.trading` | Output topic |
+| `NATS_PUBLISHER_TOPIC` | `intent.trading.*` | Output topic (Intercepted by CIO) |
 | `NATS_CONSUMER_GROUP` | `realtime-strategies-group` | Consumer group for load balancing |
 | `TRADING_SYMBOLS` | `BTCUSDT,ETHUSDT,BNBUSDT` | Symbols to process |
 | `STRATEGY_ENABLED_ORDERBOOK_SKEW` | `true` | Enable order book strategy |
@@ -931,7 +939,7 @@ spec:
         - name: NATS_CONSUMER_TOPIC
           value: "binance.websocket.data"
         - name: NATS_PUBLISHER_TOPIC
-          value: "signals.trading"
+          value: "intent.trading.*"
         - name: NATS_CONSUMER_GROUP
           value: "realtime-strategies-group"  # CRITICAL for load balancing
         resources:

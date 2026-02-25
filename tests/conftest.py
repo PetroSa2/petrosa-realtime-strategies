@@ -10,14 +10,16 @@ import structlog
 
 # Disable OpenTelemetry auto-initialization during tests (must be set first)
 os.environ["OTEL_NO_AUTO_INIT"] = "1"
-os.environ["OTEL_SDK_DISABLED"] = "true"
+# os.environ["OTEL_SDK_DISABLED"] = "true"  # Should be false for tests that verify spans
+os.environ["OTEL_SDK_DISABLED"] = "false"
 os.environ["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "false"
 
 
 def pytest_configure(config):
     """Setup before any tests are run."""
     os.environ["OTEL_NO_AUTO_INIT"] = "1"
-    os.environ["OTEL_SDK_DISABLED"] = "true"
+    # os.environ["OTEL_SDK_DISABLED"] = "true"  # Should be false for tests that verify spans
+os.environ["OTEL_SDK_DISABLED"] = "false"
 
 
 # Set up OpenTelemetry tracer provider BEFORE any imports that use it

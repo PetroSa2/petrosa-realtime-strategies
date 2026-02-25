@@ -56,7 +56,7 @@ Realtime Strategies Consumer
     ├─ Trade Momentum
     └─ Ticker Velocity
     ↓
-NATS signals.trading
+NATS intent.trading.* (CIO intercepted)
     ↓
 Trade Engine (executes orders)
 ```

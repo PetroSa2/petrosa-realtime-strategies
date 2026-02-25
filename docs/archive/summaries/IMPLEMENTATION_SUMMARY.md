@@ -156,7 +156,7 @@ Consumer._process_microstructure_strategies()
         ├─ Detect refill patterns
         └─ Generate signals
     ↓
-Publisher.publish_signal() → NATS (signals.trading)
+Publisher.publish_signal() → NATS (intent.trading.*)
 ```
 
 ### Memory Footprint
