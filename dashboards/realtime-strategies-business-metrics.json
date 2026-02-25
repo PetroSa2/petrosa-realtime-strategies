@@ -163,7 +163,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(realtime_signals_generated_total[5m])",
+          "expr": "sum by (strategy, action) (rate(realtime_signals_generated_total[5m]))",
           "legendFormat": "{{strategy}} - {{action}}",
           "range": true,
           "refId": "A"
@@ -253,7 +253,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, rate(realtime_message_processing_latency_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, sum by (le, message_type) (rate(realtime_message_processing_latency_bucket[5m])))",
           "legendFormat": "p50 - {{message_type}}",
           "range": true,
           "refId": "A"
@@ -264,7 +264,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(realtime_message_processing_latency_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, sum by (le, message_type) (rate(realtime_message_processing_latency_bucket[5m])))",
           "legendFormat": "p95 - {{message_type}}",
           "range": true,
           "refId": "B",
@@ -276,7 +276,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, rate(realtime_message_processing_latency_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, sum by (le, message_type) (rate(realtime_message_processing_latency_bucket[5m])))",
           "legendFormat": "p99 - {{message_type}}",
           "range": true,
           "refId": "C",
@@ -346,7 +346,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "realtime_consumer_lag",
+          "expr": "sum(realtime_consumer_lag)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -435,7 +435,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(realtime_strategy_executions_total{result="success"}[5m])",
+          "expr": "sum by (strategy) (rate(realtime_strategy_executions_total{result=\"success\"}[5m]))",
           "legendFormat": "{{strategy}} - success",
           "range": true,
           "refId": "A"
@@ -446,7 +446,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(realtime_strategy_executions_total{result="failure"}[5m])",
+          "expr": "sum by (strategy) (rate(realtime_strategy_executions_total{result=\"failure\"}[5m]))",
           "legendFormat": "{{strategy}} - failure",
           "range": true,
           "refId": "B",
@@ -458,7 +458,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(realtime_strategy_executions_total{result="no_signal"}[5m])",
+          "expr": "sum by (strategy) (rate(realtime_strategy_executions_total{result=\"no_signal\"}[5m]))",
           "legendFormat": "{{strategy}} - no signal",
           "range": true,
           "refId": "C",
@@ -549,7 +549,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(realtime_config_changes_total[1h])",
+          "expr": "sum by (strategy_id, action) (increase(realtime_config_changes_total[1h]))",
           "legendFormat": "{{strategy_id}} - {{action}}",
           "range": true,
           "refId": "A"
@@ -638,7 +638,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(realtime_market_metrics_processed_total[5m])",
+          "expr": "sum by (symbol, metric_type) (rate(realtime_market_metrics_processed_total[5m]))",
           "legendFormat": "{{symbol}} - {{metric_type}}",
           "range": true,
           "refId": "A"

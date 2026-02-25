@@ -24,9 +24,40 @@ class TestRealtimeStrategyMetrics:
         metrics = RealtimeStrategyMetrics()
         assert metrics.meter is not None
         assert metrics.messages_processed is not None
+        assert metrics.message_latency is not None
         assert metrics.strategy_latency is not None
         assert metrics.signals_generated is not None
         assert metrics.errors_total is not None
+        assert metrics.config_changes is not None
+        assert metrics.market_metrics_processed is not None
+
+    def test_record_message_latency(self):
+        """Test recording message latency."""
+        metrics = RealtimeStrategyMetrics()
+        assert metrics.message_latency is not None
+        assert callable(metrics.message_latency.record)
+
+        metrics.record_message_latency(15.5, "depth")
+        assert metrics.message_latency is not None
+
+    def test_record_config_change(self):
+        """Test recording config change."""
+        metrics = RealtimeStrategyMetrics()
+        assert metrics.config_changes is not None
+        assert callable(metrics.config_changes.add)
+
+        metrics.record_config_change("orderbook_skew", "BTCUSDT", "UPDATE")
+        metrics.record_config_change("orderbook_skew", None, "CREATE")
+        assert metrics.config_changes is not None
+
+    def test_record_market_metrics_processed(self):
+        """Test recording market metrics processed."""
+        metrics = RealtimeStrategyMetrics()
+        assert metrics.market_metrics_processed is not None
+        assert callable(metrics.market_metrics_processed.add)
+
+        metrics.record_market_metrics_processed("BTCUSDT", "depth")
+        assert metrics.market_metrics_processed is not None
 
     def test_record_message_processed(self):
         """Test recording message processed."""
@@ -205,7 +236,7 @@ class TestMetricsContext:
             strategy="test_strategy", symbol="BTCUSDT", metrics=metrics
         ) as ctx:
             # Simulate signal generation
-            ctx.record_signal("buy", 0.85)
+            ctx.record_signal("BUY", 0.85, "OPEN_LONG")
 
         assert ctx.signal_recorded is True
 
@@ -270,7 +301,7 @@ class TestMetricsContext:
         with MetricsContext(
             strategy="test_strategy", symbol="BTCUSDT", metrics=None
         ) as ctx:
-            ctx.record_signal("buy", 0.9)
+            ctx.record_signal("BUY", 0.9, "OPEN_LONG")
             assert ctx is not None  # Context should be created
 
         # Should complete without error
@@ -300,7 +331,11 @@ class TestMetricsContext:
             strategy="test_strategy", symbol="BTCUSDT", metrics=metrics
         ) as ctx:
             # Should not raise AttributeError
-            ctx.record_signal(signal.signal_action.value, signal.confidence_score)
+            ctx.record_signal(
+                signal.signal_type.value,
+                signal.confidence_score,
+                signal.signal_action.value,
+            )
 
         assert ctx.signal_recorded is True
 
@@ -334,10 +369,11 @@ class TestMetricsIntegration:
         ) as ctx:
             # Simulate strategy logic
             confidence = 0.85
-            signal_type = "buy"
+            signal_type = "BUY"
+            action = "OPEN_LONG"
 
             # Record signal
-            ctx.record_signal(signal_type, confidence)
+            ctx.record_signal(signal_type, confidence, action)
             assert ctx.signal_recorded is True
 
         # Record message processed
@@ -370,7 +406,7 @@ class TestMetricsIntegration:
                 ) as ctx:
                     # Simulate signal generation
                     if hash(strategy + symbol) % 2 == 0:
-                        ctx.record_signal("buy", 0.8)
+                        ctx.record_signal("BUY", 0.8, "OPEN_LONG")
                         signal_count += 1
 
         # Verify signals were recorded
@@ -405,7 +441,7 @@ class TestMetricsIntegration:
                 with MetricsContext(
                     strategy="test_strategy", symbol=symbol, metrics=metrics
                 ) as ctx:
-                    ctx.record_signal("buy", 0.75)
+                    ctx.record_signal("BUY", 0.75, "OPEN_LONG")
                     signal_count += 1
 
         # Verify expected number of signals were recorded (100 signals for 1000 messages at 10% rate)
