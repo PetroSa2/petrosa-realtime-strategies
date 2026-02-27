@@ -241,4 +241,5 @@ open htmlcov/index.html  # View detailed HTML report
 - [Testing Guide](./TESTING.md)
 - [Makefile Reference](./MAKEFILE.md)
 - [Quick Reference](./QUICK_REFERENCE.md)
+- [VERSION_PLACEHOLDER Guide](./VERSION_PLACEHOLDER_GUIDE.md)
 
