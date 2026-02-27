@@ -136,11 +136,9 @@ jobs:
           python-version: '3.11'
 
       - name: 🐍 Run Bandit (Python Security)
-        continue-on-error: true
         run: |
           pip install bandit[toml]
           bandit -r . \
-            --configfile .bandit \
             --format json \
             --output bandit-report.json
           echo "📊 Bandit Results:"
