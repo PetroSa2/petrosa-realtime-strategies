@@ -8,13 +8,21 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - name: Set version
       id: version
       run: |
-        BASE_VERSION="v1.0.5"
+        RAW_VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml)
+        BASE_VERSION="v${RAW_VERSION}"
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
         VERSION="${BASE_VERSION}-r${{ github.run_number }}-${SHORT_SHA}"
         echo "version=$VERSION" >> $GITHUB_OUTPUT
