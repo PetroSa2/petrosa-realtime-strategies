@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "petrosa-realtime-strategies"
-version = "1.0.0"
+version = "1.0.70"
 description = "Stateless trading signal service for real-time market data processing"
 readme = "README.md"
 license = {text = "MIT"}
