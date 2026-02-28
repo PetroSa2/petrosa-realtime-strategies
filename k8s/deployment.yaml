@@ -1,0 +1,267 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: petrosa-realtime-strategies
+  namespace: petrosa-apps
+  labels:
+    app: realtime-strategies
+    component: trading-signals
+    version: VERSION_PLACEHOLDER
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: realtime-strategies
+      component: trading-signals
+  template:
+    metadata:
+      labels:
+        app: realtime-strategies
+        component: trading-signals
+        version: VERSION_PLACEHOLDER
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      restartPolicy: Always
+      containers:
+      - name: realtime-strategies
+        image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
+        imagePullPolicy: Always
+        command:
+        - opentelemetry-instrument
+        - python
+        - -m
+        - strategies.main
+        args:
+        - run
+        env:
+        - name: NATS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: NATS_URL
+        - name: NATS_CONSUMER_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: NATS_CONSUMER_TOPIC
+        - name: NATS_PUBLISHER_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: NATS_PUBLISHER_TOPIC
+        - name: NATS_CONSUMER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: NATS_CONSUMER_NAME
+        - name: NATS_CONSUMER_GROUP
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: NATS_CONSUMER_GROUP
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: LOG_LEVEL
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: ENVIRONMENT
+        - name: ENABLE_OTEL
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: ENABLE_OTEL
+        - name: ENABLE_LOGS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: ENABLE_LOGS
+        - name: ENABLE_METRICS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: ENABLE_METRICS
+        - name: ENABLE_TRACES
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: ENABLE_TRACES
+        - name: OTEL_SERVICE_VERSION
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: OTEL_SERVICE_VERSION
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=realtime-strategies,service.version=VERSION_PLACEHOLDER"
+        - name: OTEL_METRICS_EXPORTER
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: OTEL_METRICS_EXPORTER
+        - name: OTEL_TRACES_EXPORTER
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: OTEL_TRACES_EXPORTER
+        - name: OTEL_LOGS_EXPORTER
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: OTEL_LOGS_EXPORTER
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: petrosa-sensitive-credentials
+              key: OTEL_EXPORTER_OTLP_HEADERS
+        - name: HEALTH_CHECK_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: HEALTH_CHECK_PORT
+        - name: STRATEGY_ENABLED_ORDERBOOK_SKEW
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_ORDERBOOK_SKEW
+        - name: STRATEGY_ENABLED_TRADE_MOMENTUM
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_TRADE_MOMENTUM
+        - name: STRATEGY_ENABLED_TICKER_VELOCITY
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_TICKER_VELOCITY
+        - name: STRATEGY_ENABLED_BTC_DOMINANCE
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_BTC_DOMINANCE
+        - name: STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD
+        - name: STRATEGY_ENABLED_ONCHAIN_METRICS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: STRATEGY_ENABLED_ONCHAIN_METRICS
+        - name: TRADING_SYMBOLS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: TRADING_SYMBOLS
+        - name: TRADING_ENABLE_SHORTS
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: TRADING_ENABLE_SHORTS
+        - name: TRADING_LEVERAGE
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: TRADING_LEVERAGE
+        - name: BATCH_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: BATCH_SIZE
+        - name: BATCH_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: BATCH_TIMEOUT
+        - name: MAX_MEMORY_MB
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-realtime-strategies-config
+              key: MAX_MEMORY_MB
+        # MongoDB Configuration for API persistence (fallback only, Data Manager preferred)
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: petrosa-sensitive-credentials
+              key: mongodb-connection-string
+        - name: MONGODB_DATABASE
+          value: "petrosa"
+        # Data Manager API configuration
+        - name: DATA_MANAGER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: petrosa-common-config
+              key: DATA_MANAGER_URL
+        - name: MONGODB_TIMEOUT_MS
+          value: "5000"
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000

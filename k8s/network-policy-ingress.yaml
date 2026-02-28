@@ -1,0 +1,35 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: petrosa-realtime-strategies-allow-ingress
+  namespace: petrosa-apps
+  labels:
+    app: realtime-strategies
+    component: trading-signals
+spec:
+  podSelector:
+    matchLabels:
+      app: realtime-strategies
+      component: trading-signals
+  policyTypes:
+  - Ingress
+  
+  ingress:
+  # Allow traffic from within the namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: petrosa-apps
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow monitoring from observability namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+    ports:
+    - protocol: TCP
+      port: 8080
