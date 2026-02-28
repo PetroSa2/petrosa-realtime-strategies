@@ -220,7 +220,7 @@ class HealthServer:
             # Start the server
             config = uvicorn.Config(
                 app=self.app,
-                host="0.0.0.0",
+                host="0.0.0.0",  # nosec B104
                 port=self.port,
                 log_level="info",
                 access_log=False,

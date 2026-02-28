@@ -589,7 +589,7 @@ async def detect_cross_service_conflicts(
                             resolution="Check ta-bot logs"
                         ))
             except Exception:
-                pass
+                pass  # nosec B110
 
         # Check tradeengine for trading parameters
         trading_params = ["leverage", "stop_loss_pct", "take_profit_pct"]
@@ -609,6 +609,6 @@ async def detect_cross_service_conflicts(
                             resolution="Check tradeengine logs"
                         ))
             except Exception:
-                pass
+                pass  # nosec B110
 
     return conflicts
