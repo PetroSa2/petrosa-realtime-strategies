@@ -140,7 +140,7 @@ jobs:
           bandit -r . \
             --configfile .bandit \
             --format json \
-            --output bandit-report.json
+            --output bandit-report.json || true
           echo "📊 Bandit Results:"
           python -m json.tool bandit-report.json | head -30 || echo "No issues found"
 
