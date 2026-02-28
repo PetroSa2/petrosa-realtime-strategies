@@ -1,0 +1,17 @@
+# Bandit security scan configuration
+# Format: YAML
+
+# Exclude directories
+exclude_dirs:
+  - 'tests'
+  - '.venv'
+  - 'venv'
+  - 'htmlcov'
+  - '.git'
+  - '__pycache__'
+  - '*.egg-info'
+
+# Skip tests
+# B104: hardcoded_bind_all_interfaces (intentional for containers)
+skips:
+  - 'B104'
