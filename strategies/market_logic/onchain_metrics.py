@@ -171,12 +171,12 @@ class OnChainMetricsStrategy:
         base_hash_rate = 200
 
         return {
-            "active_addresses": base_addresses + random.randint(-50000, 50000),
-            "transaction_volume_btc": base_volume + random.randint(-100000, 100000),
-            "hash_rate_eh": base_hash_rate + random.randint(-20, 20),
-            "exchange_inflow_btc": random.randint(1000, 5000),
-            "exchange_outflow_btc": random.randint(1000, 5000),
-            "network_value_usd": random.randint(800000000000, 1200000000000),
+            "active_addresses": base_addresses + random.randint(-50000, 50000),  # nosec B311
+            "transaction_volume_btc": base_volume + random.randint(-100000, 100000),  # nosec B311
+            "hash_rate_eh": base_hash_rate + random.randint(-20, 20),  # nosec B311
+            "exchange_inflow_btc": random.randint(1000, 5000),  # nosec B311
+            "exchange_outflow_btc": random.randint(1000, 5000),  # nosec B311
+            "network_value_usd": random.randint(800000000000, 1200000000000),  # nosec B311
             "timestamp": time.time(),
         }
 
@@ -194,12 +194,12 @@ class OnChainMetricsStrategy:
         base_gas = 50
 
         return {
-            "active_addresses": base_addresses + random.randint(-40000, 40000),
-            "transaction_volume_eth": base_volume + random.randint(-50000, 50000),
-            "avg_gas_price": base_gas + random.randint(-20, 20),
-            "defi_tvl_usd": random.randint(50000000000, 100000000000),
-            "exchange_inflow_eth": random.randint(50000, 200000),
-            "exchange_outflow_eth": random.randint(50000, 200000),
+            "active_addresses": base_addresses + random.randint(-40000, 40000),  # nosec B311
+            "transaction_volume_eth": base_volume + random.randint(-50000, 50000),  # nosec B311
+            "avg_gas_price": base_gas + random.randint(-20, 20),  # nosec B311
+            "defi_tvl_usd": random.randint(50000000000, 100000000000),  # nosec B311
+            "exchange_inflow_eth": random.randint(50000, 200000),  # nosec B311
+            "exchange_outflow_eth": random.randint(50000, 200000),  # nosec B311
             "timestamp": time.time(),
         }
 

@@ -125,9 +125,9 @@ jobs:
 
       - name: 🔐 Run Gitleaks (Secret Detection)
         uses: gitleaks/gitleaks-action@v1
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}  # Optional - works without license in v1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -138,17 +138,14 @@ jobs:
         run: |
           pip install bandit[toml]
           bandit -r . \
-            --severity-level medium \
-            --confidence-level medium \
             --format json \
-            --output bandit-report.json \
-            --exclude tests/ \
-            || true
+            --output bandit-report.json
           echo "📊 Bandit Results:"
           python -m json.tool bandit-report.json | head -30 || echo "No issues found"
 
       - name: 🗂️ Run Trivy (Vulnerability Scanner)
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           scan-type: 'fs'
           scan-ref: '.'

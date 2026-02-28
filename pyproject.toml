@@ -238,7 +238,9 @@ ignore = [
 "tests/**/*" = ["B011"]
 
 [tool.bandit]
-exclude_dirs = ["tests", "venv", ".venv"]
+exclude_dirs = ["tests", "venv", ".venv", ".git", "__pycache__", "*.egg-info", "htmlcov"]
 skips = ["B101", "B601"]
+severity = "medium"
+confidence = "medium"
 
 [tool.sphinx.ext.autodoc]
