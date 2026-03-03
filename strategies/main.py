@@ -12,45 +12,26 @@ import signal
 import sys
 from typing import Optional
 
+# 1. Setup OpenTelemetry FIRST (before any other imports that might use it)
+try:
+    from petrosa_otel import setup_telemetry
+    if os.getenv("OTEL_NO_AUTO_INIT"):
+        service_name = os.getenv("OTEL_SERVICE_NAME", "realtime-strategies")
+        setup_telemetry(
+            service_name=service_name,
+            service_type="async",
+            enable_mongodb=True,
+            auto_attach_logging=False,
+        )
+except ImportError:
+    setup_telemetry = None
+
 import typer
 from dotenv import load_dotenv
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
-
-import constants  # noqa: E402
-from strategies.core.consumer import NATSConsumer  # noqa: E402
-from strategies.core.publisher import TradeOrderPublisher  # noqa: E402
-from strategies.health.server import HealthServer  # noqa: E402
-from strategies.utils.heartbeat import HeartbeatManager  # noqa: E402
-from strategies.utils.logger import setup_logging  # noqa: E402
-from strategies.utils.telemetry import (  # noqa: E402
-    flush_telemetry,
-    shutdown_telemetry,
-)
-
-# Initialize OpenTelemetry as early as possible
-ConfigRateLimiter = None
-
-try:
-    from petrosa_otel import (
-        ConfigRateLimiter,
-        setup_telemetry,
-    )
-
-    if not os.getenv("OTEL_NO_AUTO_INIT"):
-        setup_telemetry(
-            service_name=constants.OTEL_SERVICE_NAME,
-            service_type="fastapi",
-            enable_fastapi=True,
-            enable_mongodb=True,
-            auto_attach_logging=False,  # Will attach manually after setup_logging()
-        )
-        # Note: setup_metrics() for Prometheus is called separately in __init__
-        # Health server will attach logging handler via lifespan
-except ImportError:
-    pass
 
 # Load environment variables
 load_dotenv()
@@ -64,15 +45,6 @@ class StrategiesService:
     def __init__(self):
         """Initialize the service."""
         self.logger = setup_logging(level=constants.LOG_LEVEL)
-
-        # Attach OTLP logging handler AFTER setup_logging() configures logging
-        # This ensures the handler survives any logging reconfiguration
-        try:
-            from petrosa_otel import attach_logging_handler
-
-            attach_logging_handler()
-        except Exception as e:
-            print(f"⚠️  Failed to attach OTLP handler: {e}")
 
         self.consumer: NATSConsumer | None = None
         self.publisher: TradeOrderPublisher | None = None
@@ -327,6 +299,11 @@ def run(
 
     # Create and run service
     service = StrategiesService()
+    try:
+        from petrosa_otel import attach_logging_handler
+        attach_logging_handler()
+    except ImportError:
+        print("⚠️  petrosa_otel not found, skipping OTLP logging handler.")
     signal_handler.service = service
 
     try:
