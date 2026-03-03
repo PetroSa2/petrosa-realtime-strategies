@@ -112,7 +112,10 @@ async def get_strategy_schema(
         if not defaults:
             return APIResponse(
                 success=False,
-                error={"code": "NOT_FOUND", "message": f"Strategy not found: {strategy_id}"},
+                error={
+                    "code": "NOT_FOUND",
+                    "message": f"Strategy not found: {strategy_id}",
+                },
             )
 
         schema_items = []
@@ -122,7 +125,9 @@ async def get_strategy_schema(
                 ParameterSchemaItem(
                     name=param_name,
                     type=param_schema.get("type", type(param_value).__name__),
-                    description=param_schema.get("description", f"Parameter: {param_name}"),
+                    description=param_schema.get(
+                        "description", f"Parameter: {param_name}"
+                    ),
                     default=param_value,
                     min=param_schema.get("min"),
                     max=param_schema.get("max"),
@@ -134,7 +139,9 @@ async def get_strategy_schema(
         return APIResponse(success=True, data=schema_items)
     except Exception as e:
         logger.error(f"Error getting schema: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.get(
@@ -151,7 +158,10 @@ async def get_strategy_defaults_endpoint(
         if not defaults:
             return APIResponse(
                 success=False,
-                error={"code": "NOT_FOUND", "message": f"Strategy not found: {strategy_id}"},
+                error={
+                    "code": "NOT_FOUND",
+                    "message": f"Strategy not found: {strategy_id}",
+                },
             )
         metadata = get_strategy_metadata(strategy_id)
         return APIResponse(
@@ -161,7 +171,9 @@ async def get_strategy_defaults_endpoint(
         )
     except Exception as e:
         logger.error(f"Error getting defaults: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.get(
@@ -191,7 +203,9 @@ async def get_global_config(
         )
     except Exception as e:
         logger.error(f"Error getting global config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.get(
@@ -222,7 +236,9 @@ async def get_symbol_config(
         )
     except Exception as e:
         logger.error(f"Error getting symbol config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.post(
@@ -249,11 +265,17 @@ async def update_global_config(
         if not success:
             return APIResponse(
                 success=False,
-                error={"code": "VALIDATION_ERROR", "message": "Validation failed", "details": {"errors": errors}},
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {"errors": errors},
+                },
             )
 
         if request.validate_only:
-            return APIResponse(success=True, data=None, metadata={"validation": "passed"})
+            return APIResponse(
+                success=True, data=None, metadata={"validation": "passed"}
+            )
 
         return APIResponse(
             success=True,
@@ -271,7 +293,9 @@ async def update_global_config(
         )
     except Exception as e:
         logger.error(f"Error updating global config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.post(
@@ -299,11 +323,17 @@ async def update_symbol_config(
         if not success:
             return APIResponse(
                 success=False,
-                error={"code": "VALIDATION_ERROR", "message": "Validation failed", "details": {"errors": errors}},
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "details": {"errors": errors},
+                },
             )
 
         if request.validate_only:
-            return APIResponse(success=True, data=None, metadata={"validation": "passed"})
+            return APIResponse(
+                success=True, data=None, metadata={"validation": "passed"}
+            )
 
         return APIResponse(
             success=True,
@@ -320,7 +350,9 @@ async def update_symbol_config(
         )
     except Exception as e:
         logger.error(f"Error updating symbol config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.delete(
@@ -343,13 +375,19 @@ async def delete_global_config(
         if not success:
             return APIResponse(
                 success=False,
-                error={"code": "DELETE_FAILED", "message": "Failed to delete", "details": {"errors": errors}},
+                error={
+                    "code": "DELETE_FAILED",
+                    "message": "Failed to delete",
+                    "details": {"errors": errors},
+                },
             )
 
         return APIResponse(success=True, data={"message": "deleted successfully"})
     except Exception as e:
         logger.error(f"Error deleting global config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.delete(
@@ -367,13 +405,20 @@ async def delete_symbol_config(
     try:
         manager = get_config_manager()
         success, errors = await manager.delete_config(
-            strategy_id=strategy_id, changed_by=changed_by, symbol=symbol.upper(), reason=reason
+            strategy_id=strategy_id,
+            changed_by=changed_by,
+            symbol=symbol.upper(),
+            reason=reason,
         )
 
         if not success:
             return APIResponse(
                 success=False,
-                error={"code": "DELETE_FAILED", "message": "Failed to delete", "details": {"errors": errors}},
+                error={
+                    "code": "DELETE_FAILED",
+                    "message": "Failed to delete",
+                    "details": {"errors": errors},
+                },
             )
 
         return APIResponse(
@@ -383,7 +428,9 @@ async def delete_symbol_config(
         )
     except Exception as e:
         logger.error(f"Error deleting symbol config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.get(
@@ -400,7 +447,7 @@ async def get_audit_trail(
     try:
         manager = get_config_manager()
         audit_trail = await manager.get_audit_trail(strategy_id, symbol, limit)
-        
+
         items = [
             AuditTrailItem(
                 id=item.id,
@@ -415,11 +462,13 @@ async def get_audit_trail(
             )
             for item in audit_trail
         ]
-        
+
         return APIResponse(success=True, data=items, metadata={"count": len(items)})
     except Exception as e:
         logger.error(f"Error getting audit trail: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.post(
@@ -469,7 +518,11 @@ async def rollback_config(
         if not success:
             return APIResponse(
                 success=False,
-                error={"code": "ROLLBACK_FAILED", "message": "Failed to rollback", "details": {"errors": errors}},
+                error={
+                    "code": "ROLLBACK_FAILED",
+                    "message": "Failed to rollback",
+                    "details": {"errors": errors},
+                },
             )
 
         return APIResponse(
@@ -487,7 +540,9 @@ async def rollback_config(
         )
     except Exception as e:
         logger.error(f"Error rolling back config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 @router.post(
@@ -515,7 +570,10 @@ async def validate_config(request: ConfigValidationRequest):
         if not request.strategy_id:
             return APIResponse(
                 success=False,
-                error={"code": "VALIDATION_ERROR", "message": "strategy_id is required"},
+                error={
+                    "code": "VALIDATION_ERROR",
+                    "message": "strategy_id is required",
+                },
             )
 
         manager = get_config_manager()
@@ -532,16 +590,36 @@ async def validate_config(request: ConfigValidationRequest):
         for error_msg in errors:
             if "Unknown parameter" in error_msg:
                 code = "UNKNOWN_PARAMETER"
-                field = error_msg.split("Unknown parameter:")[-1].strip() if ":" in error_msg else "unknown"
-                validation_errors.append(ValidationError(field=field, message=error_msg, code=code))
+                field = (
+                    error_msg.split("Unknown parameter:")[-1].strip()
+                    if ":" in error_msg
+                    else "unknown"
+                )
+                validation_errors.append(
+                    ValidationError(field=field, message=error_msg, code=code)
+                )
             elif "must be" in error_msg:
                 field = error_msg.split(" must be")[0].strip()
-                code = "INVALID_TYPE" if "type" in error_msg or "integer" in error_msg or "number" in error_msg else "OUT_OF_RANGE"
-                validation_errors.append(ValidationError(field=field, message=error_msg, code=code))
+                code = (
+                    "INVALID_TYPE"
+                    if "type" in error_msg
+                    or "integer" in error_msg
+                    or "number" in error_msg
+                    else "OUT_OF_RANGE"
+                )
+                validation_errors.append(
+                    ValidationError(field=field, message=error_msg, code=code)
+                )
             else:
-                validation_errors.append(ValidationError(field="unknown", message=error_msg, code="VALIDATION_ERROR"))
+                validation_errors.append(
+                    ValidationError(
+                        field="unknown", message=error_msg, code="VALIDATION_ERROR"
+                    )
+                )
 
-        conflicts = await detect_cross_service_conflicts(request.parameters, request.strategy_id, request.symbol)
+        conflicts = await detect_cross_service_conflicts(
+            request.parameters, request.strategy_id, request.symbol
+        )
 
         return APIResponse(
             success=True,
@@ -549,17 +627,24 @@ async def validate_config(request: ConfigValidationRequest):
                 validation_passed=success and len(validation_errors) == 0,
                 errors=validation_errors,
                 conflicts=conflicts,
-                estimated_impact={"risk_level": "low", "parameter_count": len(request.parameters)},
+                estimated_impact={
+                    "risk_level": "low",
+                    "parameter_count": len(request.parameters),
+                },
             ),
         )
     except Exception as e:
         logger.error(f"Error validating config: {e}")
-        return APIResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        return APIResponse(
+            success=False, error={"code": "INTERNAL_ERROR", "message": str(e)}
+        )
 
 
 # Service URLs for cross-service conflict detection
 SERVICE_URLS = {
-    "tradeengine": os.getenv("TRADEENGINE_URL", "http://petrosa-tradeengine-service:80"),
+    "tradeengine": os.getenv(
+        "TRADEENGINE_URL", "http://petrosa-tradeengine-service:80"
+    ),
     "data-manager": os.getenv("DATA_MANAGER_URL", "http://petrosa-data-manager:80"),
     "ta-bot": os.getenv("TA_BOT_URL", "http://petrosa-ta-bot-service:80"),
 }
@@ -577,17 +662,25 @@ async def detect_cross_service_conflicts(
             try:
                 resp = await client.post(
                     f"{SERVICE_URLS['ta-bot']}/api/v1/config/validate",
-                    json={"parameters": parameters, "strategy_id": strategy_id, "symbol": symbol},
+                    json={
+                        "parameters": parameters,
+                        "strategy_id": strategy_id,
+                        "symbol": symbol,
+                    },
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    if data.get("success") and not data.get("data", {}).get("validation_passed", True):
-                        conflicts.append(CrossServiceConflict(
-                            service="ta-bot",
-                            conflict_type="VALIDATION_CONFLICT",
-                            description="ta-bot reported validation errors",
-                            resolution="Check ta-bot logs"
-                        ))
+                    if data.get("success") and not data.get("data", {}).get(
+                        "validation_passed", True
+                    ):
+                        conflicts.append(
+                            CrossServiceConflict(
+                                service="ta-bot",
+                                conflict_type="VALIDATION_CONFLICT",
+                                description="ta-bot reported validation errors",
+                                resolution="Check ta-bot logs",
+                            )
+                        )
             except Exception:
                 pass  # nosec B110
 
@@ -597,17 +690,26 @@ async def detect_cross_service_conflicts(
             try:
                 resp = await client.post(
                     f"{SERVICE_URLS['tradeengine']}/api/v1/config/validate",
-                    json={"parameters": {k: v for k, v in parameters.items() if k in trading_params}, "symbol": symbol},
+                    json={
+                        "parameters": {
+                            k: v for k, v in parameters.items() if k in trading_params
+                        },
+                        "symbol": symbol,
+                    },
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    if data.get("success") and not data.get("data", {}).get("validation_passed", True):
-                        conflicts.append(CrossServiceConflict(
-                            service="tradeengine",
-                            conflict_type="VALIDATION_CONFLICT",
-                            description="tradeengine reported validation errors",
-                            resolution="Check tradeengine logs"
-                        ))
+                    if data.get("success") and not data.get("data", {}).get(
+                        "validation_passed", True
+                    ):
+                        conflicts.append(
+                            CrossServiceConflict(
+                                service="tradeengine",
+                                conflict_type="VALIDATION_CONFLICT",
+                                description="tradeengine reported validation errors",
+                                resolution="Check tradeengine logs",
+                            )
+                        )
             except Exception:
                 pass  # nosec B110
 
