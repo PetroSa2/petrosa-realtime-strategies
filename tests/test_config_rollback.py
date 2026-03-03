@@ -110,7 +110,10 @@ class TestStrategyConfigRollback:
         """Test configuration by ID lookup includes security filtering."""
         # 1. Setup mock
         mock_mongodb_client.get_audit_record_by_id = AsyncMock(
-            return_value={"strategy_id": "s1", "new_parameters": {"rsi": 14, "version": 2}}
+            return_value={
+                "strategy_id": "s1",
+                "new_parameters": {"rsi": 14, "version": 2},
+            }
         )
 
         # 2. Execute
@@ -194,7 +197,7 @@ class TestStrategyConfigRollback:
         # 2. No symbol, but global exists
         # MUST clear cache because we're checking same (strategy, symbol)
         await config_manager.refresh_cache()
-        
+
         mock_mongodb_client.get_symbol_config = AsyncMock(return_value=None)
         mock_mongodb_client.get_global_config = AsyncMock(
             return_value={"parameters": {"rsi": 14}, "version": 2}
@@ -265,23 +268,25 @@ class TestStrategyConfigRollback:
         """Test fallback to environment variables via constants."""
         mock_mongodb_client.get_symbol_config = AsyncMock(return_value=None)
         mock_mongodb_client.get_global_config = AsyncMock(return_value=None)
-        
+
         with patch("strategies.services.config_manager.constants") as mock_const:
             mock_const.ORDERBOOK_SKEW_TOP_LEVELS = 42
             # Need to mock other values used in the dict
             mock_const.ORDERBOOK_SKEW_BUY_THRESHOLD = 1.2
             mock_const.ORDERBOOK_SKEW_SELL_THRESHOLD = 0.8
             mock_const.ORDERBOOK_SKEW_MIN_SPREAD_PERCENT = 0.1
-            
+
             config = await config_manager.get_config("orderbook_skew")
             assert config["parameters"]["top_levels"] == 42
             assert config["source"] == "environment"
 
-    async def test_get_config_default_fallback(self, config_manager, mock_mongodb_client):
+    async def test_get_config_default_fallback(
+        self, config_manager, mock_mongodb_client
+    ):
         """Test fallback to hardcoded defaults."""
         mock_mongodb_client.get_symbol_config = AsyncMock(return_value=None)
         mock_mongodb_client.get_global_config = AsyncMock(return_value=None)
-        
+
         # Patch constants to return empty/None so it falls through to defaults
         with patch("strategies.services.config_manager.constants") as mock_const:
             # Making it return something that _get_from_environment will consider "empty"
@@ -289,24 +294,26 @@ class TestStrategyConfigRollback:
             # If it matches, it uses the values in constants.
             # To test default fallback, we can use a non-existent strategy_id
             # or ensure _get_from_environment returns {}
-            
+
             config = await config_manager.get_config("non_existent_strategy")
             assert "parameters" in config
             assert config["source"] == "default"
 
     async def test_get_audit_trail_direct(self, config_manager, mock_mongodb_client):
         """Test direct retrieval of audit trail."""
-        mock_mongodb_client.get_audit_trail = AsyncMock(return_value=[
-            {
-                "_id": "id1",
-                "strategy_id": "s1",
-                "action": "CREATE",
-                "new_parameters": {"p": 1},
-                "changed_by": "u1",
-                "changed_at": datetime.utcnow()
-            }
-        ])
-        
+        mock_mongodb_client.get_audit_trail = AsyncMock(
+            return_value=[
+                {
+                    "_id": "id1",
+                    "strategy_id": "s1",
+                    "action": "CREATE",
+                    "new_parameters": {"p": 1},
+                    "changed_by": "u1",
+                    "changed_at": datetime.utcnow(),
+                }
+            ]
+        )
+
         trail = await config_manager.get_audit_trail("s1")
         assert len(trail) == 1
         assert trail[0].id == "id1"
@@ -316,17 +323,22 @@ class TestStrategyConfigRollback:
         """Test rollback to a specific version number."""
         # Mock database finding the version
         mock_mongodb_client.get_audit_record_by_version = AsyncMock(
-            return_value={"strategy_id": "s1", "new_parameters": {"rsi": 10, "version": 1}}
+            return_value={
+                "strategy_id": "s1",
+                "new_parameters": {"rsi": 10, "version": 1},
+            }
         )
-        
+
         # Mock set_config
-        with patch.object(config_manager, "set_config", new_callable=AsyncMock) as mock_set:
+        with patch.object(
+            config_manager, "set_config", new_callable=AsyncMock
+        ) as mock_set:
             mock_set.return_value = (True, MagicMock(spec=StrategyConfig), [])
-            
+
             success, config, errors = await config_manager.rollback_config(
                 strategy_id="s1", changed_by="admin", target_version=1
             )
-            
+
             assert success is True
             mock_set.assert_called_once()
             assert mock_set.call_args[1]["parameters"]["rsi"] == 10
@@ -337,31 +349,35 @@ class TestStrategyConfigRollback:
         mock_mongodb_client.get_audit_record_by_id = AsyncMock(
             return_value={
                 "strategy_id": "s1",
-                "new_parameters": {"rsi": 15, "version": 2}
+                "new_parameters": {"rsi": 15, "version": 2},
             }
         )
-            
+
         config = await config_manager.get_config_by_id("s1", "target_id")
         assert config["rsi"] == 15
 
     async def test_delete_symbol_config(self, config_manager, mock_mongodb_client):
         """Test deletion of symbol-specific configuration."""
         mock_mongodb_client.delete_symbol_config = AsyncMock(return_value=True)
-        mock_mongodb_client.get_symbol_config = AsyncMock(return_value={"parameters": {"p": 1}, "version": 1})
+        mock_mongodb_client.get_symbol_config = AsyncMock(
+            return_value={"parameters": {"p": 1}, "version": 1}
+        )
         mock_mongodb_client.create_audit_record = AsyncMock()
-        
+
         success, errors = await config_manager.delete_config(
             strategy_id="s1", symbol="BTCUSDT", changed_by="admin"
         )
-        
+
         assert success is True
         mock_mongodb_client.delete_symbol_config.assert_called_with("s1", "BTCUSDT")
 
     async def test_mongodb_unavailable(self, config_manager, mock_mongodb_client):
         """Test behavior when MongoDB is not connected."""
         mock_mongodb_client.is_connected = False
-        
-        success, config, errors = await config_manager.set_config("s1", {"p": 1}, "admin")
+
+        success, config, errors = await config_manager.set_config(
+            "s1", {"p": 1}, "admin"
+        )
         assert success is False
         assert "MongoDB not available" in errors[0]
 
@@ -379,9 +395,11 @@ class TestStrategyConfigRollback:
         """Test the background cache refresh loop logic."""
         # This test is notoriously flaky due to asyncio task scheduling.
         # We'll test the expiration logic instead.
-        manager = StrategyConfigManager(mongodb_client=mock_mongodb_client, cache_ttl_seconds=0.01)
+        manager = StrategyConfigManager(
+            mongodb_client=mock_mongodb_client, cache_ttl_seconds=0.01
+        )
         manager._cache["s1:global"] = ({"p": 1}, time.time() - 100)
-        
+
         # Manually run the cleanup logic
         current_time = time.time()
         expired_keys = [
@@ -391,17 +409,19 @@ class TestStrategyConfigRollback:
         ]
         for key in expired_keys:
             del manager._cache[key]
-            
+
         assert "s1:global" not in manager._cache
 
     async def test_get_config_cache_hit(self, config_manager, mock_mongodb_client):
         """Test that cache hit returns correctly and skips DB."""
         # 1. First call to populate cache
-        mock_mongodb_client.get_global_config = AsyncMock(return_value={"parameters": {"p": 1}, "version": 1})
+        mock_mongodb_client.get_global_config = AsyncMock(
+            return_value={"parameters": {"p": 1}, "version": 1}
+        )
         await config_manager.get_config("s1")
-        
+
         # 2. Second call should hit cache
-        mock_mongodb_client.get_global_config = AsyncMock() # Should NOT be called
+        mock_mongodb_client.get_global_config = AsyncMock()  # Should NOT be called
         config = await config_manager.get_config("s1")
         assert config["cache_hit"] is True
         mock_mongodb_client.get_global_config.assert_not_called()
@@ -409,28 +429,47 @@ class TestStrategyConfigRollback:
     async def test_set_config_upsert_failure(self, config_manager, mock_mongodb_client):
         """Test failure when database upsert fails."""
         mock_mongodb_client.get_global_config = AsyncMock(return_value=None)
-        mock_mongodb_client.upsert_global_config = AsyncMock(return_value=None) # Failure
-        
-        success, config, errors = await config_manager.set_config("orderbook_skew", {"top_levels": 5}, "admin")
+        mock_mongodb_client.upsert_global_config = AsyncMock(
+            return_value=None
+        )  # Failure
+
+        success, config, errors = await config_manager.set_config(
+            "orderbook_skew", {"top_levels": 5}, "admin"
+        )
         assert success is False
         assert "Failed to save" in errors[0]
 
     async def test_rollback_no_history(self, config_manager):
         """Test rollback when no audit trail exists."""
         with patch.object(config_manager, "get_audit_trail", return_value=[]):
-            success, config, errors = await config_manager.rollback_config("s1", "admin")
+            success, config, errors = await config_manager.rollback_config(
+                "s1", "admin"
+            )
             assert success is False
             assert "No previous configuration found" in errors[0]
 
-    async def test_get_config_by_version_fallback(self, config_manager, mock_mongodb_client):
+    async def test_get_config_by_version_fallback(
+        self, config_manager, mock_mongodb_client
+    ):
         """Test fallback when direct MongoDB query fails or is not used."""
-        mock_mongodb_client.use_data_manager = False # Allow fallback search
+        mock_mongodb_client.use_data_manager = False  # Allow fallback search
         # Ensure direct lookup returns None so it falls through to get_audit_trail
         mock_mongodb_client.get_audit_record_by_version = AsyncMock(return_value=None)
-        
-        with patch.object(config_manager, "get_audit_trail", return_value=[
-            StrategyConfigAudit(id="1", strategy_id="s1", action="CREATE", new_parameters={"p": 1, "version": 5}, changed_by="u1", changed_at=datetime.utcnow())
-        ]):
+
+        with patch.object(
+            config_manager,
+            "get_audit_trail",
+            return_value=[
+                StrategyConfigAudit(
+                    id="1",
+                    strategy_id="s1",
+                    action="CREATE",
+                    new_parameters={"p": 1, "version": 5},
+                    changed_by="u1",
+                    changed_at=datetime.utcnow(),
+                )
+            ],
+        ):
             config = await config_manager.get_config_by_version("s1", 5)
             assert config["p"] == 1
 

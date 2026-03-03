@@ -11,6 +11,59 @@ from typing import Union
 from pydantic import BaseModel, Field, validator
 
 
+class MarkPriceData(BaseModel):
+    """Mark price update from Binance WebSocket."""
+
+    symbol: str = Field(..., description="Trading symbol")
+    mark_price: str = Field(..., description="Mark price")
+    index_price: str = Field(..., description="Index price")
+    estimated_settle_price: str = Field(..., description="Estimated Settle Price")
+    funding_rate: str = Field(..., description="Funding rate")
+    next_funding_time: int = Field(..., description="Next funding time in milliseconds")
+    event_time: int = Field(..., description="Event time in milliseconds")
+
+    @validator("symbol")
+    def validate_symbol(cls, v):
+        """Validate trading symbol format."""
+        if not v or len(v) < 6:
+            raise ValueError("Invalid symbol format")
+        return v.upper()
+
+    @validator(
+        "mark_price",
+        "index_price",
+        "estimated_settle_price",
+        "funding_rate",
+    )
+    def validate_numeric_string(cls, v):
+        """Validate that the string can be converted to a float."""
+        try:
+            float(v)
+            return v
+        except ValueError:
+            raise ValueError(f"Invalid numeric string: {v}")
+
+    @property
+    def timestamp(self) -> datetime:
+        """Convert event_time to datetime."""
+        return datetime.fromtimestamp(self.event_time / 1000)
+
+    @property
+    def mark_price_float(self) -> float:
+        """Get mark price as float."""
+        return float(self.mark_price)
+
+    @property
+    def index_price_float(self) -> float:
+        """Get index price as float."""
+        return float(self.index_price)
+
+    @property
+    def funding_rate_float(self) -> float:
+        """Get funding rate as float."""
+        return float(self.funding_rate)
+
+
 class DepthLevel(BaseModel):
     """Represents a single level in the order book."""
 
@@ -213,7 +266,7 @@ class MarketDataMessage(BaseModel):
     """Generic market data message wrapper."""
 
     stream: str = Field(..., description="Stream name")
-    data: Union[DepthUpdate, TradeData, TickerData] = Field(
+    data: Union[DepthUpdate, TradeData, TickerData, MarkPriceData] = Field(
         ..., description="Market data"
     )
     timestamp: datetime = Field(
@@ -251,3 +304,8 @@ class MarketDataMessage(BaseModel):
     def is_ticker(self) -> bool:
         """Check if this is a ticker."""
         return isinstance(self.data, TickerData)
+
+    @property
+    def is_mark_price(self) -> bool:
+        """Check if this is a mark price update."""
+        return isinstance(self.data, MarkPriceData)

@@ -37,6 +37,7 @@ from strategies.models.market_data import (
     DepthLevel,
     DepthUpdate,
     MarketDataMessage,
+    MarkPriceData,
     TickerData,
     TradeData,
 )
@@ -491,7 +492,7 @@ class NATSConsumer:
 
     def _transform_binance_data(
         self, stream: str, data: dict[str, Any]
-    ) -> Union[DepthUpdate, TradeData, TickerData] | None:
+    ) -> Union[DepthUpdate, TradeData, TickerData, MarkPriceData] | None:
         """Transform raw Binance WebSocket data to expected format."""
         try:
             stream_type = stream.split("@")[1] if "@" in stream else None
@@ -507,6 +508,8 @@ class NATSConsumer:
                 return self._transform_trade_data(data)
             elif "ticker" in stream_type:
                 return self._transform_ticker_data(data)
+            elif "markPrice" in stream_type:
+                return self._transform_mark_price_data(data)
             else:
                 self.logger.warning("Unknown stream type", stream_type=stream_type)
                 return None
@@ -605,6 +608,22 @@ class NATSConsumer:
             self.logger.error("Failed to transform ticker data", error=str(e))
             return None
 
+    def _transform_mark_price_data(self, data: dict[str, Any]) -> MarkPriceData | None:
+        """Transform mark price data to MarkPriceData model."""
+        try:
+            return MarkPriceData(
+                symbol=data.get("s", ""),
+                mark_price=data.get("p", "0"),
+                index_price=data.get("i", "0"),
+                estimated_settle_price=data.get("P", "0"),
+                funding_rate=data.get("r", "0"),
+                next_funding_time=data.get("T", 0),
+                event_time=data.get("E", 0),
+            )
+        except Exception as e:
+            self.logger.error("Failed to transform mark price data", error=str(e))
+            return None
+
     async def _process_market_data(self, market_data: MarketDataMessage) -> None:
         """Process market data through strategies."""
         try:
@@ -615,6 +634,8 @@ class NATSConsumer:
                 await self._process_trade_data(market_data)
             elif market_data.is_ticker:
                 await self._process_ticker_data(market_data)
+            elif market_data.is_mark_price:
+                await self._process_mark_price_data(market_data)
             else:
                 self.logger.warning(
                     "Unknown stream type", stream_type=market_data.stream_type
@@ -715,6 +736,11 @@ class NATSConsumer:
         """Process ticker data."""
         # This will be implemented by the strategy processor
         self.logger.debug("Processing ticker data", symbol=market_data.symbol)
+
+    async def _process_mark_price_data(self, market_data: MarketDataMessage) -> None:
+        """Process mark price data."""
+        # This will be implemented by the strategy processor
+        self.logger.debug("Processing mark price data", symbol=market_data.symbol)
 
     async def _process_market_logic_strategies(
         self, market_data: MarketDataMessage

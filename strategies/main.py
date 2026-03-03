@@ -15,6 +15,7 @@ from typing import Optional
 # 1. Setup OpenTelemetry FIRST (before any other imports that might use it)
 try:
     from petrosa_otel import setup_telemetry
+
     if os.getenv("OTEL_NO_AUTO_INIT"):
         service_name = os.getenv("OTEL_SERVICE_NAME", "realtime-strategies")
         setup_telemetry(
@@ -32,6 +33,23 @@ from dotenv import load_dotenv
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+
+import constants  # noqa: E402
+from strategies.core.consumer import NATSConsumer  # noqa: E402
+from strategies.core.publisher import TradeOrderPublisher  # noqa: E402
+from strategies.health.server import HealthServer  # noqa: E402
+from strategies.utils.heartbeat import HeartbeatManager  # noqa: E402
+from strategies.utils.logger import setup_logging  # noqa: E402
+from strategies.utils.telemetry import (  # noqa: E402
+    flush_telemetry,
+    shutdown_telemetry,
+)
+
+ConfigRateLimiter = None
+try:
+    from petrosa_otel import ConfigRateLimiter
+except ImportError:
+    pass
 
 # Load environment variables
 load_dotenv()
@@ -301,6 +319,7 @@ def run(
     service = StrategiesService()
     try:
         from petrosa_otel import attach_logging_handler
+
         attach_logging_handler()
     except ImportError:
         print("⚠️  petrosa_otel not found, skipping OTLP logging handler.")
