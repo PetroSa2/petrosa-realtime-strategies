@@ -517,7 +517,9 @@ class MongoDBClient:
 
             # Handle both string IDs and ObjectId if passed
             query_id = ObjectId(audit_id) if isinstance(audit_id, str) else audit_id
-            record = await self.database.strategy_config_audit.find_one({"_id": query_id})
+            record = await self.database.strategy_config_audit.find_one(
+                {"_id": query_id}
+            )
             return record
         except Exception as e:
             logger.debug(f"Error fetching audit record {audit_id}: {e}")
