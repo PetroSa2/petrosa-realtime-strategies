@@ -2,11 +2,14 @@ name: Deploy
 
 on:
   push:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     branches: [ 'main' ]
   pull_request:
+    if: github.event.pull_request.head.repo.full_name == github.repository
 
 jobs:
   create-release:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     name: Create Release
     runs-on: petrosa-org-runners
     permissions:
@@ -38,9 +41,10 @@ jobs:
         git push origin "$VERSION"
 
   build-and-push:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     name: Build & Push
     needs: create-release
-    runs-on: petrosa-org-runners
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -144,7 +148,7 @@ jobs:
     name: notify
     needs: [build-and-push, gitops-update, create-release]
     runs-on: petrosa-org-runners
-    if: always()
+    if: always() && (github.event.pull_request.head.repo.full_name == github.repository)
     steps:
     - name: Notify Deployment Status
       run: |
@@ -168,7 +172,7 @@ jobs:
     name: cleanup
     needs: [build-and-push]
     runs-on: petrosa-org-runners
-    if: always()
+    if: always() && (github.event.pull_request.head.repo.full_name == github.repository)
     steps:
     - name: Clean Up Old Images
       run: |
