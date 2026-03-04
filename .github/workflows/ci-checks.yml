@@ -2,12 +2,13 @@ name: CI Checks
 
 on:
   pull_request:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     branches: [main, develop]
 
 jobs:
   lint:
-    name: Lint & Format Check
     if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Lint & Format Check
     runs-on: petrosa-org-runners
     steps:
       - name: Checkout code
@@ -41,8 +42,8 @@ jobs:
         continue-on-error: true  # Allow type check failures initially
 
   test:
-    name: Test & Coverage
     if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Test & Coverage
     runs-on: petrosa-org-runners
     env:
       OTEL_NO_AUTO_INIT: 1
@@ -84,8 +85,8 @@ jobs:
           fail_ci_if_error: true
 
   test-quality:
-    name: Test Quality Check
     if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Test Quality Check
     runs-on: petrosa-org-runners
     steps:
       - name: Checkout service code
@@ -114,8 +115,8 @@ jobs:
           echo "✅ All tests have assertions"
 
   security:
-    name: Security Scan
     if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Security Scan
     runs-on: petrosa-org-runners
     permissions:
       contents: read
@@ -168,8 +169,8 @@ jobs:
         # Note: Upload step will fail if permissions not granted, which will block PR
 
   documentation-standards:
-    name: Documentation Standards Check
     if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Documentation Standards Check
     runs-on: petrosa-org-runners
     steps:
       - name: Checkout code
