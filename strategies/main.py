@@ -12,20 +12,20 @@ import signal
 import sys
 from typing import Optional
 
-# 1. Setup OpenTelemetry FIRST (before any other imports that might use it)
+# Initialize OpenTelemetry as early as possible
 try:
     from petrosa_otel import setup_telemetry
 
-    if os.getenv("OTEL_NO_AUTO_INIT"):
+    if not os.getenv("OTEL_NO_AUTO_INIT"):
         service_name = os.getenv("OTEL_SERVICE_NAME", "realtime-strategies")
         setup_telemetry(
             service_name=service_name,
             service_type="async",
             enable_mongodb=True,
-            auto_attach_logging=False,
+            auto_attach_logging=True,
         )
 except ImportError:
-    setup_telemetry = None
+    pass
 
 import typer
 from dotenv import load_dotenv
@@ -317,12 +317,15 @@ def run(
 
     # Create and run service
     service = StrategiesService()
+
+    # Attach OTel logging handler LAST (after logging is configured)
     try:
-        from petrosa_otel import attach_logging_handler
+        from petrosa_otel import attach_logging_handler  # noqa: E402
 
         attach_logging_handler()
     except ImportError:
-        print("⚠️  petrosa_otel not found, skipping OTLP logging handler.")
+        pass
+
     signal_handler.service = service
 
     try:
