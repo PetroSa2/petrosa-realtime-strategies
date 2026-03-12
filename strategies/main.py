@@ -92,6 +92,7 @@ class StrategiesService:
                 uri=constants.MONGODB_URI,
                 database=constants.MONGODB_DATABASE,
                 timeout_ms=constants.MONGODB_TIMEOUT_MS,
+                use_data_manager=False,
             )
 
             self.config_manager = StrategyConfigManager(
