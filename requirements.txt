@@ -7,14 +7,8 @@ pydantic>=2.0.0,<3.0.0
 structlog>=23.0.0
 
 # OpenTelemetry (unified via petrosa-otel package)
-<<<<<<< HEAD
 # For local development: pip install -e ../petrosa_k8s/petrosa-otel[all]>=1.0.4
 petrosa-otel[all]>=1.0.4
-=======
-# For local development: pip install -e ../petrosa_k8s/petrosa-otel[all]>=1.0.4
-petrosa-otel[all]>=1.0.4
->>>>>>> main
-
 # CLI and utilities
 typer>=0.9.0
 orjson>=3.9.0
