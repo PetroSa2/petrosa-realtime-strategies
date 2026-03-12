@@ -88,12 +88,13 @@ class StrategiesService:
             from strategies.services.config_manager import StrategyConfigManager
             from strategies.services.depth_analyzer import DepthAnalyzer
 
+            # General MongoDB client for configuration management (follows default behavior)
             mongodb_client = MongoDBClient(
                 uri=constants.MONGODB_URI,
                 database=constants.MONGODB_DATABASE,
                 timeout_ms=constants.MONGODB_TIMEOUT_MS,
-                use_data_manager=False,
             )
+            await mongodb_client.connect()
 
             self.config_manager = StrategyConfigManager(
                 mongodb_client=mongodb_client,
@@ -106,11 +107,27 @@ class StrategiesService:
                 cache_ttl_seconds=60,
             )
 
+            # Dedicated direct MongoDB client for the Rate Limiter
+            # This ensures ConfigRateLimiter always works while general client follows default paths
+            rate_limit_mongo_client = MongoDBClient(
+                uri=constants.MONGODB_URI,
+                database=constants.MONGODB_DATABASE,
+                timeout_ms=constants.MONGODB_TIMEOUT_MS,
+                use_data_manager=False,
+            )
+            if not await rate_limit_mongo_client.connect():
+                self.logger.error(
+                    "Failed to connect to direct MongoDB for rate limiter; aborting startup",
+                    uri=constants.MONGODB_URI,
+                )
+                raise RuntimeError("Direct MongoDB connection for rate limiter failed")
+            self.logger.info("Rate limiter MongoDB client (direct) initialized")
+
             # Initialize and set configuration rate limiter
             rate_limiter = None
             if ConfigRateLimiter is not None:
                 rate_limiter = ConfigRateLimiter(
-                    mongodb_client=mongodb_client,
+                    mongodb_client=rate_limit_mongo_client,
                     service_name="realtime-strategies",
                     per_agent_limit=int(os.getenv("CONFIG_RATE_LIMIT_PER_AGENT", "10")),
                     cooldown_seconds=int(
