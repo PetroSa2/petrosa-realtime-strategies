@@ -104,7 +104,9 @@ async def test_start_success(service, mock_components):
         patch("strategies.main.HeartbeatManager") as mock_heartbeat,
     ):
         # Setup mocks
-        mock_mongo.return_value = MagicMock()
+        mock_mongo_instance = MagicMock()
+        mock_mongo_instance.connect = AsyncMock(return_value=True)
+        mock_mongo.return_value = mock_mongo_instance
         mock_config_mgr.return_value = mock_components["config_manager"]
         mock_depth.return_value = mock_components["depth_analyzer"]
         mock_health.return_value = mock_components["health_server"]
@@ -484,7 +486,9 @@ async def test_service_startup_sequence(service, mock_components):
         patch("strategies.main.HeartbeatManager") as mock_heartbeat,
     ):
         # Setup mocks
-        mock_mongo.return_value = MagicMock()
+        mock_mongo_instance = MagicMock()
+        mock_mongo_instance.connect = AsyncMock(return_value=True)
+        mock_mongo.return_value = mock_mongo_instance
         mock_config_mgr.return_value = mock_components["config_manager"]
         mock_depth.return_value = mock_components["depth_analyzer"]
         mock_health.return_value = mock_components["health_server"]
@@ -503,6 +507,21 @@ async def test_service_startup_sequence(service, mock_components):
         mock_components["publisher"].start.assert_called_once()
         mock_components["consumer"].start.assert_called_once()
         mock_components["heartbeat_manager"].start.assert_called_once()
+
+        # Verify dual MongoDB clients
+        assert mock_mongo.call_count == 2
+        assert mock_mongo_instance.connect.call_count == 2
+
+        # Verify rate limiter client was called with use_data_manager=False
+        rate_limit_call = next(
+            (
+                c
+                for c in mock_mongo.call_args_list
+                if c.kwargs.get("use_data_manager") is False
+            ),
+            None,
+        )
+        assert rate_limit_call is not None
 
         # Verify component references are set
         assert service.config_manager == mock_components["config_manager"]
