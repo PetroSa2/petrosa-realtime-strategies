@@ -12,20 +12,21 @@ import signal
 import sys
 from typing import Optional
 
-# Initialize OpenTelemetry as early as possible
 try:
     from petrosa_otel import setup_telemetry
-
-    if not os.getenv("OTEL_NO_AUTO_INIT"):
-        service_name = os.getenv("OTEL_SERVICE_NAME", "realtime-strategies")
-        setup_telemetry(
-            service_name=service_name,
-            service_type="async",
-            enable_mongodb=True,
-            auto_attach_logging=True,
-        )
 except ImportError:
-    pass
+    setup_telemetry = None
+
+# Initialize OpenTelemetry as early as possible.
+# If OTEL_NO_AUTO_INIT is set, we do manual initialization here.
+if setup_telemetry and os.getenv("OTEL_NO_AUTO_INIT"):
+    service_name = os.getenv("OTEL_SERVICE_NAME", "realtime-strategies")
+    setup_telemetry(
+        service_name=service_name,
+        service_type="async",
+        enable_mongodb=True,
+        auto_attach_logging=False,
+    )
 
 import typer
 from dotenv import load_dotenv
@@ -50,7 +51,6 @@ try:
     from petrosa_otel import ConfigRateLimiter
 except ImportError:
     pass
-
 # Load environment variables
 load_dotenv()
 
@@ -343,7 +343,6 @@ def run(
         attach_logging_handler()
     except ImportError:
         pass
-
     signal_handler.service = service
 
     try:
