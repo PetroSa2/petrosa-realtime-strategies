@@ -1,7 +1,9 @@
 # VERSION_PLACEHOLDER System Guide
 
 ## Overview
-All Petrosa systems use a unified version management system with `VERSION_PLACEHOLDER` in Kubernetes manifests. This system ensures consistent versioning across deployments and enables automated CI/CD pipelines.
+All Petrosa systems use a unified version management system with
+`VERSION_PLACEHOLDER` in Kubernetes manifests. This system ensures consistent
+versioning across deployments and enables automated CI/CD pipelines.
 
 ## How It Works
 
@@ -12,13 +14,13 @@ All Kubernetes manifests use `VERSION_PLACEHOLDER` instead of hardcoded versions
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: petrosa-ta-bot
+  name: petrosa-realtime-strategies
 spec:
   template:
     spec:
       containers:
-      - name: ta-bot
-        image: yurisa2/petrosa-ta-bot:VERSION_PLACEHOLDER  # ← This gets replaced
+      - name: petrosa-realtime-strategies
+        image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER  # ← This gets replaced
 ```
 
 ### 2. CI/CD Pipeline Replacement
@@ -38,14 +40,37 @@ The version comes from:
 ## Critical Rules
 
 ### ✅ DO
-- Use `VERSION_PLACEHOLDER` in all Kubernetes manifests
+- Use `VERSION_PLACEHOLDER` in all Kubernetes manifests in the `k8s/` directory
 - Let the CI/CD pipeline handle version replacement
 - Use semantic versioning for releases (e.g., `v1.0.1`)
+- Always keep `VERSION_PLACEHOLDER` in your source k8s/ manifests - even after deployment
 
 ### ❌ DON'T
-- **NEVER manually replace VERSION_PLACEHOLDER** in manifests
-- **NEVER hardcode versions** in Kubernetes files
+- **NEVER manually replace VERSION_PLACEHOLDER** in committed manifests
+- **NEVER hardcode versions** (e.g., `v1.2.15`) in Kubernetes files
 - **NEVER commit manifests with actual versions** instead of placeholders
+- **DO NOT remove VERSION_PLACEHOLDER** after deployment - it must remain for the next release
+
+## CI/CD Enforcement (CRITICAL)
+
+### Automatic Validation
+All CI/CD pipelines now include a **mandatory validation step** that checks for `VERSION_PLACEHOLDER` before attempting GitOps updates:
+
+```yaml
+- name: Validate VERSION_PLACEHOLDER in source k8s manifests
+  run: |
+    if grep -rq "VERSION_PLACEHOLDER" k8s/ 2>/dev/null; then
+      echo "✅ VERSION_PLACEHOLDER found in source k8s manifests"
+    else
+      echo "❌ ERROR: VERSION_PLACEHOLDER not found!"
+      exit 1
+    fi
+```
+
+### What Happens If You Break This Rule
+1. **Hardcoded version in source k8s/** → CI fails with error BEFORE gitops-update
+2. **GitOps silently skips** → Old version stays deployed (this was the old bug)
+3. **Version drift** → Cluster runs outdated code without anyone noticing
 
 ## Files That Use VERSION_PLACEHOLDER
 
@@ -57,19 +82,14 @@ The version comes from:
 - `k8s/network-policy.yaml`
 
 ### Project-Specific Files
-- **TA Bot**: All standard manifests
-- **Trading Engine**: All standard manifests
-- **Data Extractor**:
-  - `k8s/klines-all-timeframes-cronjobs.yaml`
-  - `k8s/klines-gap-filler-cronjob.yaml`
-  - `k8s/klines-mongodb-production.yaml`
+- **Realtime Strategies**: All standard manifests in this repo
 
 ## Version Management Process
 
 ### 1. Development
 ```bash
 # During development, manifests contain VERSION_PLACEHOLDER
-image: yurisa2/petrosa-ta-bot:VERSION_PLACEHOLDER
+image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
 ```
 
 ### 2. Release Process
@@ -87,7 +107,7 @@ git push origin v1.0.1
 ### 3. Deployment
 ```bash
 # After CI/CD processing, manifests contain actual version
-image: yurisa2/petrosa-ta-bot:v1.0.1
+image: yurisa2/petrosa-realtime-strategies:v1.0.1
 ```
 
 ## CI/CD Integration
@@ -111,11 +131,8 @@ image: yurisa2/petrosa-ta-bot:v1.0.1
 
 ### Local Development
 ```bash
-# For local testing, you can manually replace (but don't commit)
-sed -i "s|VERSION_PLACEHOLDER|local-test|g" k8s/deployment.yaml
-
-# Revert after testing
-git checkout k8s/deployment.yaml
+# For local testing, you can build and deploy a local tag without committing
+# manifest changes.
 ```
 
 ## Troubleshooting
@@ -134,9 +151,9 @@ grep -r "VERSION_PLACEHOLDER" k8s/
 #### 2. Version Mismatch
 ```bash
 # Check deployed version
-kubectl --kubeconfig=k8s/kubeconfig.yaml get deployment petrosa-ta-bot -n petrosa-apps -o jsonpath='{.spec.template.spec.containers[0].image}'
+kubectl --kubeconfig=k8s/kubeconfig.yaml get deployment petrosa-realtime-strategies -n petrosa-apps -o jsonpath='{.spec.template.spec.containers[0].image}'
 
-# Should show: yurisa2/petrosa-ta-bot:v1.0.1 (not VERSION_PLACEHOLDER)
+# Should show: yurisa2/petrosa-realtime-strategies:v1.0.1 (not VERSION_PLACEHOLDER)
 ```
 
 #### 3. Manual Version Committed
@@ -151,10 +168,10 @@ git checkout HEAD -- k8s/deployment.yaml
 ### 1. Always Use Placeholders
 ```yaml
 # ✅ Correct
-image: yurisa2/petrosa-ta-bot:VERSION_PLACEHOLDER
+image: yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER
 
 # ❌ Wrong
-image: yurisa2/petrosa-ta-bot:v1.0.1
+image: yurisa2/petrosa-realtime-strategies:v1.0.1
 ```
 
 ### 2. Verify Before Committing
@@ -181,7 +198,7 @@ latest
 
 ### 4. Test Version Replacement
 ```bash
-# Test the replacement locally
+# Test the replacement locally (do not commit the changes)
 IMAGE_TAG=v1.0.1-test
 find k8s/ -name "*.yaml" -exec sed -i "s|VERSION_PLACEHOLDER|${IMAGE_TAG}|g" {} \;
 
@@ -194,9 +211,9 @@ git checkout k8s/
 
 ## Project-Specific Notes
 
-### TA Bot
-- Uses standard deployment pattern
-- Version affects signal generation service
+### Realtime Strategies
+- Uses the standard deployment pattern
+- Version affects strategy execution service
 
 ### Trading Engine
 - Uses standard deployment pattern
@@ -212,12 +229,12 @@ git checkout k8s/
 ### If You Have Hardcoded Versions
 ```bash
 # 1. Replace hardcoded versions with placeholders
-find k8s/ -name "*.yaml" -exec sed -i "s|yurisa2/petrosa.*:v[0-9.]*|yurisa2/petrosa-ta-bot:VERSION_PLACEHOLDER|g" {} \;
+find k8s/ -name "*.yaml" -exec sed -i "s|yurisa2/petrosa.*:v[0-9.]*|yurisa2/petrosa-realtime-strategies:VERSION_PLACEHOLDER|g" {} \;
 
 # 2. Verify changes
 grep -r "VERSION_PLACEHOLDER" k8s/
 
-# 3. Commit changes
+# 3. Commit changes (only if you are migrating the repo)
 git add k8s/
 git commit -m "Replace hardcoded versions with VERSION_PLACEHOLDER"
 ```
