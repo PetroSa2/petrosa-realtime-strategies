@@ -78,10 +78,14 @@ class Signal(BaseModel):
     """Enhanced trading signal aligned with Trade Engine format."""
 
     # Core signal information
-    strategy_id: str = Field(default="unknown", description="Unique identifier for the strategy")
+    strategy_id: str = Field(
+        default="unknown", description="Unique identifier for the strategy"
+    )
     symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT)")
     action: str = Field(default="hold", description="Trading action")
-    confidence: float = Field(default=0.0, ge=0, le=1, description="Signal confidence (0-1)")
+    confidence: float = Field(
+        default=0.0, ge=0, le=1, description="Signal confidence (0-1)"
+    )
     current_price: float = Field(default=0.0, gt=0, description="Current market price")
     price: float = Field(default=0.0, gt=0, description="Signal price/execution price")
 
@@ -121,13 +125,13 @@ class Signal(BaseModel):
             action_val = data["signal_action"]
             if isinstance(action_val, Enum):
                 action_val = action_val.value
-            
+
             action_map = {
                 "OPEN_LONG": "buy",
                 "OPEN_SHORT": "sell",
                 "CLOSE_LONG": "close",
                 "CLOSE_SHORT": "close",
-                "HOLD": "hold"
+                "HOLD": "hold",
             }
             data["action"] = action_map.get(action_val, "hold")
 
@@ -175,7 +179,7 @@ class Signal(BaseModel):
     @classmethod
     def validate_symbol(cls, v: str) -> str:
         if not v or len(v) < 6:
-             raise ValueError("Symbol too short")
+            raise ValueError("Symbol too short")
         return v.upper() if v else v
 
     @field_validator("timestamp", mode="before")
@@ -295,15 +299,21 @@ class SignalAggregation(BaseModel):
     """Aggregated signals from multiple strategies."""
 
     symbol: str = Field(..., description="Trading symbol")
-    aggregated_signal_type: str = Field(default="buy", description="Aggregated signal type")
-    aggregated_signal_action: str = Field(default="OPEN_LONG", description="Aggregated signal action")
+    aggregated_signal_type: str = Field(
+        default="buy", description="Aggregated signal type"
+    )
+    aggregated_signal_action: str = Field(
+        default="OPEN_LONG", description="Aggregated signal action"
+    )
     aggregated_confidence_score: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Aggregated confidence score"
     )
     strategy_signals: dict[str, StrategySignal] = Field(
         default_factory=dict, description="Individual strategy signals"
     )
-    aggregation_method: str = Field(default="average", description="Method used for aggregation")
+    aggregation_method: str = Field(
+        default="average", description="Method used for aggregation"
+    )
     aggregation_weights: dict[str, float] = Field(
         default_factory=dict, description="Weights used for aggregation"
     )
@@ -346,7 +356,11 @@ class SignalAggregation(BaseModel):
         consensus_type = self.consensus_signal_type
         if not consensus_type:
             return False
-        count = sum(1 for sig in self.strategy_signals.values() if sig.signal_type == consensus_type)
+        count = sum(
+            1
+            for sig in self.strategy_signals.values()
+            if sig.signal_type == consensus_type
+        )
         return count >= len(self.strategy_signals) * 0.7
 
 
@@ -369,17 +383,15 @@ class SignalMetrics(BaseModel):
         )
         # Use Enum key for compatibility with tests
         stype = signal.signal_type
-        self.signals_by_type[stype] = (
-            self.signals_by_type.get(stype, 0) + 1
-        )
-        
+        self.signals_by_type[stype] = self.signals_by_type.get(stype, 0) + 1
+
         # Track by confidence enum
         conf_enum = SignalConfidence.LOW
         if signal.confidence >= 0.8:
             conf_enum = SignalConfidence.HIGH
         elif signal.confidence >= 0.5:
             conf_enum = SignalConfidence.MEDIUM
-        
+
         self.signals_by_confidence[conf_enum] = (
             self.signals_by_confidence.get(conf_enum, 0) + 1
         )
@@ -396,4 +408,7 @@ class SignalMetrics(BaseModel):
     def get_signal_distribution(self) -> dict[str, float]:
         if self.total_signals_generated == 0:
             return {}
-        return {str(k): v / self.total_signals_generated for k, v in self.signals_by_strategy.items()}
+        return {
+            str(k): v / self.total_signals_generated
+            for k, v in self.signals_by_strategy.items()
+        }

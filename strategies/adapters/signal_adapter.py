@@ -58,7 +58,8 @@ def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
         "strength": signal_data.get("strength", "medium"),
         # Price and quantity information
         "price": signal.price,
-        "quantity": signal.quantity or _calculate_default_quantity(signal.price, signal.confidence),
+        "quantity": signal.quantity
+        or _calculate_default_quantity(signal.price, signal.confidence),
         "current_price": signal.current_price,
         "target_price": signal_data.get("target_price") or signal.price,
         # Source and metadata
@@ -72,9 +73,11 @@ def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
         "time_in_force": signal.time_in_force,
         # Risk management - ensure they exist
         "stop_loss": signal.stop_loss,
-        "stop_loss_pct": signal.stop_loss_pct or _calculate_default_stop_loss(signal.confidence),
+        "stop_loss_pct": signal.stop_loss_pct
+        or _calculate_default_stop_loss(signal.confidence),
         "take_profit": signal.take_profit,
-        "take_profit_pct": signal.take_profit_pct or _calculate_default_take_profit(signal.confidence),
+        "take_profit_pct": signal.take_profit_pct
+        or _calculate_default_take_profit(signal.confidence),
         # Timestamp
         "timestamp": (
             signal.timestamp.isoformat()

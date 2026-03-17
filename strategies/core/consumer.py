@@ -125,9 +125,9 @@ class NATSConsumer:
             )
 
         if constants.STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
-            self.market_logic_strategies[
-                "cross_exchange_spread"
-            ] = CrossExchangeSpreadStrategy(logger=self.logger)
+            self.market_logic_strategies["cross_exchange_spread"] = (
+                CrossExchangeSpreadStrategy(logger=self.logger)
+            )
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -149,9 +149,9 @@ class NATSConsumer:
         # Initialize microstructure strategies
         self.microstructure_strategies = {}
         if constants.STRATEGY_ENABLED_SPREAD_LIQUIDITY:
-            self.microstructure_strategies[
-                "spread_liquidity"
-            ] = SpreadLiquidityStrategy()
+            self.microstructure_strategies["spread_liquidity"] = (
+                SpreadLiquidityStrategy()
+            )
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",
@@ -160,9 +160,9 @@ class NATSConsumer:
             )
 
         if constants.STRATEGY_ENABLED_ICEBERG_DETECTOR:
-            self.microstructure_strategies[
-                "iceberg_detector"
-            ] = IcebergDetectorStrategy()
+            self.microstructure_strategies["iceberg_detector"] = (
+                IcebergDetectorStrategy()
+            )
             self.logger.info(
                 "Strategy initialized",
                 event_type="strategy_initialized",

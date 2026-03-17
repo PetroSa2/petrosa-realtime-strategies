@@ -134,11 +134,14 @@ class TestStrategyConfigRollback:
 
     async def test_rollback_success(self, config_manager, sample_history):
         """Test successful rollback execution."""
-        with patch.object(
-            config_manager, "get_audit_trail", return_value=sample_history
-        ), patch.object(
-            config_manager, "set_config", new_callable=AsyncMock
-        ) as mock_set_config:
+        with (
+            patch.object(
+                config_manager, "get_audit_trail", return_value=sample_history
+            ),
+            patch.object(
+                config_manager, "set_config", new_callable=AsyncMock
+            ) as mock_set_config,
+        ):
             mock_set_config.return_value = (True, MagicMock(spec=StrategyConfig), [])
 
             success, config, errors = await config_manager.rollback_config(
