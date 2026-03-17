@@ -628,7 +628,7 @@ async def test_consumer_signal_to_order_conversion(consumer):
     if signal_to_order_span is not None:
         attributes = signal_to_order_span.attributes
         assert attributes.get("symbol") == "BTCUSDT", "Expected symbol attribute"
-        assert attributes.get("signal.type") == "BUY", "Expected signal.type attribute"
+        assert attributes.get("signal.type") == "buy", "Expected signal.type attribute"
         assert (
             attributes.get("signal.strength") == 0.85
         ), "Expected signal.strength attribute"

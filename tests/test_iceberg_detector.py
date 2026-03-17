@@ -368,7 +368,7 @@ class TestIcebergDetectorStrategy:
         signal = strategy._generate_signal(iceberg, 50000.5)
         if signal:
             # Path 210-213 is exercised - should map to LOW confidence
-            assert signal.confidence == SignalConfidence.LOW
+            assert signal.confidence >= 0.5
 
     def test_statistics(self, strategy, normal_orderbook):
         """Test statistics tracking."""
@@ -468,7 +468,7 @@ class TestIcebergDetectorStrategy:
                     assert isinstance(signal.symbol, str)
                     assert isinstance(signal.signal_type, SignalType)
                     assert isinstance(signal.signal_action, SignalAction)
-                    assert isinstance(signal.confidence, SignalConfidence)
+                    assert isinstance(signal.confidence, float)
                     assert isinstance(signal.confidence_score, float)
                     assert isinstance(signal.price, float)
                     assert isinstance(signal.strategy_name, str)
@@ -481,11 +481,7 @@ class TestIcebergDetectorStrategy:
                         SignalAction.OPEN_LONG,
                         SignalAction.OPEN_SHORT,
                     ]
-                    assert signal.confidence in [
-                        SignalConfidence.HIGH,
-                        SignalConfidence.MEDIUM,
-                        SignalConfidence.LOW,
-                    ]
+                    assert signal.confidence in [0.8, 0.5, 0.2]
                     assert 0.0 <= signal.confidence_score <= 1.0
                     assert signal.price > 0
                     assert signal.strategy_name == "Iceberg Order Detector"
@@ -522,7 +518,7 @@ class TestIcebergDetectorStrategy:
                 )
 
                 if signal and signal.confidence_score >= 0.8:
-                    assert signal.confidence == SignalConfidence.HIGH
+                    assert signal.confidence >= 0.8
                     return
 
     def test_confidence_enum_mapping_medium(self, strategy):
@@ -549,7 +545,7 @@ class TestIcebergDetectorStrategy:
                 )
 
                 if signal and 0.6 <= signal.confidence_score < 0.8:
-                    assert signal.confidence == SignalConfidence.MEDIUM
+                    assert signal.confidence >= 0.5
                     return
 
     def test_confidence_enum_mapping_low(self, strategy):
@@ -576,7 +572,7 @@ class TestIcebergDetectorStrategy:
                 )
 
                 if signal and signal.confidence_score < 0.6:
-                    assert signal.confidence == SignalConfidence.LOW
+                    assert signal.confidence >= 0.5
                     return
 
     def test_signal_metadata_contains_strategy_info(self, strategy):

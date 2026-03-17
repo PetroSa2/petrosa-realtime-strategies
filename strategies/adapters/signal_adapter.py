@@ -71,6 +71,9 @@ def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
         # Order configuration
         "order_type": signal.order_type,
         "time_in_force": signal.time_in_force,
+        # Legacy compatibility
+        "signal_type": signal.action.lower(),
+        "confidence_score": signal.confidence,
         # Risk management - ensure they exist
         "stop_loss": signal.stop_loss,
         "stop_loss_pct": signal.stop_loss_pct

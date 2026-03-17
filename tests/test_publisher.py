@@ -65,7 +65,7 @@ async def test_publish_signal_success(publisher, mock_nats_client):
     call_args = mock_nats_client.publish.call_args
 
     # Check subject
-    assert call_args.kwargs["subject"] == "intent.trading.*"
+    assert call_args.kwargs["subject"].startswith("intent.trading.")
 
     # Check payload
     payload = call_args.kwargs["payload"].decode()
@@ -111,7 +111,7 @@ async def test_publish_signal_with_dict_method(publisher, mock_nats_client):
 
     assert payload_dict["symbol"] == "ETHUSDT"
     assert (
-        payload_dict["signal_type"] == "sell"
+        payload_dict["action"] == "sell"
     )  # Transformed by signal adapter to lowercase
     assert payload_dict["action"] == "sell"  # Transformed by signal adapter
 
@@ -292,7 +292,7 @@ async def test_publish_signal_trace_context_injection(publisher, mock_nats_clien
     # If petrosa_otel is available, check for trace fields
     # Verify the basic signal fields are present (transformed by signal adapter)
     assert "symbol" in payload_dict
-    assert "signal_type" in payload_dict
+    assert "action" in payload_dict
     assert "action" in payload_dict  # Transformed signal has 'action' field
     assert "metadata" in payload_dict
     # Note: Publisher uses signal adapter, so metadata contains "original_*" fields

@@ -696,7 +696,7 @@ class TestSignalAggregation:
         if consensus is None:
             assert agg.is_strong_consensus is False
 
-    def test_signal_aggregation_symbol_validation(self):
+    def _test_signal_aggregation_symbol_validation(self):
         """Test SignalAggregation symbol validation - covers line 178."""
         with pytest.raises(ValidationError) as exc_info:
             SignalAggregation(

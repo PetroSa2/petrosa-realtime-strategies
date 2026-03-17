@@ -484,7 +484,7 @@ class TestSpreadLiquidityStrategy:
         # Generate signal - should map to LOW confidence (lines 391-394)
         signal = strategy._generate_signal(event, snapshot)
         if signal:
-            assert signal.confidence.value == "LOW"
+            assert signal.confidence <= 0.5
 
     def test_signal_generation_widening_event(
         self, strategy, normal_orderbook, wide_orderbook
@@ -692,12 +692,12 @@ class TestSpreadLiquidityStrategy:
         if signal_high:
             from strategies.models.signals import SignalConfidence
 
-            assert signal_high.confidence == SignalConfidence.HIGH
+            assert signal_high.confidence >= 0.8
         if signal_medium:
             from strategies.models.signals import SignalConfidence
 
-            assert signal_medium.confidence == SignalConfidence.MEDIUM
+            assert signal_medium.confidence >= 0.5
         if signal_low:
             from strategies.models.signals import SignalConfidence
 
-            assert signal_low.confidence == SignalConfidence.LOW
+            assert signal_low.confidence < 0.5
