@@ -6,14 +6,20 @@ Tests the publisher's ability to publish trade orders and trading signals to NAT
 
 import asyncio
 import json
-from datetime import datetime, timezone
-UTC = timezone.utc
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from strategies.core.publisher import TradeOrderPublisher
-from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+from strategies.models.signals import (
+    Signal,
+    SignalAction,
+    SignalConfidence,
+    SignalType,
+)
+
+UTC = UTC
 
 
 @pytest.fixture
