@@ -4,7 +4,14 @@ Aligned with petrosa-cio contracts.
 """
 
 from datetime import datetime
-from enum import Enum, StrEnum
+from enum import Enum
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        """Shim for StrEnum in Python < 3.11"""
+        def __str__(self) -> str:
+            return str(self.value)
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator

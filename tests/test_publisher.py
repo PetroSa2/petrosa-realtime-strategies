@@ -6,7 +6,8 @@ Tests the publisher's ability to publish trade orders and trading signals to NAT
 
 import asyncio
 import json
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
+UTC = timezone.utc
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -65,7 +66,7 @@ async def test_publish_signal_success(publisher, mock_nats_client):
     call_args = mock_nats_client.publish.call_args
 
     # Check subject
-    assert call_args.kwargs["subject"].startswith("intent.trading.")
+    assert call_args.kwargs["subject"].startswith("cio.intent.trading.")
 
     # Check payload
     payload = call_args.kwargs["payload"].decode()
@@ -334,3 +335,28 @@ async def test_get_metrics_includes_signal_counts(publisher):
     # Check values
     assert metrics["signal_count"] == 1
     assert metrics["error_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_publish_signal_standardized_subject(publisher, mock_nats_client):
+    """Test that signals are published to the standardized subject prefix."""
+    import constants
+    # Set a custom prefix for testing
+    with patch.object(constants, "NATS_TOPIC_INTENTS", "test.prefix"):
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="test_strategy",
+        )
+
+        # Publish signal
+        await publisher.publish_signal(signal)
+
+        # Verify subject - it should be prefix.strategy_id
+        # Strategy ID defaults to strategy_name if not provided explicitly in the signal
+        call_args = mock_nats_client.publish.call_args
+        assert call_args.kwargs["subject"] == "test.prefix.test_strategy"
