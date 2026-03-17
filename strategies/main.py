@@ -14,7 +14,6 @@ from typing import Optional
 
 # Note: OpenTelemetry is initialized inside the run() function to ensure
 # it happens after logging configuration.
-
 import typer
 from dotenv import load_dotenv
 
@@ -322,8 +321,8 @@ def run(
 
     # 1. Setup telemetry
     try:
-        from petrosa_otel import setup_telemetry, attach_logging_handler
-        
+        from petrosa_otel import attach_logging_handler, setup_telemetry
+
         service_name = os.getenv("OTEL_SERVICE_NAME", "petrosa-realtime-strategies")
         setup_telemetry(
             service_name=service_name,
