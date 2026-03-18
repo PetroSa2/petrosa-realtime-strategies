@@ -24,6 +24,7 @@ NATS_CONSUMER_TOPIC = os.getenv("NATS_CONSUMER_TOPIC", "binance.websocket.data")
 # The Centralized Interception Orchestrator (CIO) will now intercept these intents
 # and publish approved signals to signals.trading for the TradeEngine.
 NATS_PUBLISHER_TOPIC = os.getenv("NATS_PUBLISHER_TOPIC", "intent.trading.*")
+NATS_TOPIC_INTENTS = os.getenv("NATS_TOPIC_INTENTS", "cio.intent.trading")
 NATS_CONSUMER_NAME = os.getenv("NATS_CONSUMER_NAME", "realtime-strategies-consumer")
 NATS_CONSUMER_GROUP = os.getenv("NATS_CONSUMER_GROUP", "realtime-strategies-group")
 

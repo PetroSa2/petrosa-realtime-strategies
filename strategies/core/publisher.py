@@ -384,9 +384,11 @@ class TradeOrderPublisher:
             signal_dict_with_trace = inject_trace_context(signal_dict)
             signal_message = json.dumps(signal_dict_with_trace)
 
-            # Use standardized subject: intent.trading.{strategy_id}
+            # Use standardized subject: {NATS_TOPIC_INTENTS}.{strategy_id}
             strategy_id = signal_dict.get("strategy_id", "unknown")
-            subject = f"intent.trading.{strategy_id}"
+            # Normalize strategy_id for NATS subject
+            normalized_strategy_id = strategy_id.replace(" ", "_").replace(".", "_")
+            subject = f"{constants.NATS_TOPIC_INTENTS}.{normalized_strategy_id}"
 
             # Publish message to NATS
             await self.nats_client.publish(
