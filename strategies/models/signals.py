@@ -5,6 +5,7 @@ Aligned with petrosa-cio contracts.
 
 from datetime import datetime
 from enum import Enum
+
 try:
     from enum import StrEnum
 except ImportError:
@@ -128,7 +129,7 @@ class Signal(BaseModel):
             action_val = data["signal_action"]
             if isinstance(action_val, Enum):
                 action_val = action_val.value
-            
+
             action_map = {
                 "OPEN_LONG": "buy",
                 "OPEN_SHORT": "sell",
@@ -191,7 +192,7 @@ class Signal(BaseModel):
         """Ensure timestamp is valid datetime."""
         if isinstance(v, str):
             try:
-                return datetime.fromisoformat(v.replace("Z", "+00:00"))
+                return datetime.fromisoformat(v)
             except ValueError:
                 return datetime.utcnow()
         if isinstance(v, (int, float)):
@@ -259,7 +260,7 @@ class Signal(BaseModel):
             data["timestamp"] = data["timestamp"].isoformat()
         if not data.get("strategy"):
             data["strategy"] = self.strategy_id
-        
+
         # Inject legacy fields for test compatibility
         data["signal_type"] = self.action.lower()
         data["confidence_score"] = self.confidence
@@ -387,14 +388,14 @@ class SignalMetrics(BaseModel):
         self.signals_by_type[stype] = (
             self.signals_by_type.get(stype, 0) + 1
         )
-        
+
         # Track by confidence enum
         conf_enum = SignalConfidence.LOW
         if signal.confidence >= 0.8:
             conf_enum = SignalConfidence.HIGH
         elif signal.confidence >= 0.5:
             conf_enum = SignalConfidence.MEDIUM
-        
+
         self.signals_by_confidence[conf_enum] = (
             self.signals_by_confidence.get(conf_enum, 0) + 1
         )

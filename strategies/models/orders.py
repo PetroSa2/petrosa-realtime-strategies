@@ -7,6 +7,7 @@ order types, sides, and position management.
 
 from datetime import datetime
 from enum import Enum
+
 try:
     from enum import StrEnum
 except ImportError:
