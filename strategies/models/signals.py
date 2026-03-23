@@ -3,7 +3,7 @@ Standardized Signal data model for trading signals.
 Aligned with petrosa-cio contracts.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from typing import Any, Literal, Union
 
