@@ -125,7 +125,7 @@ async def test_publish_signal_with_dict_method(publisher, mock_nats_client):
 async def test_publish_signal_datetime_serialization(publisher, mock_nats_client):
     """Test that datetime fields are properly serialized to ISO format."""
     # Create signal with explicit timestamp
-    test_timestamp = datetime(2024, 1, 1, 12, 0, 0)
+    test_timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     signal = Signal(
         symbol="BTCUSDT",
         signal_type=SignalType.BUY,

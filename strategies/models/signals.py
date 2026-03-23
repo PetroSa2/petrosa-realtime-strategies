@@ -3,16 +3,8 @@ Standardized Signal data model for trading signals.
 Aligned with petrosa-cio contracts.
 """
 
-from datetime import datetime
-from enum import Enum
-
-try:
-    from enum import StrEnum
-except ImportError:
-    class StrEnum(str, Enum):
-        """Shim for StrEnum in Python < 3.11"""
-        def __str__(self) -> str:
-            return str(self.value)
+from datetime import datetime, UTC
+from enum import Enum, StrEnum
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -112,7 +104,7 @@ class Signal(BaseModel):
     stop_loss_pct: float | None = Field(None, ge=0, le=1)
     take_profit: float | None = Field(None, description="Take profit price")
     take_profit_pct: float | None = Field(None, ge=0, le=1)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Legacy compatibility fields
     signal_id: str | None = Field(None, description="Compatibility with contracts")
@@ -194,10 +186,10 @@ class Signal(BaseModel):
             try:
                 return datetime.fromisoformat(v)
             except ValueError:
-                return datetime.utcnow()
+                return datetime.now(UTC)
         if isinstance(v, (int, float)):
-            return datetime.fromtimestamp(v)
-        return v or datetime.utcnow()
+            return datetime.fromtimestamp(v, tz=UTC)
+        return v or datetime.now(UTC)
 
     # Compatibility properties - return Enum members
     @property
@@ -324,7 +316,7 @@ class SignalAggregation(BaseModel):
         default_factory=dict, description="Weights used for aggregation"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Aggregation timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Aggregation timestamp"
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"

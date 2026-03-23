@@ -5,16 +5,8 @@ This module contains Pydantic models for representing trade orders,
 order types, sides, and position management.
 """
 
-from datetime import datetime
-from enum import Enum
-
-try:
-    from enum import StrEnum
-except ImportError:
-    class StrEnum(str, Enum):
-        """Shim for StrEnum in Python < 3.11"""
-        def __str__(self) -> str:
-            return str(self.value)
+from datetime import datetime, UTC
+from enum import Enum, StrEnum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, validator
@@ -37,7 +29,7 @@ class OrderSide(StrEnum):
 
 
 class TimeInForce(StrEnum):
-    """Time in force options."""
+    """Order time in force options."""
 
     GTC = "GTC"  # Good Till Canceled
     IOC = "IOC"  # Immediate or Cancel
@@ -80,7 +72,7 @@ class TradeOrder(BaseModel):
         ..., ge=0.0, le=1.0, description="Signal confidence score"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Order timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Order timestamp"
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
@@ -212,7 +204,7 @@ class OrderResponse(BaseModel):
     status: str = Field(..., description="Order status")
     message: str = Field(..., description="Response message")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Response timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Response timestamp"
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
