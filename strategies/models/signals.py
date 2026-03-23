@@ -3,15 +3,8 @@ Standardized Signal data model for trading signals.
 Aligned with petrosa-cio contracts.
 """
 
-from datetime import datetime
-from enum import Enum
-try:
-    from enum import StrEnum
-except ImportError:
-    class StrEnum(str, Enum):
-        """Shim for StrEnum in Python < 3.11"""
-        def __str__(self) -> str:
-            return str(self.value)
+from datetime import datetime, UTC
+from enum import Enum, StrEnum
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -111,7 +104,7 @@ class Signal(BaseModel):
     stop_loss_pct: float | None = Field(None, ge=0, le=1)
     take_profit: float | None = Field(None, description="Take profit price")
     take_profit_pct: float | None = Field(None, ge=0, le=1)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Legacy compatibility fields
     signal_id: str | None = Field(None, description="Compatibility with contracts")
@@ -128,7 +121,7 @@ class Signal(BaseModel):
             action_val = data["signal_action"]
             if isinstance(action_val, Enum):
                 action_val = action_val.value
-            
+
             action_map = {
                 "OPEN_LONG": "buy",
                 "OPEN_SHORT": "sell",
@@ -191,12 +184,12 @@ class Signal(BaseModel):
         """Ensure timestamp is valid datetime."""
         if isinstance(v, str):
             try:
-                return datetime.fromisoformat(v.replace("Z", "+00:00"))
+                return datetime.fromisoformat(v)
             except ValueError:
-                return datetime.utcnow()
+                return datetime.now(UTC)
         if isinstance(v, (int, float)):
-            return datetime.fromtimestamp(v)
-        return v or datetime.utcnow()
+            return datetime.fromtimestamp(v, tz=UTC)
+        return v or datetime.now(UTC)
 
     # Compatibility properties - return Enum members
     @property
@@ -259,7 +252,7 @@ class Signal(BaseModel):
             data["timestamp"] = data["timestamp"].isoformat()
         if not data.get("strategy"):
             data["strategy"] = self.strategy_id
-        
+
         # Inject legacy fields for test compatibility
         data["signal_type"] = self.action.lower()
         data["confidence_score"] = self.confidence
@@ -323,7 +316,7 @@ class SignalAggregation(BaseModel):
         default_factory=dict, description="Weights used for aggregation"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Aggregation timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Aggregation timestamp"
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
@@ -387,14 +380,14 @@ class SignalMetrics(BaseModel):
         self.signals_by_type[stype] = (
             self.signals_by_type.get(stype, 0) + 1
         )
-        
+
         # Track by confidence enum
         conf_enum = SignalConfidence.LOW
         if signal.confidence >= 0.8:
             conf_enum = SignalConfidence.HIGH
         elif signal.confidence >= 0.5:
             conf_enum = SignalConfidence.MEDIUM
-        
+
         self.signals_by_confidence[conf_enum] = (
             self.signals_by_confidence.get(conf_enum, 0) + 1
         )
