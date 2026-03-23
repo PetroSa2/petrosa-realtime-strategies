@@ -20,10 +20,10 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # NATS Configuration
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_CONSUMER_TOPIC = os.getenv("NATS_CONSUMER_TOPIC", "binance.websocket.data")
-# Changed from "signals.trading" to "intent.trading.*" for CIO interception
-# The Centralized Interception Orchestrator (CIO) will now intercept these intents
-# and publish approved signals to signals.trading for the TradeEngine.
-NATS_PUBLISHER_TOPIC = os.getenv("NATS_PUBLISHER_TOPIC", "intent.trading.*")
+# Standardized output topic for signals.trading.*
+NATS_PUBLISHER_TOPIC = os.getenv(
+    "NATS_TOPIC_SIGNALS", os.getenv("NATS_PUBLISHER_TOPIC", "signals.trading.*")
+)
 NATS_TOPIC_INTENTS = os.getenv("NATS_TOPIC_INTENTS", "cio.intent.trading")
 NATS_CONSUMER_NAME = os.getenv("NATS_CONSUMER_NAME", "realtime-strategies-consumer")
 NATS_CONSUMER_GROUP = os.getenv("NATS_CONSUMER_GROUP", "realtime-strategies-group")

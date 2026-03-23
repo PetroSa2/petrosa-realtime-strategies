@@ -5,7 +5,7 @@ This module contains Pydantic models for representing trade orders,
 order types, sides, and position management.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from typing import Any, Optional
 
