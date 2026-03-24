@@ -269,9 +269,14 @@ class StrategiesService:
 
 def signal_handler(signum, frame):
     """Handle shutdown signals."""
-    signal_name = (
-        signal.Signals(signum).name if signum in signal.Signals else str(signum)
-    )
+    import signal as signal_module
+
+    # Get signal name safely
+    try:
+        signal_name = signal_module.Signals(signum).name
+    except (ValueError, AttributeError):
+        signal_name = str(signum)
+
     print(f"\nReceived {signal_name}, shutting down gracefully...")
 
     # Flush telemetry data immediately on signal to prevent data loss
