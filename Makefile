@@ -24,7 +24,7 @@ NAMESPACE := petrosa-apps
 # PHONY targets
 .PHONY: help setup install install-dev clean
 .PHONY: format lint type-check pre-commit
-.PHONY: test unit integration e2e coverage
+.PHONY: test unit integration e2e coverage test-coverage test-quality
 .PHONY: security build container
 .PHONY: deploy k8s-status k8s-logs k8s-clean
 .PHONY: pipeline
@@ -101,6 +101,8 @@ test: validate-python ## Run all tests with coverage (fail if below 40%)
 	@echo "$(BLUE)🧪 Running all tests with coverage...$(NC)"
 	OTEL_NO_AUTO_INIT=1 ENVIRONMENT=testing pytest tests/ -v --cov=. --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=$(COVERAGE_THRESHOLD)
 	@echo "✅ Tests completed!"
+
+test-coverage: test ## Alias for test (standardized)
 
 unit: ## Run unit tests only
 	@echo "🧪 Running unit tests..."
@@ -192,6 +194,10 @@ k8s-clean: ## Clean up Kubernetes resources
 	@echo "✅ Cleanup completed!"
 
 # Complete Pipeline
+test-quality: validate-python ## Run test quality check (assertions check)
+	@echo "🔍 Checking test quality..."
+	python3 scripts/check-test-assertions.py $(shell find tests -name "test_*.py")
+
 pipeline: validate-python ## Run complete CI/CD pipeline locally
 	@echo "$(BLUE)🔄 Running complete CI/CD pipeline...$(NC)"
 	@echo "=================================="
@@ -214,13 +220,16 @@ pipeline: validate-python ## Run complete CI/CD pipeline locally
 	@echo "6️⃣ Running tests..."
 	$(MAKE) test
 	@echo ""
-	@echo "7️⃣ Running security scans..."
+	@echo "7️⃣ Running test quality check..."
+	$(MAKE) test-quality
+	@echo ""
+	@echo "8️⃣ Running security scans..."
 	$(MAKE) security
 	@echo ""
-	@echo "8️⃣ Building Docker image..."
+	@echo "9️⃣ Building Docker image..."
 	$(MAKE) build
 	@echo ""
-	@echo "9️⃣ Testing container..."
+	@echo "🔟 Testing container..."
 	$(MAKE) container
 	@echo ""
 	@echo "✅ Pipeline completed successfully!"
