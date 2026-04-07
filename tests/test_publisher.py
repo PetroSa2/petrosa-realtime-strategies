@@ -6,7 +6,14 @@ Tests the publisher's ability to publish trade orders and trading signals to NAT
 
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import datetime
+
+try:
+    from datetime import UTC
+except ImportError:
+    from datetime import timezone
+
+    UTC = timezone.utc  # noqa: UP017
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -345,6 +352,7 @@ async def test_get_metrics_includes_signal_counts(publisher):
 async def test_publish_signal_standardized_subject(publisher, mock_nats_client):
     """Test that signals are published to the standardized subject prefix."""
     import constants
+
     # Set a custom prefix for testing
     with patch.object(constants, "NATS_TOPIC_INTENTS", "test.prefix"):
         signal = Signal(
