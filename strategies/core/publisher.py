@@ -70,6 +70,16 @@ class TradeOrderPublisher:
         self.batch_size = constants.BATCH_SIZE
         self.batch_timeout = constants.BATCH_TIMEOUT
 
+    def _signal_subject_for_order(self, order: TradeOrder) -> str:
+        """
+        Tradeengine subscribes to ``signals.trading.>``; a bare ``signals.trading``
+        publish is not delivered. Match TA-bot / CIO contract: ``{base}.{strategy}``.
+        NATS subjects cannot contain spaces — normalize strategy_name accordingly.
+        """
+        base = self.topic.rstrip(".*>")
+        strategy_token = order.strategy_name.replace(" ", "_").replace(".", "_")
+        return f"{base}.{strategy_token}"
+
     async def start(self) -> None:
         """Start the trade order publisher."""
         self.logger.info(
@@ -205,18 +215,14 @@ class TradeOrderPublisher:
         publishing_time = 0.0
 
         try:
-            # Convert orders to JSON
-            order_messages = []
+            # Convert orders to JSON and publish each on a strategy-scoped subject
             for order in orders:
                 order_dict = order.to_dict()
-                # Inject trace context into order for distributed tracing
                 order_dict_with_trace = inject_trace_context(order_dict)
-                order_messages.append(json.dumps(order_dict_with_trace))
-
-            # Publish messages to NATS
-            for order_message in order_messages:
+                order_message = json.dumps(order_dict_with_trace)
+                subject = self._signal_subject_for_order(order)
                 await self.nats_client.publish(
-                    subject=self.topic,
+                    subject=subject,
                     payload=order_message.encode(),
                 )
 
@@ -310,9 +316,9 @@ class TradeOrderPublisher:
             order_dict_with_trace = inject_trace_context(order_dict)
             order_message = json.dumps(order_dict_with_trace)
 
-            # Publish message to NATS
+            # Publish message to NATS (strategy-scoped subject for tradeengine wildcard)
             await self.nats_client.publish(
-                subject=self.topic,
+                subject=self._signal_subject_for_order(order),
                 payload=order_message.encode(),
             )
 
