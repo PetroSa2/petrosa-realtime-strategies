@@ -1,6 +1,6 @@
 [bandit]
 # Exclude directories from scanning
-exclude_dirs = tests/,.venv/,venv/,htmlcov/,.git/,__pycache__/
+exclude_dirs = tests/,.venv/,venv/,htmlcov/,.git/,__pycache__/,*.egg-info/
 
 # Skip specific checks
 # B104: hardcoded_bind_all_interfaces (intentional for containers)

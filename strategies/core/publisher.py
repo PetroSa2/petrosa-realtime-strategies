@@ -74,9 +74,11 @@ class TradeOrderPublisher:
         """
         Tradeengine subscribes to ``signals.trading.>``; a bare ``signals.trading``
         publish is not delivered. Match TA-bot / CIO contract: ``{base}.{strategy}``.
+        NATS subjects cannot contain spaces — normalize strategy_name accordingly.
         """
         base = self.topic.rstrip(".*>")
-        return f"{base}.{order.strategy_name}"
+        strategy_token = order.strategy_name.replace(" ", "_").replace(".", "_")
+        return f"{base}.{strategy_token}"
 
     async def start(self) -> None:
         """Start the trade order publisher."""
