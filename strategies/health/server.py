@@ -6,6 +6,7 @@ for Kubernetes liveness and readiness probes, plus configuration API.
 """
 
 import asyncio
+import sys
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -90,18 +91,10 @@ class HealthServer:
         self.config_manager = config_manager
         self.depth_analyzer = depth_analyzer
 
-        # Create lifespan for OTLP handler attachment
+        # Create lifespan for config manager and depth analyzer wiring
         @asynccontextmanager
         async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-            """Application lifespan manager - attach OTLP logging handler and set config manager"""
-            # Startup: Attach OTLP handler after uvicorn configures logging
-            try:
-                from petrosa_otel import attach_logging_handler
-
-                attach_logging_handler()
-            except Exception as e:
-                self.logger.warning(f"Failed to attach OTLP logging handler: {e}")
-
+            """Application lifespan manager - set config manager and depth analyzer for API routes."""
             # Set config manager for API routes if available
             if self.config_manager:
                 set_config_manager(self.config_manager)
@@ -137,14 +130,26 @@ class HealthServer:
             self.app.middleware("http")(config_rate_limit_middleware)
             self.logger.info("✅ Configuration rate limit middleware registered")
 
-        # Instrument FastAPI for OpenTelemetry tracing
-        try:
-            from petrosa_otel.instrumentors import instrument_fastapi
+        # Instrument FastAPI for OpenTelemetry tracing — skip if already handled by
+        # the opentelemetry-instrument CLI wrapper (k8s deployment command), which
+        # auto-instruments FastAPI before the application starts. Calling
+        # instrument_fastapi() again would trigger "Attempting to instrument while
+        # already instrumented" warnings from the OTel SDK.
+        _is_auto_instrumented = any(
+            "opentelemetry-instrument" in arg for arg in sys.argv
+        )
+        if not _is_auto_instrumented:
+            try:
+                from petrosa_otel.instrumentors import instrument_fastapi
 
-            instrument_fastapi(self.app)
-            self.logger.info("✅ FastAPI instrumented for OpenTelemetry tracing")
-        except Exception as e:
-            self.logger.warning(f"⚠️  Failed to instrument FastAPI: {e}")
+                instrument_fastapi(self.app)
+                self.logger.info("✅ FastAPI instrumented for OpenTelemetry tracing")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Failed to instrument FastAPI: {e}")
+        else:
+            self.logger.info(
+                "✅ FastAPI instrumentation managed by opentelemetry-instrument CLI"
+            )
 
         # Include configuration API router
         self.app.include_router(config_router)
