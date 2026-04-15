@@ -4,100 +4,140 @@ Tests for issue #146 fixes:
   - AC2: attach_logging_handler() not called from lifespan (single call via main.py)
 """
 
-import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+from fastapi.testclient import TestClient
+
+from strategies.health.server import HealthServer
+
+
+def _setup_mock_constants(mock_const) -> None:
+    """Configure mock constants required for HealthServer instantiation."""
+    mock_const.SERVICE_VERSION = "1.0.0"
+    mock_const.SERVICE_NAME = "test-service"
+    mock_const.ENVIRONMENT = "test"
+    mock_const.get_enabled_strategies.return_value = []
+    mock_const.TRADING_SYMBOLS = []
+    mock_const.TRADING_ENABLE_SHORTS = False
+    mock_const.HEARTBEAT_ENABLED = False
+    mock_const.HEARTBEAT_INTERVAL_SECONDS = 30
+    mock_const.LOG_LEVEL = "INFO"
+    mock_const.ENABLE_OTEL = False
+    mock_const.NATS_URL = "nats://localhost:4222"
+    mock_const.NATS_CONSUMER_TOPIC = "test"
+    mock_const.NATS_PUBLISHER_TOPIC = "test"
+    mock_const.HEALTH_CHECK_PORT = 8080
+    mock_const.get_strategy_config.return_value = {}
+    mock_const.get_trading_config.return_value = {}
+    mock_const.get_risk_config.return_value = {}
+    mock_const.TRADING_LEVERAGE = 1.0
 
 
 class TestAutoInstrumentationGuard:
     """AC1: instrument_fastapi() skipped when CLI wrapper already active."""
 
-    def test_guard_true_when_cli_wrapper_in_argv(self):
-        """Guard returns True when opentelemetry-instrument is in sys.argv."""
-        fake_argv = ["opentelemetry-instrument", "python", "-m", "strategies.main"]
-        result = any("opentelemetry-instrument" in arg for arg in fake_argv)
-        assert result is True
+    def test_instrument_fastapi_not_called_when_auto_instrumented(self):
+        """HealthServer.__init__ must skip instrument_fastapi() when opentelemetry-instrument is in sys.argv."""
+        mock_instrumentors = MagicMock()
 
-    def test_guard_false_when_cli_wrapper_absent(self):
-        """Guard returns False when opentelemetry-instrument is NOT in sys.argv."""
-        fake_argv = ["python", "-m", "strategies.main"]
-        result = any("opentelemetry-instrument" in arg for arg in fake_argv)
-        assert result is False
+        with (
+            patch("strategies.health.server.constants") as mock_const,
+            patch.dict(
+                "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
+            ),
+            patch(
+                "sys.argv",
+                ["opentelemetry-instrument", "python", "-m", "strategies.main"],
+            ),
+        ):
+            _setup_mock_constants(mock_const)
+            HealthServer(port=8080)
 
-    def test_no_fastapi_instrumentation_when_auto_instrumented(self):
-        """When opentelemetry-instrument is in sys.argv, instrument_fastapi is not called."""
-        fake_argv = ["opentelemetry-instrument", "python", "-m", "strategies.main"]
-        mock_instrument_fastapi = MagicMock()
+        mock_instrumentors.instrument_fastapi.assert_not_called()
 
-        _is_auto_instrumented = any(
-            "opentelemetry-instrument" in arg for arg in fake_argv
-        )
-        if not _is_auto_instrumented:
-            mock_instrument_fastapi()
+    def test_instrument_fastapi_called_when_not_auto_instrumented(self):
+        """HealthServer.__init__ must call instrument_fastapi() when opentelemetry-instrument is absent from sys.argv."""
+        mock_instrumentors = MagicMock()
 
-        mock_instrument_fastapi.assert_not_called()
+        with (
+            patch("strategies.health.server.constants") as mock_const,
+            patch.dict(
+                "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
+            ),
+            patch("sys.argv", ["python", "-m", "strategies.main"]),
+        ):
+            _setup_mock_constants(mock_const)
+            HealthServer(port=8080)
 
-    def test_fastapi_instrumented_when_not_auto_instrumented(self):
-        """When opentelemetry-instrument is NOT in sys.argv, instrument_fastapi is called."""
-        fake_argv = ["python", "-m", "strategies.main"]
-        mock_instrument_fastapi = MagicMock()
-
-        _is_auto_instrumented = any(
-            "opentelemetry-instrument" in arg for arg in fake_argv
-        )
-        if not _is_auto_instrumented:
-            mock_instrument_fastapi()
-
-        mock_instrument_fastapi.assert_called_once()
+        mock_instrumentors.instrument_fastapi.assert_called_once()
 
     def test_guard_detects_cli_wrapper_in_any_argv_position(self):
-        """Guard detects opentelemetry-instrument regardless of argv position."""
+        """HealthServer skips instrument_fastapi() regardless of where opentelemetry-instrument appears in argv."""
         cases = [
             ["opentelemetry-instrument", "python"],
             ["/usr/bin/opentelemetry-instrument", "python"],
             ["python", "opentelemetry-instrument"],
         ]
+
         for argv in cases:
-            result = any("opentelemetry-instrument" in arg for arg in argv)
-            assert result is True, f"Failed to detect CLI wrapper in: {argv}"
+            mock_instrumentors = MagicMock()
+            with (
+                patch("strategies.health.server.constants") as mock_const,
+                patch.dict(
+                    "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
+                ),
+                patch("sys.argv", argv),
+            ):
+                _setup_mock_constants(mock_const)
+                HealthServer(port=8080)
+
+            (
+                mock_instrumentors.instrument_fastapi.assert_not_called(),
+                (f"instrument_fastapi was called for argv={argv}"),
+            )
 
 
 class TestLifespanNoDuplicateLoggingHandler:
     """AC2: attach_logging_handler() removed from lifespan to avoid duplicate calls."""
 
-    def test_lifespan_does_not_call_attach_logging_handler(self):
-        """The lifespan closure in HealthServer.__init__ must not call attach_logging_handler."""
-        import pathlib
+    def test_attach_logging_handler_not_called_during_lifespan(self):
+        """FastAPI lifespan startup must not invoke attach_logging_handler.
 
-        server_path = (
-            pathlib.Path(__file__).parent.parent / "strategies" / "health" / "server.py"
-        )
-        source = server_path.read_text()
+        A MagicMock is injected into sys.modules["petrosa_otel"] so that any
+        local 'from petrosa_otel import attach_logging_handler' call inside the
+        lifespan would be tracked. The test fails if the call count is non-zero.
+        """
+        attach_mock = MagicMock()
+        petrosa_otel_mock = MagicMock()
+        petrosa_otel_mock.attach_logging_handler = attach_mock
 
-        lifespan_start = source.find("async def lifespan")
-        fastapi_init = source.find("self.app = FastAPI")
-        assert lifespan_start != -1, "Could not find lifespan function in server.py"
-        assert fastapi_init != -1, "Could not find FastAPI instantiation in server.py"
+        with (
+            patch("strategies.health.server.constants") as mock_const,
+            patch.dict(
+                "sys.modules",
+                {
+                    "petrosa_otel": petrosa_otel_mock,
+                    "petrosa_otel.instrumentors": MagicMock(),
+                },
+            ),
+            patch("sys.argv", ["opentelemetry-instrument", "python"]),
+        ):
+            _setup_mock_constants(mock_const)
+            server = HealthServer(port=8080)
+            with TestClient(server.app):
+                pass  # triggers lifespan startup and shutdown
 
-        lifespan_source = source[lifespan_start:fastapi_init]
+        attach_mock.assert_not_called()
 
-        assert "attach_logging_handler" not in lifespan_source, (
-            "attach_logging_handler() should not be called from lifespan — "
-            "it is called once from main.py; a second call produces duplicate log warnings"
-        )
-
-    def test_instrument_fastapi_guard_present_in_source(self):
-        """server.py must contain the _is_auto_instrumented guard before instrument_fastapi."""
-        import pathlib
-
-        server_path = (
-            pathlib.Path(__file__).parent.parent / "strategies" / "health" / "server.py"
-        )
-        source = server_path.read_text()
-
-        assert "_is_auto_instrumented" in source, (
-            "The _is_auto_instrumented guard must be present in server.py "
-            "to prevent double FastAPI instrumentation under opentelemetry-instrument CLI"
-        )
-        assert "opentelemetry-instrument" in source, (
-            "The guard must check for 'opentelemetry-instrument' in sys.argv"
-        )
+    def test_lifespan_completes_successfully(self):
+        """FastAPI lifespan must start and shut down without error."""
+        with (
+            patch("strategies.health.server.constants") as mock_const,
+            patch.dict("sys.modules", {"petrosa_otel.instrumentors": MagicMock()}),
+            patch("sys.argv", ["opentelemetry-instrument", "python"]),
+        ):
+            _setup_mock_constants(mock_const)
+            server = HealthServer(port=8080)
+            with TestClient(server.app) as client:
+                response = client.get("/healthz")
+                assert response.status_code in (200, 503)
