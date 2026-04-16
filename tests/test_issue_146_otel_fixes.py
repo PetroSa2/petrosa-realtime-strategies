@@ -1,11 +1,12 @@
 """
 Tests for issue #146 fixes:
-  - AC1: No 'Attempting to instrument' warning when opentelemetry-instrument is in sys.argv
+  - AC1: No 'Attempting to instrument' warning when FastAPI app is already auto-instrumented
   - AC2: attach_logging_handler() not called from lifespan (single call via main.py)
 """
 
 from unittest.mock import MagicMock, patch
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from strategies.health.server import HealthServer
@@ -34,10 +35,11 @@ def _setup_mock_constants(mock_const) -> None:
 
 
 class TestAutoInstrumentationGuard:
-    """AC1: instrument_fastapi() skipped when CLI wrapper already active."""
+    """AC1: instrument_fastapi() skipped when app is already auto-instrumented by OTel SDK."""
 
-    def test_instrument_fastapi_not_called_when_auto_instrumented(self):
-        """HealthServer.__init__ must skip instrument_fastapi() when opentelemetry-instrument is in sys.argv."""
+    def test_instrument_fastapi_not_called_when_app_already_instrumented(self):
+        """HealthServer.__init__ must skip instrument_fastapi() when the FastAPI app already
+        has _is_instrumented_by_opentelemetry=True (set by opentelemetry-instrument CLI)."""
         mock_instrumentors = MagicMock()
 
         with (
@@ -45,18 +47,20 @@ class TestAutoInstrumentationGuard:
             patch.dict(
                 "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
             ),
-            patch(
-                "sys.argv",
-                ["opentelemetry-instrument", "python", "-m", "strategies.main"],
-            ),
+            patch("strategies.health.server.FastAPI") as MockFastAPI,
         ):
             _setup_mock_constants(mock_const)
+            # Simulate _InstrumentedFastAPI: auto-instrumentation sets the attribute on init
+            mock_app = MagicMock(spec=FastAPI)
+            mock_app._is_instrumented_by_opentelemetry = True
+            MockFastAPI.return_value = mock_app
             HealthServer(port=8080)
 
         mock_instrumentors.instrument_fastapi.assert_not_called()
 
-    def test_instrument_fastapi_called_when_not_auto_instrumented(self):
-        """HealthServer.__init__ must call instrument_fastapi() when opentelemetry-instrument is absent from sys.argv."""
+    def test_instrument_fastapi_called_when_app_not_yet_instrumented(self):
+        """HealthServer.__init__ must call instrument_fastapi() when the FastAPI app has
+        not yet been instrumented (no opentelemetry-instrument CLI in the command)."""
         mock_instrumentors = MagicMock()
 
         with (
@@ -64,37 +68,35 @@ class TestAutoInstrumentationGuard:
             patch.dict(
                 "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
             ),
-            patch("sys.argv", ["python", "-m", "strategies.main"]),
+            patch("strategies.health.server.FastAPI") as MockFastAPI,
         ):
             _setup_mock_constants(mock_const)
+            # Simulate plain FastAPI (no auto-instrumentation): attribute absent
+            mock_app = MagicMock(spec=FastAPI)
+            del mock_app._is_instrumented_by_opentelemetry  # ensure attribute absent
+            MockFastAPI.return_value = mock_app
             HealthServer(port=8080)
 
         mock_instrumentors.instrument_fastapi.assert_called_once()
 
-    def test_guard_detects_cli_wrapper_in_any_argv_position(self):
-        """HealthServer skips instrument_fastapi() regardless of where opentelemetry-instrument appears in argv."""
-        cases = [
-            ["opentelemetry-instrument", "python"],
-            ["/usr/bin/opentelemetry-instrument", "python"],
-            ["python", "opentelemetry-instrument"],
-        ]
+    def test_instrument_fastapi_called_when_attribute_explicitly_false(self):
+        """Guard falls through to manual instrumentation when _is_instrumented_by_opentelemetry=False."""
+        mock_instrumentors = MagicMock()
 
-        for argv in cases:
-            mock_instrumentors = MagicMock()
-            with (
-                patch("strategies.health.server.constants") as mock_const,
-                patch.dict(
-                    "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
-                ),
-                patch("sys.argv", argv),
-            ):
-                _setup_mock_constants(mock_const)
-                HealthServer(port=8080)
+        with (
+            patch("strategies.health.server.constants") as mock_const,
+            patch.dict(
+                "sys.modules", {"petrosa_otel.instrumentors": mock_instrumentors}
+            ),
+            patch("strategies.health.server.FastAPI") as MockFastAPI,
+        ):
+            _setup_mock_constants(mock_const)
+            mock_app = MagicMock(spec=FastAPI)
+            mock_app._is_instrumented_by_opentelemetry = False
+            MockFastAPI.return_value = mock_app
+            HealthServer(port=8080)
 
-            (
-                mock_instrumentors.instrument_fastapi.assert_not_called(),
-                (f"instrument_fastapi was called for argv={argv}"),
-            )
+        mock_instrumentors.instrument_fastapi.assert_called_once()
 
 
 class TestLifespanNoDuplicateLoggingHandler:
@@ -120,7 +122,6 @@ class TestLifespanNoDuplicateLoggingHandler:
                     "petrosa_otel.instrumentors": MagicMock(),
                 },
             ),
-            patch("sys.argv", ["opentelemetry-instrument", "python"]),
         ):
             _setup_mock_constants(mock_const)
             server = HealthServer(port=8080)
@@ -134,7 +135,6 @@ class TestLifespanNoDuplicateLoggingHandler:
         with (
             patch("strategies.health.server.constants") as mock_const,
             patch.dict("sys.modules", {"petrosa_otel.instrumentors": MagicMock()}),
-            patch("sys.argv", ["opentelemetry-instrument", "python"]),
         ):
             _setup_mock_constants(mock_const)
             server = HealthServer(port=8080)
