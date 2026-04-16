@@ -6,7 +6,6 @@ for Kubernetes liveness and readiness probes, plus configuration API.
 """
 
 import asyncio
-import sys
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -130,15 +129,13 @@ class HealthServer:
             self.app.middleware("http")(config_rate_limit_middleware)
             self.logger.info("✅ Configuration rate limit middleware registered")
 
-        # Instrument FastAPI for OpenTelemetry tracing — skip if already handled by
-        # the opentelemetry-instrument CLI wrapper (k8s deployment command), which
-        # auto-instruments FastAPI before the application starts. Calling
-        # instrument_fastapi() again would trigger "Attempting to instrument while
-        # already instrumented" warnings from the OTel SDK.
-        _is_auto_instrumented = any(
-            "opentelemetry-instrument" in arg for arg in sys.argv
-        )
-        if not _is_auto_instrumented:
+        # Instrument FastAPI for OpenTelemetry tracing — skip if the OTel SDK has
+        # already instrumented this app (e.g., via the opentelemetry-instrument CLI
+        # wrapper in k8s, which replaces fastapi.FastAPI with _InstrumentedFastAPI and
+        # sets _is_instrumented_by_opentelemetry=True on every new app instance).
+        # Calling instrument_fastapi() on an already-instrumented app triggers an
+        # "Attempting to instrument while already instrumented" warning from the OTel SDK.
+        if not getattr(self.app, "_is_instrumented_by_opentelemetry", False):
             try:
                 from petrosa_otel.instrumentors import instrument_fastapi
 
