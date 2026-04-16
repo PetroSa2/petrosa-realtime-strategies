@@ -72,11 +72,14 @@ class TradeOrderPublisher:
 
     def _signal_subject_for_order(self, order: TradeOrder) -> str:
         """
-        Tradeengine subscribes to ``signals.trading.>``; a bare ``signals.trading``
-        publish is not delivered. Match TA-bot / CIO contract: ``{base}.{strategy}``.
+        Build NATS subject routing orders through the CIO intent topic.
+
+        Always uses constants.NATS_TOPIC_INTENTS (not self.topic) so all
+        orders pass through LLM governance before reaching the tradeengine.
+        self.topic is retained for display/health reporting only.
         NATS subjects cannot contain spaces — normalize strategy_name accordingly.
         """
-        base = self.topic.rstrip(".*>")
+        base = constants.NATS_TOPIC_INTENTS.rstrip(".*>")
         strategy_token = order.strategy_name.replace(" ", "_").replace(".", "_")
         return f"{base}.{strategy_token}"
 
@@ -419,7 +422,7 @@ class TradeOrderPublisher:
                 strategy_id=signal_dict.get("strategy_id"),
                 publishing_time_ms=publishing_time,
                 signal_count=self.signal_count,
-                topic=self.topic,
+                topic=subject,
             )
 
         except Exception as e:

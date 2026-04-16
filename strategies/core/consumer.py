@@ -819,17 +819,16 @@ class NATSConsumer:
 
     async def _publish_market_logic_signals(self, signals) -> None:
         """
-        Publish market logic signals to the trade engine.
+        Publish market logic signals to the trade engine via CIO.
 
-        Converts signals to order format and publishes via NATS.
+        Routes through cio.intent.trading so the LLM governance layer
+        (regime analysis, strategy assessment, action classification) is
+        consulted before any order reaches the tradeengine.
         """
         try:
             for signal in signals:
-                # Convert signal to order format
-                order_data = self._signal_to_order(signal)
-
-                # Publish to trade engine
-                await self.publisher.publish_order(order_data)
+                # Publish signal via CIO intent topic (same path as microstructure)
+                await self.publisher.publish_signal(signal)
 
                 self.logger.info(
                     "Market logic signal published",
