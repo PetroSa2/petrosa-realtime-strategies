@@ -130,11 +130,12 @@ class HealthServer:
             self.logger.info("✅ Configuration rate limit middleware registered")
 
         # Instrument FastAPI for OpenTelemetry tracing — skip if the OTel SDK has
-        # already instrumented this app (e.g., via the opentelemetry-instrument CLI
-        # wrapper in k8s, which replaces fastapi.FastAPI with _InstrumentedFastAPI and
-        # sets _is_instrumented_by_opentelemetry=True on every new app instance).
-        # Calling instrument_fastapi() on an already-instrumented app triggers an
-        # "Attempting to instrument while already instrumented" warning from the OTel SDK.
+        # already instrumented this app, as indicated by
+        # _is_instrumented_by_opentelemetry=True. This may happen through the
+        # opentelemetry-instrument CLI wrapper in k8s or by other SDK-managed
+        # instrumentation paths. Calling instrument_fastapi() on an already
+        # instrumented app triggers an "Attempting to instrument while already
+        # instrumented" warning from the OTel SDK.
         if not getattr(self.app, "_is_instrumented_by_opentelemetry", False):
             try:
                 from petrosa_otel.instrumentors import instrument_fastapi

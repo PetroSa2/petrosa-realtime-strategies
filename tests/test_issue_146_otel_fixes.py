@@ -71,9 +71,10 @@ class TestAutoInstrumentationGuard:
             patch("strategies.health.server.FastAPI") as MockFastAPI,
         ):
             _setup_mock_constants(mock_const)
-            # Simulate plain FastAPI (no auto-instrumentation): attribute absent
+            # Simulate plain FastAPI (no auto-instrumentation): attribute absent.
+            # spec=FastAPI excludes _is_instrumented_by_opentelemetry (not on the real
+            # class), so getattr(app, ..., False) returns the default False — no del needed.
             mock_app = MagicMock(spec=FastAPI)
-            del mock_app._is_instrumented_by_opentelemetry  # ensure attribute absent
             MockFastAPI.return_value = mock_app
             HealthServer(port=8080)
 
