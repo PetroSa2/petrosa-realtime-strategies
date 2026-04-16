@@ -557,6 +557,37 @@ async def test_consumer_process_market_logic_strategies_exception(consumer):
 
 
 @pytest.mark.asyncio
+async def test_publish_market_logic_signals_uses_publish_signal(
+    consumer, mock_publisher
+):
+    """Verify _publish_market_logic_signals routes via publish_signal (CIO path), not publish_order."""
+    from datetime import datetime
+
+    from strategies.models.signals import (
+        Signal,
+        SignalAction,
+        SignalConfidence,
+        SignalType,
+    )
+
+    signal = Signal(
+        symbol="BTCUSDT",
+        signal_type=SignalType.BUY,
+        signal_action=SignalAction.OPEN_LONG,
+        confidence=SignalConfidence.HIGH,
+        confidence_score=0.85,
+        price=50000.0,
+        timestamp=datetime.utcnow(),
+        strategy_name="btc_dominance",
+    )
+
+    await consumer._publish_market_logic_signals([signal])
+
+    mock_publisher.publish_signal.assert_called_once_with(signal)
+    mock_publisher.publish_order.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_consumer_signal_to_order_conversion(consumer):
     """Test _signal_to_order method - covers lines 758-760, 779, 781."""
     from opentelemetry import trace

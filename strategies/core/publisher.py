@@ -73,8 +73,10 @@ class TradeOrderPublisher:
     def _signal_subject_for_order(self, order: TradeOrder) -> str:
         """
         Build NATS subject routing orders through the CIO intent topic.
-        Uses NATS_TOPIC_INTENTS so all orders pass through LLM governance
-        before reaching the tradeengine (matches TA-bot / publish_signal contract).
+
+        Always uses constants.NATS_TOPIC_INTENTS (not self.topic) so all
+        orders pass through LLM governance before reaching the tradeengine.
+        self.topic is retained for display/health reporting only.
         NATS subjects cannot contain spaces — normalize strategy_name accordingly.
         """
         base = constants.NATS_TOPIC_INTENTS.rstrip(".*>")
