@@ -40,23 +40,6 @@ except ImportError:
     config_rate_limit_middleware = None
 
 # Prometheus metrics
-STRATEGY_SIGNALS_GENERATED = Counter(
-    "strategy_signals_generated_total",
-    "Total signals generated",
-    ["strategy", "signal_type"],
-)
-NATS_MESSAGES_CONSUMED = Counter(
-    "nats_messages_consumed_total", "Total NATS messages consumed"
-)
-NATS_MESSAGES_PUBLISHED = Counter(
-    "nats_messages_published_total", "Total orders published to NATS"
-)
-STRATEGY_PROCESSING_TIME = Histogram(
-    "strategy_processing_time_seconds", "Time to process a message", ["strategy"]
-)
-STRATEGY_ERRORS = Counter(
-    "strategy_errors_total", "Total strategy errors", ["strategy", "error_type"]
-)
 CIRCUIT_BREAKER_STATE = Gauge(
     "circuit_breaker_state", "Circuit breaker state (0=closed, 1=open)", ["component"]
 )
