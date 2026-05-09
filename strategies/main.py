@@ -68,6 +68,15 @@ class StrategiesService:
             environment=constants.ENVIRONMENT,
         )
 
+        self.logger.info(
+            "NATS subjects: effective publisher=%s, consumer=%s",
+            constants.NATS_TOPIC_INTENTS,
+            constants.NATS_CONSUMER_TOPIC,
+            event_type="nats_subject_config",
+            effective_publish_subject=constants.NATS_TOPIC_INTENTS,
+            consumer_subject=constants.NATS_CONSUMER_TOPIC,
+        )
+
         try:
             # Initialize MongoDB and Configuration Manager FIRST
             from strategies.db.mongodb_client import MongoDBClient
