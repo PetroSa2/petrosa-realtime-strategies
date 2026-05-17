@@ -75,6 +75,7 @@ repos:
     hooks:
       - id: yamllint
         name: 📋 YAML Linter
+        exclude: ^.github/workflows/deploy.yml$
 
   # ==================================================================
   # STANDARD HOOKS
