@@ -5,6 +5,7 @@ This module contains Pydantic models for representing trade orders,
 order types, sides, and position management.
 """
 
+import uuid
 from datetime import datetime
 
 try:
@@ -83,6 +84,10 @@ class TradeOrder(BaseModel):
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
+    )
+    intent_id: str = Field(
+        default_factory=lambda: uuid.uuid4().hex,
+        description="uuid4 hex string uniquely identifying this intent; generated at publish time",
     )
 
     @validator("symbol")
@@ -193,6 +198,7 @@ class TradeOrder(BaseModel):
             "confidence_score": self.confidence_score,
             "timestamp": self.timestamp.isoformat(),
             "metadata": self.metadata,
+            "intent_id": self.intent_id,
         }
 
         if self.price is not None:
