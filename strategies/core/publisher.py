@@ -319,6 +319,24 @@ class TradeOrderPublisher:
             order_dict_with_trace = inject_trace_context(order_dict)
             order_message = json.dumps(order_dict_with_trace)
 
+            # Set decision.* OTel span attributes for this intent
+            try:
+                from opentelemetry import trace as _trace
+                from petrosa_otel import set_decision_context
+
+                set_decision_context(
+                    _trace.get_current_span(),
+                    intent_id=order.intent_id,
+                    strategy_id=order.strategy_name,
+                    symbol=order.symbol,
+                    action=order.side.value.lower(),
+                    confidence=order.confidence_score,
+                )
+            except ImportError:
+                pass
+            except Exception as _exc:
+                self.logger.debug("set_decision_context failed: %s", _exc)
+
             # Publish message to NATS (strategy-scoped subject for tradeengine wildcard)
             await self.nats_client.publish(
                 subject=self._signal_subject_for_order(order),
