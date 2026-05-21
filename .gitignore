@@ -228,3 +228,5 @@ docs/build/
 # Local development
 .local/
 local/
+
+.serena/cache/
