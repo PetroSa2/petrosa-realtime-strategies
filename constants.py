@@ -19,7 +19,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # NATS Configuration
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
-NATS_CONSUMER_TOPIC = os.getenv("NATS_CONSUMER_TOPIC", "binance.websocket.data")
+NATS_CONSUMER_TOPIC = os.getenv("NATS_CONSUMER_TOPIC", "binance.futures.websocket.data")
 # All signals/orders route through CIO; NATS_TOPIC_INTENTS is the single source of truth.
 # NATS_PUBLISHER_TOPIC is retained for health-endpoint display only — it mirrors NATS_TOPIC_INTENTS
 # so that the two never drift.
