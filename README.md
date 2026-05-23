@@ -14,11 +14,11 @@ A high-performance, horizontally scalable trading signal service that processes 
 
 | Service | Purpose | Input | Output | Status |
 |---------|---------|-------|--------|--------|
-| **petrosa-socket-client** | Real-time WebSocket data ingestion | Binance WebSocket API | NATS: `binance.websocket.data` | Real-time Processing |
+| **petrosa-socket-client** | Real-time WebSocket data ingestion | Binance WebSocket API | NATS: `binance.futures.websocket.data` | Real-time Processing |
 | **petrosa-binance-data-extractor** | Historical data extraction & gap filling | Binance REST API | MySQL (klines, funding rates, trades) | Batch Processing |
 | **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | MySQL klines data | NATS: `intent.trading.*` | Signal Generation |
 | **petrosa-cio** | Centralized orchestrator & gatekeeper | NATS: `intent.>` | NATS: `signals.trading` | Interception Layer |
-| **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.websocket.data` | NATS: `intent.trading.*` | **YOU ARE HERE** |
+| **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.futures.websocket.data` | NATS: `intent.trading.*` | **YOU ARE HERE** |
 | **petrosa-tradeengine** | Order execution & trade management | NATS: `signals.trading` | Binance Orders API, MongoDB audit | Order Execution |
 | **petrosa_k8s** | Centralized infrastructure | Kubernetes manifests | Cluster resources | Infrastructure |
 
@@ -35,7 +35,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │   Socket Client      │
 │  (WebSocket Client)  │
 └──────┬───────────────┘
-       │ NATS: binance.websocket.data
+       │ NATS: binance.futures.websocket.data
        │
        ▼
 ┌──────────────────────┐
@@ -78,7 +78,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 
 #### NATS Messaging (Input & Output)
 
-**Consumed Topic:** `binance.websocket.data`
+**Consumed Topic:** `binance.futures.websocket.data`
 
 **Message Types Consumed:**
 1. **Trade Messages** - Individual trades
@@ -126,7 +126,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │  ┌──────────────────────────────────────────────────────────┐     │
 │  │                    Main Service                           │     │
 │  │                                                            │     │
-│  │  • NATS Consumer (binance.websocket.data)                │     │
+│  │  • NATS Consumer (binance.futures.websocket.data)                │     │
 │  │  • Signal Processor (stateless)                          │     │
 │  │  • NATS Publisher (intent.trading.*)                     │     │
 │  │  • Health Server (HTTP:8080)                             │     │
@@ -137,7 +137,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 │  ┌──────────────────────────────────────────────────────────┐     │
 │  │              NATS Consumer                                │     │
 │  │                                                            │     │
-│  │  • Subscribe to binance.websocket.data                   │     │
+│  │  • Subscribe to binance.futures.websocket.data                   │     │
 │  │  • Consumer group: realtime-strategies-group             │     │
 │  │  • Load balancing across replicas                        │     │
 │  │  • Circuit breaker protection                            │     │
@@ -231,7 +231,7 @@ A high-performance, horizontally scalable trading signal service that processes 
 ```python
 class NATSConsumer:
     """NATS consumer with stateless processing."""
-    
+
     def __init__(
         self,
         nats_url: str,
@@ -246,26 +246,26 @@ class NATSConsumer:
         self.consumer_name = consumer_name
         self.consumer_group = consumer_group  # Load balancing
         self.publisher = publisher
-        
+
         # Processing state (stateless - reset per message)
         self.message_count = 0
         self.error_count = 0
-        
+
         # Initialize strategies
         self.strategies = {
             "orderbook_skew": OrderBookSkewStrategy(),
             "trade_momentum": TradeMomentumStrategy(),
             "ticker_velocity": TickerVelocityStrategy()
         }
-    
+
     async def start(self) -> None:
         """Start consuming messages."""
         await self._connect_to_nats()
         await self._subscribe_to_topic()
-        
+
         self.is_running = True
         asyncio.create_task(self._processing_loop())
-    
+
     async def _subscribe_to_topic(self) -> None:
         """Subscribe with consumer group for load balancing."""
         self.subscription = await self.nats_client.subscribe(
@@ -273,16 +273,16 @@ class NATSConsumer:
             queue=self.consumer_group,  # IMPORTANT: Enables load balancing
             cb=self._message_handler
         )
-    
+
     async def _message_handler(self, msg):
         """Handle incoming message (stateless)."""
         try:
             # Parse message
             data = json.loads(msg.data.decode())
-            
+
             # Determine stream type
             stream = data.get("stream", "")
-            
+
             # Route to appropriate strategy (stateless)
             if "@trade" in stream:
                 await self._process_trade(data)
@@ -290,20 +290,20 @@ class NATSConsumer:
                 await self._process_ticker(data)
             elif "@depth" in stream:
                 await self._process_depth(data)
-            
+
             self.message_count += 1
-            
+
         except Exception as e:
             self.error_count += 1
             logger.error(f"Message processing failed: {e}")
-    
+
     async def _process_depth(self, data: dict):
         """Process order book depth data."""
         market_data = DepthUpdate.parse_obj(data["data"])
-        
+
         # Run stateless strategy
         signal = self.strategies["orderbook_skew"].analyze(market_data)
-        
+
         if signal:
             # Publish signal
             await self.publisher.publish_signal(signal)
@@ -318,21 +318,21 @@ class NATSConsumer:
 class OrderBookSkewStrategy:
     """
     Analyze order book imbalance for buying/selling pressure.
-    
+
     Completely stateless - each message processed independently.
     No historical data required.
-    
+
     Algorithm:
     1. Sum bid volumes (top 5 levels)
     2. Sum ask volumes (top 5 levels)
     3. Calculate ratio: bid_volume / ask_volume
     4. Generate signal if ratio exceeds threshold
-    
+
     Thresholds:
     - Buy: ratio > 1.2 (20% more bids than asks)
     - Sell: ratio < 0.8 (20% more asks than bids)
     """
-    
+
     def __init__(
         self,
         top_levels: int = 5,
@@ -344,14 +344,14 @@ class OrderBookSkewStrategy:
         self.buy_threshold = buy_threshold
         self.sell_threshold = sell_threshold
         self.min_spread_percent = min_spread_percent
-    
+
     def analyze(self, depth_data: DepthUpdate) -> Optional[Signal]:
         """
         Analyze order book depth (stateless).
-        
+
         Args:
             depth_data: Order book depth update
-        
+
         Returns:
             Signal if conditions met, None otherwise
         """
@@ -360,44 +360,44 @@ class OrderBookSkewStrategy:
             float(level.quantity)
             for level in depth_data.bids[:self.top_levels]
         )
-        
+
         # Calculate ask volume (top N levels)
         ask_volume = sum(
             float(level.quantity)
             for level in depth_data.asks[:self.top_levels]
         )
-        
+
         if ask_volume == 0:
             return None
-        
+
         # Calculate ratio
         ratio = bid_volume / ask_volume
-        
+
         # Check spread (filter out low liquidity)
         top_bid = float(depth_data.bids[0].price)
         top_ask = float(depth_data.asks[0].price)
         spread_percent = ((top_ask - top_bid) / top_bid) * 100
-        
+
         if spread_percent > self.min_spread_percent:
             return None  # Spread too wide
-        
+
         # Generate signal
         action = None
         confidence = 0.0
-        
+
         if ratio > self.buy_threshold:
             action = "buy"
             # Scale confidence based on how far above threshold
             confidence = min(0.95, 0.60 + (ratio - self.buy_threshold) * 0.5)
-            
+
         elif ratio < self.sell_threshold:
             action = "sell"
             # Scale confidence based on how far below threshold
             confidence = min(0.95, 0.60 + (self.sell_threshold - ratio) * 0.5)
-        
+
         if action is None:
             return None
-        
+
         # Create signal
         return Signal(
             strategy_id="orderbook_skew",
@@ -430,34 +430,34 @@ class OrderBookSkewStrategy:
 class TradeMomentumStrategy:
     """
     Analyze individual trades for momentum indicators.
-    
+
     Weighted scoring system:
     - Price movement: 40%
     - Quantity size: 30%
     - Maker/taker status: 30%
     """
-    
+
     def analyze(self, trade_data: TradeData) -> Optional[Signal]:
         """Stateless trade analysis."""
         # Calculate price momentum
         price_change = trade_data.price - trade_data.previous_price
         price_momentum = price_change / trade_data.previous_price if trade_data.previous_price > 0 else 0
-        
+
         # Quantity score (normalized)
         quantity_score = min(1.0, trade_data.quantity / trade_data.avg_quantity)
-        
+
         # Maker/taker score
         # is_buyer_maker=True means seller initiated (bearish)
         # is_buyer_maker=False means buyer initiated (bullish)
         maker_score = -1.0 if trade_data.is_buyer_maker else 1.0
-        
+
         # Weighted momentum
         momentum = (
             price_momentum * 0.4 +
             quantity_score * 0.3 +
             maker_score * 0.3
         )
-        
+
         # Check thresholds
         if momentum > 0.7:
             action = "buy"
@@ -467,7 +467,7 @@ class TradeMomentumStrategy:
             confidence = min(0.95, 0.65 + abs(momentum) * 0.2)
         else:
             return None
-        
+
         return Signal(
             strategy_id="trade_momentum",
             symbol=trade_data.symbol,
@@ -494,10 +494,10 @@ class TradeMomentumStrategy:
 class TickerVelocityStrategy:
     """
     Analyze price velocity over time windows.
-    
+
     Tracks rate of change to detect acceleration/deceleration.
     """
-    
+
     def __init__(
         self,
         time_window: int = 60,  # seconds
@@ -507,45 +507,45 @@ class TickerVelocityStrategy:
         self.time_window = time_window
         self.buy_threshold = buy_threshold
         self.sell_threshold = sell_threshold
-        
+
         # In-memory cache for velocity calculation
         # NOTE: This introduces minimal state but is acceptable
         #       for velocity calculations
         self.price_cache = {}  # {symbol: [(timestamp, price)]}
-    
+
     def analyze(self, ticker_data: TickerData) -> Optional[Signal]:
         """Calculate velocity and generate signal."""
         symbol = ticker_data.symbol
         current_price = ticker_data.last_price
         current_time = time.time()
-        
+
         # Update cache
         if symbol not in self.price_cache:
             self.price_cache[symbol] = []
-        
+
         self.price_cache[symbol].append((current_time, current_price))
-        
+
         # Remove old entries (outside time window)
         cutoff_time = current_time - self.time_window
         self.price_cache[symbol] = [
             (t, p) for t, p in self.price_cache[symbol]
             if t >= cutoff_time
         ]
-        
+
         # Need at least 2 points for velocity
         if len(self.price_cache[symbol]) < 2:
             return None
-        
+
         # Calculate velocity (% change per minute)
         oldest_time, oldest_price = self.price_cache[symbol][0]
         time_elapsed = (current_time - oldest_time) / 60  # minutes
-        
+
         if time_elapsed == 0 or oldest_price == 0:
             return None
-        
+
         price_change = ((current_price - oldest_price) / oldest_price) * 100
         velocity = price_change / time_elapsed  # % per minute
-        
+
         # Check thresholds
         if velocity > self.buy_threshold:
             action = "buy"
@@ -555,7 +555,7 @@ class TickerVelocityStrategy:
             confidence = min(0.95, 0.60 + (abs(velocity) / 10))
         else:
             return None
-        
+
         return Signal(
             strategy_id="ticker_velocity",
             symbol=symbol,
@@ -586,7 +586,7 @@ The Realtime Strategies service provides **two comprehensive REST APIs**:
 
 Both APIs are production-ready, fully documented, and LLM-agent friendly.
 
-**Base URL**: `http://realtime-strategies:8080`  
+**Base URL**: `http://realtime-strategies:8080`
 **Swagger UI**: `http://realtime-strategies:8080/docs`
 
 ---
@@ -896,7 +896,7 @@ For complete documentation, examples, and troubleshooting, see the [TA Bot Confi
 | `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
 | `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
 | `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string (fallback) |
-| `NATS_CONSUMER_TOPIC` | `binance.websocket.data` | Input topic |
+| `NATS_CONSUMER_TOPIC` | `binance.futures.websocket.data` | Input topic |
 | `NATS_PUBLISHER_TOPIC` | `intent.trading.*` | Output topic (Intercepted by CIO) |
 | `NATS_CONSUMER_GROUP` | `realtime-strategies-group` | Consumer group for load balancing |
 | `TRADING_SYMBOLS` | `BTCUSDT,ETHUSDT,BNBUSDT` | Symbols to process |
@@ -937,7 +937,7 @@ spec:
               name: petrosa-common-config
               key: NATS_URL
         - name: NATS_CONSUMER_TOPIC
-          value: "binance.websocket.data"
+          value: "binance.futures.websocket.data"
         - name: NATS_PUBLISHER_TOPIC
           value: "intent.trading.*"
         - name: NATS_CONSUMER_GROUP
@@ -1094,7 +1094,7 @@ The Grafana dashboard provides comprehensive visualization of:
 - **Signal Generation**: Tracking by strategy, type, and confidence level
 - **Error Rates**: Success/failure rates and health indicators
 
-**Dashboard Location**: `docs/grafana-dashboard.json`  
+**Dashboard Location**: `docs/grafana-dashboard.json`
 **Import Guide**: See [`petrosa_k8s/docs/GRAFANA_DASHBOARD_IMPORT_GUIDE.md`](https://github.com/PetroSa2/petrosa_k8s/blob/main/docs/GRAFANA_DASHBOARD_IMPORT_GUIDE.md)
 
 **Key Metrics Thresholds**:
