@@ -56,6 +56,7 @@ class StrategiesService:
         self.heartbeat_manager: HeartbeatManager | None = None
         self.config_manager = None
         self.depth_analyzer = None
+        self.health_evaluator = None
         self.shutdown_event = asyncio.Event()
 
     async def start(self):
@@ -208,6 +209,28 @@ class StrategiesService:
             # Update health server with heartbeat manager reference
             self.health_server.heartbeat_manager = self.heartbeat_manager
 
+            # Start health evaluator (publishes evaluator.realtime-strategies.verdict).
+            # Optional: skipped if petrosa-otel lacks the evaluators framework.
+            try:
+                from strategies.evaluators import (
+                    build_realtime_strategies_health_evaluator,
+                )
+
+                self.health_evaluator = build_realtime_strategies_health_evaluator(
+                    self.consumer, self.publisher
+                )
+                if self.health_evaluator is not None:
+                    await self.health_evaluator.start()
+                    self.logger.info(
+                        "Health evaluator started",
+                        event_type="health_evaluator_started",
+                    )
+            except ImportError:
+                self.logger.warning(
+                    "petrosa_otel.evaluators unavailable; health evaluator disabled",
+                    event_type="health_evaluator_unavailable",
+                )
+
             # Wait for shutdown signal
             await self.shutdown_event.wait()
 
@@ -225,6 +248,13 @@ class StrategiesService:
             "Stopping Petrosa Realtime Strategies service",
             event_type="service_stopping",
         )
+
+        # Stop health evaluator first
+        if self.health_evaluator:
+            await self.health_evaluator.stop()
+            self.logger.info(
+                "Health evaluator stopped", event_type="health_evaluator_stopped"
+            )
 
         # Stop heartbeat manager first
         if self.heartbeat_manager:
