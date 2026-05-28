@@ -117,6 +117,21 @@ class Signal(BaseModel):
     take_profit_pct: float | None = Field(None, ge=0, le=1)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+    # FR52 / P1.5-AC1 (#177) — content-addressable max-leverage opinion
+    # carried from the producer to CIO. `None` (not 0) means "no
+    # recommendation — CIO picks from strategy/portfolio defaults".
+    # The integer is the leverage multiplier the strategy backtest's
+    # max-leverage envelope supports (e.g. 1, 2, 5, 10). CIO arbitration
+    # logic against portfolio aggregates ships in a separate child story.
+    recommended_leverage: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Max leverage multiplier the producer's characterization supports. "
+            "None = no recommendation."
+        ),
+    )
+
     # Legacy compatibility fields
     signal_id: str | None = Field(None, description="Compatibility with contracts")
 
