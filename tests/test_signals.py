@@ -831,3 +831,55 @@ class TestSignalMetrics:
         assert isinstance(distribution, dict)
         # Should have distribution data when signals exist
         assert len(distribution) > 0 or metrics.total_signals_generated == 2
+
+
+# ---------------------------------------------------------------------------
+# FR52 / P1.5-AC1 (#177) — recommended_leverage on the signal contract.
+# ---------------------------------------------------------------------------
+
+
+class TestRecommendedLeverageField:
+    """recommended_leverage is optional, defaults None, accepts >=1 ints."""
+
+    def test_signal_defaults_recommended_leverage_to_none(self):
+        """Producers that don't set the field keep working (AC1.c)."""
+        signal = Signal(symbol="BTCUSDT", current_price=50000.0, price=50000.0)
+        assert signal.recommended_leverage is None
+
+    def test_signal_accepts_recommended_leverage(self):
+        signal = Signal(
+            symbol="BTCUSDT",
+            current_price=50000.0,
+            price=50000.0,
+            recommended_leverage=5,
+        )
+        assert signal.recommended_leverage == 5
+
+    def test_signal_round_trips_recommended_leverage_through_dump_load(self):
+        original = Signal(
+            symbol="ETHUSDT",
+            current_price=3000.0,
+            price=3000.0,
+            recommended_leverage=3,
+        )
+        rebuilt = Signal(**original.model_dump())
+        assert rebuilt.recommended_leverage == 3
+
+    def test_signal_rejects_recommended_leverage_below_one(self):
+        """The field is ge=1 — 0 is not a valid 'no recommendation' sentinel
+        (use None for that)."""
+        with pytest.raises(ValidationError) as exc_info:
+            Signal(
+                symbol="BTCUSDT",
+                current_price=50000.0,
+                price=50000.0,
+                recommended_leverage=0,
+            )
+        assert "recommended_leverage" in str(exc_info.value)
+
+    def test_signal_dumps_none_when_field_omitted(self):
+        """A signal with no leverage opinion serializes the field as None —
+        CIO treats None as 'pick from defaults' (legacy behaviour preserved)."""
+        signal = Signal(symbol="BTCUSDT", current_price=50000.0, price=50000.0)
+        dumped = signal.model_dump()
+        assert dumped["recommended_leverage"] is None
