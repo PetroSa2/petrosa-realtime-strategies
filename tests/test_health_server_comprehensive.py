@@ -96,8 +96,15 @@ def test_health_server_initialization(health_server):
 
 
 def test_register_routes(health_server):
-    """Test that all routes are registered."""
-    routes = [route.path for route in health_server.app.routes]
+    """Test that all routes are registered.
+
+    Note (#183): newer Starlette versions include `_IncludedRouter` mount
+    entries in `app.routes` alongside plain `Route` objects; mount entries
+    have no `.path` attribute, so filter to route-like entries only.
+    """
+    routes = [
+        route.path for route in health_server.app.routes if hasattr(route, "path")
+    ]
     expected_routes = ["/healthz", "/ready", "/metrics", "/info", "/"]
     for route in expected_routes:
         assert route in routes
