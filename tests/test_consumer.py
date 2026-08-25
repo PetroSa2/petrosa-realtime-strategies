@@ -19,6 +19,7 @@ import pytest
 from strategies.core.consumer import NATSConsumer
 from strategies.core.publisher import TradeOrderPublisher
 from strategies.models.market_data import MarketDataMessage
+from strategies.services.depth_analyzer import DepthAnalyzer
 
 
 @pytest.fixture
@@ -352,6 +353,90 @@ async def test_consumer_transform_depth_data_error(consumer):
     result = consumer._transform_depth_data(invalid_data)
     # Should return None on error (line 518)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_consumer_transform_depth_data_real_binance_keys(consumer):
+    """Regression test for #181: live Binance diff-depth payloads use the
+    short keys "b"/"a", not "bids"/"asks". Prior to the fix, `bids in data`
+    was always False for real payloads, so `bids`/`asks` stayed empty and
+    every downstream imbalance/pressure calculation was silently 0.0.
+    """
+    # Real captured Binance Futures diff-depth WebSocket payload (see issue #181).
+    real_payload = {
+        "e": "depthUpdate",
+        "E": 1787622635217,
+        "T": 1787622635151,
+        "s": "BTCUSDT",
+        "ps": "BTCUSDT",
+        "U": 410706805751,
+        "u": 410706808244,
+        "pu": 410706801858,
+        "b": [["79667.70", "368.0138"], ["79667.60", "1.2000"]],
+        "a": [["79686.20", "0.0714"], ["79686.30", "2.5000"]],
+        "st": 1,
+    }
+
+    result = consumer._transform_depth_data(real_payload)
+
+    assert result is not None
+    assert len(result.bids) == 2
+    assert len(result.asks) == 2
+    assert result.bids[0].price == "79667.70"
+    assert result.bids[0].quantity == "368.0138"
+    assert result.asks[0].price == "79686.20"
+    assert result.asks[0].quantity == "0.0714"
+
+
+@pytest.mark.asyncio
+async def test_consumer_transform_depth_data_legacy_bids_asks_fallback(consumer):
+    """Defensive fallback: if a differently-shaped message source ever sends
+    "bids"/"asks" keys directly, they should still populate correctly.
+    """
+    legacy_payload = {
+        "s": "ETHUSDT",
+        "E": int(datetime.utcnow().timestamp() * 1000),
+        "bids": [["2000.0", "1.0"]],
+        "asks": [["2001.0", "0.5"]],
+    }
+
+    result = consumer._transform_depth_data(legacy_payload)
+
+    assert result is not None
+    assert len(result.bids) == 1
+    assert len(result.asks) == 1
+
+
+def test_depth_transform_feeds_nonzero_imbalance_to_analyzer(consumer):
+    """Regression test for #181: a non-symmetric real Binance depth payload,
+    once transformed by `_transform_depth_data`, must produce a non-empty
+    order book that yields non-zero imbalance/net_pressure from
+    `DepthAnalyzer.analyze_depth`. Prior to the fix this was always
+    imbalance_percent == 0.0 / net_pressure == 0.0 because bids/asks were
+    silently empty for every real payload.
+    """
+    real_payload = {
+        "e": "depthUpdate",
+        "E": 1787622635217,
+        "s": "BTCUSDT",
+        "U": 410706805751,
+        "u": 410706808244,
+        # Deliberately non-symmetric book (bid volume >> ask volume).
+        "b": [["79667.70", "368.0138"], ["79667.60", "10.0"]],
+        "a": [["79686.20", "0.0714"], ["79686.30", "0.05"]],
+    }
+
+    depth_update = consumer._transform_depth_data(real_payload)
+    assert depth_update is not None
+
+    bids = [(float(b.price), float(b.quantity)) for b in depth_update.bids]
+    asks = [(float(a.price), float(a.quantity)) for a in depth_update.asks]
+
+    analyzer = DepthAnalyzer()
+    metrics = analyzer.analyze_depth("BTCUSDT", bids, asks)
+
+    assert metrics.imbalance_percent != 0.0
+    assert metrics.net_pressure != 0.0
 
 
 @pytest.mark.asyncio

@@ -529,18 +529,23 @@ class NATSConsumer:
             # Extract symbol from the data if available, otherwise use a default
             symbol = data.get("s", "BTCUSDT")  # Default fallback
 
-            # Transform bids and asks from arrays to DepthLevel objects
+            # Transform bids and asks from arrays to DepthLevel objects.
+            # Live Binance Futures diff-depth WebSocket messages use the short
+            # keys "b"/"a" (see depthUpdate payload). "bids"/"asks" are kept as
+            # a defensive fallback only, in case a differently-shaped message
+            # source is ever used (e.g. REST snapshot format).
+            raw_bids = data.get("b", data.get("bids", []))
+            raw_asks = data.get("a", data.get("asks", []))
+
             bids = []
-            if "bids" in data:
-                for bid in data["bids"]:
-                    if len(bid) >= 2:
-                        bids.append(DepthLevel(price=bid[0], quantity=bid[1]))
+            for bid in raw_bids:
+                if len(bid) >= 2:
+                    bids.append(DepthLevel(price=bid[0], quantity=bid[1]))
 
             asks = []
-            if "asks" in data:
-                for ask in data["asks"]:
-                    if len(ask) >= 2:
-                        asks.append(DepthLevel(price=ask[0], quantity=ask[1]))
+            for ask in raw_asks:
+                if len(ask) >= 2:
+                    asks.append(DepthLevel(price=ask[0], quantity=ask[1]))
 
             return DepthUpdate(
                 symbol=symbol,
