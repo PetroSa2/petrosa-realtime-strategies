@@ -30,13 +30,21 @@ import socket
 import subprocess
 import time
 import uuid
+from unittest.mock import patch
 
 import pytest
 
 from strategies.core.consumer import NATSConsumer
 from strategies.core.publisher import TradeOrderPublisher
 
-pytestmark = pytest.mark.integration
+# NOTE: no module-level `pytestmark = pytest.mark.integration` here on
+# purpose. Only the two real-broker tests at the bottom of this file need
+# Docker and are marked individually; the helper-level tests above them
+# (docker-availability check, port-wait helpers, _NatsContainer's docker CLI
+# invocations) are pure unit tests with subprocess/socket mocked out, so they
+# always run -- including in CI, where Docker is unavailable and the two
+# integration tests self-skip. This keeps real coverage of this file's own
+# logic (not just the skip guard) regardless of Docker availability.
 
 _DOCKER_IMAGE = "nats:2-alpine"
 
@@ -155,6 +163,172 @@ def nats_container():
         container.remove()
 
 
+# ---------------------------------------------------------------------------
+# Unit tests for the helpers above: no Docker, no real broker -- always run.
+# ---------------------------------------------------------------------------
+
+
+def test_docker_usable_false_when_binary_missing():
+    with patch("shutil.which", return_value=None):
+        assert _docker_usable() is False
+
+
+def test_docker_usable_false_when_daemon_unreachable():
+    with (
+        patch("shutil.which", return_value="/usr/bin/docker"),
+        patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, ["docker", "info"]),
+        ),
+    ):
+        assert _docker_usable() is False
+
+
+def test_docker_usable_true_when_binary_and_daemon_ok():
+    with (
+        patch("shutil.which", return_value="/usr/bin/docker"),
+        patch("subprocess.run") as mock_run,
+    ):
+        assert _docker_usable() is True
+    mock_run.assert_called_once()
+    assert mock_run.call_args.kwargs["check"] is True
+
+
+def test_free_port_returns_a_bindable_port():
+    port = _free_port()
+    assert 1 <= port <= 65535
+    # The port must be free immediately after release -- rebind to confirm.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", port))
+
+
+def test_wait_for_port_returns_once_listening():
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        result = _wait_for_port(port, timeout=2.0)  # must not raise
+        assert result is None
+    finally:
+        listener.close()
+
+
+def test_wait_for_port_raises_timeout_when_never_open():
+    # Reserve a free port, then release it immediately -- nothing listens.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        closed_port = s.getsockname()[1]
+
+    with pytest.raises(TimeoutError) as exc_info:
+        _wait_for_port(closed_port, timeout=0.5)
+    assert str(closed_port) in str(exc_info.value)
+
+
+def test_wait_for_port_closed_returns_once_port_closes():
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    listener.close()
+
+    result = _wait_for_port_closed(port, timeout=2.0)  # must not raise
+    assert result is None
+
+
+def test_wait_for_port_closed_raises_timeout_when_still_open():
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        with pytest.raises(TimeoutError) as exc_info:
+            _wait_for_port_closed(port, timeout=0.5)
+        assert str(port) in str(exc_info.value)
+    finally:
+        listener.close()
+
+
+def test_nats_container_start_invokes_docker_run_and_waits_for_port():
+    with (
+        patch("subprocess.run") as mock_run,
+        patch(f"{__name__}._wait_for_port") as mock_wait,
+    ):
+        container = _NatsContainer()
+        container.start()
+
+    args = mock_run.call_args.args[0]
+    assert args[:3] == ["docker", "run", "-d"]
+    assert "--rm" not in args
+    assert container.name in args
+    assert f"{container.port}:4222" in args
+    assert args[-1] == _DOCKER_IMAGE
+    mock_run.assert_called_once_with(args, check=True, capture_output=True)
+    mock_wait.assert_called_once_with(container.port)
+
+
+def test_nats_container_stop_invokes_docker_stop_and_waits_for_close():
+    with (
+        patch("subprocess.run") as mock_run,
+        patch(f"{__name__}._wait_for_port_closed") as mock_wait_closed,
+    ):
+        container = _NatsContainer()
+        container.stop()
+
+    mock_run.assert_called_once_with(
+        ["docker", "stop", "-t", "0", container.name], capture_output=True
+    )
+    mock_wait_closed.assert_called_once_with(container.port)
+
+
+def test_nats_container_restart_invokes_docker_start_and_waits_for_port():
+    with (
+        patch("subprocess.run") as mock_run,
+        patch(f"{__name__}._wait_for_port") as mock_wait,
+    ):
+        container = _NatsContainer()
+        container.restart()
+
+    mock_run.assert_called_once_with(
+        ["docker", "start", container.name], check=True, capture_output=True
+    )
+    mock_wait.assert_called_once_with(container.port)
+
+
+def test_nats_container_remove_invokes_docker_rm_f():
+    with patch("subprocess.run") as mock_run:
+        container = _NatsContainer()
+        container.remove()
+
+    mock_run.assert_called_once_with(
+        ["docker", "rm", "-f", container.name], capture_output=True
+    )
+
+
+def test_nats_container_url_property():
+    with patch(f"{__name__}._free_port", return_value=12345):
+        container = _NatsContainer()
+    assert container.url == "nats://127.0.0.1:12345"
+
+
+def test_nats_container_fixture_skips_when_docker_unavailable():
+    # `nats_container.__wrapped__` is the plain generator function pytest's
+    # @pytest.fixture decorator wraps (functools.wraps-preserved); calling it
+    # directly exercises the skip branch without needing the full fixture
+    # machinery.
+    unwrapped = nats_container.__wrapped__  # type: ignore[attr-defined]
+    with patch(f"{__name__}.DOCKER_AVAILABLE", False):
+        with pytest.raises(pytest.skip.Exception) as exc_info:
+            next(unwrapped())
+    assert SKIP_REASON in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Real Docker + real broker integration tests (self-skip without Docker).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_consumer_reconnects_after_real_broker_restart(nats_container):
     """AC6: kill the real broker, restart it, confirm the consumer reconnects
