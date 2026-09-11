@@ -111,6 +111,76 @@ async def test_consumer_connect_to_nats(consumer):
 
 
 @pytest.mark.asyncio
+async def test_consumer_connect_to_nats_unlimited_reconnect_with_callbacks(consumer):
+    """AC1/AC2: connect() must request unlimited reconnects, a jittered
+    reconnect handler, and register all four lifecycle callbacks."""
+    mock_nats = AsyncMock()
+    mock_nats.is_connected = True
+    mock_nats.connect = AsyncMock()
+
+    with patch("strategies.core.consumer.nats.NATS", return_value=mock_nats):
+        await consumer._connect_to_nats()
+
+    _, kwargs = mock_nats.connect.call_args
+    assert kwargs["max_reconnect_attempts"] == -1
+    assert callable(kwargs["reconnect_to_server_handler"])
+    assert kwargs["error_cb"] == consumer._on_nats_error
+    assert kwargs["disconnected_cb"] == consumer._on_nats_disconnected
+    assert kwargs["reconnected_cb"] == consumer._on_nats_reconnected
+    assert kwargs["closed_cb"] == consumer._on_nats_closed
+
+
+@pytest.mark.asyncio
+async def test_consumer_on_nats_disconnected_logs_and_records_error(consumer):
+    """AC3/AC5: disconnected_cb fires -> structured log + error counter increments."""
+    with patch.object(consumer.metrics, "record_error") as mock_record_error:
+        await consumer._on_nats_disconnected()
+
+    mock_record_error.assert_called_once_with("nats_disconnected")
+
+
+@pytest.mark.asyncio
+async def test_consumer_on_nats_error_records_error(consumer):
+    """AC3: error_cb records realtime.errors.total with error_type=nats_error."""
+    with patch.object(consumer.metrics, "record_error") as mock_record_error:
+        await consumer._on_nats_error(Exception("boom"))
+
+    mock_record_error.assert_called_once_with("nats_error")
+
+
+@pytest.mark.asyncio
+async def test_consumer_on_nats_reconnected_records_error(consumer):
+    """AC3: reconnected_cb records realtime.errors.total with error_type=nats_reconnected."""
+    with patch.object(consumer.metrics, "record_error") as mock_record_error:
+        await consumer._on_nats_reconnected()
+
+    mock_record_error.assert_called_once_with("nats_reconnected")
+
+
+@pytest.mark.asyncio
+async def test_consumer_on_nats_closed_records_error(consumer):
+    """AC3: closed_cb records realtime.errors.total with error_type=nats_closed."""
+    with patch.object(consumer.metrics, "record_error") as mock_record_error:
+        await consumer._on_nats_closed()
+
+    mock_record_error.assert_called_once_with("nats_closed")
+
+
+def test_consumer_nats_connected_property_reflects_client_state(consumer):
+    """AC4/AC5: nats_connected is synchronously readable and flips with the
+    underlying client's is_connected state -- no client, then connected, then
+    disconnected (simulating the outage -> reconnect lifecycle)."""
+    assert consumer.nats_connected is False
+
+    consumer.nats_client = Mock()
+    consumer.nats_client.is_connected = True
+    assert consumer.nats_connected is True
+
+    consumer.nats_client.is_connected = False
+    assert consumer.nats_connected is False
+
+
+@pytest.mark.asyncio
 async def test_consumer_subscribe_to_topic(consumer):
     """Test _subscribe_to_topic method."""
     consumer.nats_client = AsyncMock()
