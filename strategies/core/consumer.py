@@ -621,14 +621,23 @@ class NATSConsumer:
             raw_bids = data.get("b", data.get("bids", []))
             raw_asks = data.get("a", data.get("asks", []))
 
+            # Per #188: quantity "0" on a diff-depth (@depth) stream means
+            # "delete this level" -- it is not a real resting order and must
+            # never reach OrderBookTracker, which would otherwise count the
+            # delete-then-restore sequence as an iceberg refill. The
+            # currently-configured stream (@depth20, a sorted partial-book
+            # snapshot -- see socket-client's BINANCE_STREAMS) should not
+            # legitimately emit zero-quantity levels, but this filter is kept
+            # unconditionally as defense-in-depth against that assumption
+            # ever becoming false (upstream stream change, malformed data).
             bids = []
             for bid in raw_bids:
-                if len(bid) >= 2:
+                if len(bid) >= 2 and float(bid[1]) > 0:
                     bids.append(DepthLevel(price=bid[0], quantity=bid[1]))
 
             asks = []
             for ask in raw_asks:
-                if len(ask) >= 2:
+                if len(ask) >= 2 and float(ask[1]) > 0:
                     asks.append(DepthLevel(price=ask[0], quantity=ask[1]))
 
             return DepthUpdate(
@@ -643,6 +652,50 @@ class NATSConsumer:
         except Exception as e:
             self.logger.error("Failed to transform depth data", error=str(e), data=data)
             return None
+
+    def _validate_depth_snapshot(
+        self, bids: list[tuple[float, float]], asks: list[tuple[float, float]]
+    ) -> list[str]:
+        """
+        Validate order-book snapshot invariants (per #188 AC2/AC5).
+
+        The consumer treats depth data as a maintained, sorted snapshot --
+        which the currently-configured `@depth20` partial-book stream (see
+        `petrosa-socket-client`'s `BINANCE_STREAMS`) provides. This check
+        makes that assumption explicit and observable rather than implicit
+        and silent:
+
+        - No zero/negative-quantity levels (would mean a diff-stream delete).
+        - Bids sorted descending by price, asks sorted ascending by price.
+        - The book is not crossed (best_bid < best_ask).
+
+        Returns a list of violation codes; an empty list means the snapshot
+        satisfied every invariant. Violations are counted via
+        `realtime.errors.total{error_type="malformed_depth"}` by the caller --
+        this is a detection mechanism, not an enforcement one, so a future
+        upstream change (e.g. a switch to the diff `@depth` stream) is caught
+        immediately instead of silently corrupting downstream signals.
+        """
+        violations: list[str] = []
+
+        if any(qty <= 0 for _, qty in bids):
+            violations.append("zero_or_negative_bid_quantity")
+        if any(qty <= 0 for _, qty in asks):
+            violations.append("zero_or_negative_ask_quantity")
+
+        if len(bids) > 1 and any(
+            bids[i][0] < bids[i + 1][0] for i in range(len(bids) - 1)
+        ):
+            violations.append("bids_not_sorted_descending")
+        if len(asks) > 1 and any(
+            asks[i][0] > asks[i + 1][0] for i in range(len(asks) - 1)
+        ):
+            violations.append("asks_not_sorted_ascending")
+
+        if bids and asks and bids[0][0] >= asks[0][0]:
+            violations.append("book_crossed_best_bid_gte_best_ask")
+
+        return violations
 
     def _transform_trade_data(self, data: dict[str, Any]) -> TradeData | None:
         """Transform trade data to TradeData model."""
@@ -751,6 +804,22 @@ class NATSConsumer:
                 # Convert DepthLevel objects to tuples for analyzer
                 bids = [(float(b.price), float(b.quantity)) for b in depth_data.bids]
                 asks = [(float(a.price), float(a.quantity)) for a in depth_data.asks]
+
+                # Per #188 AC2/AC5: make the "sorted snapshot" contract explicit
+                # rather than silently trusting whatever arrived. This does not
+                # block processing (the configured @depth20 stream is expected
+                # to satisfy these invariants) -- it is a detection mechanism so
+                # a future upstream change (e.g. a switch to the diff @depth
+                # stream) is caught via the metric immediately instead of
+                # silently corrupting signals.
+                violations = self._validate_depth_snapshot(bids, asks)
+                if violations:
+                    self.metrics.record_error("malformed_depth")
+                    self.logger.warning(
+                        "Malformed depth snapshot detected",
+                        symbol=symbol,
+                        violations=violations,
+                    )
 
                 # Analyze and store metrics
                 metrics = self.depth_analyzer.analyze_depth(symbol, bids, asks)

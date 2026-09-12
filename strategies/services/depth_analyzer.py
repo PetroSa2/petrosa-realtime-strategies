@@ -64,6 +64,11 @@ class DepthMetrics:
     strongest_bid_level: tuple[float, float] | None  # (price, volume)
     strongest_ask_level: tuple[float, float] | None
 
+    # Book Validity (per #188 AC4): False when best_ask <= best_bid (a
+    # crossed or inverted book, which is never legitimate). When False,
+    # spread_abs/spread_bps/mid_price are zeroed rather than negative.
+    book_valid: bool = True
+
 
 @dataclass
 class MarketPressureHistory:
@@ -186,9 +191,25 @@ class DepthAnalyzer:
         # Spread metrics
         best_bid = bids[0][0] if bids else 0.0
         best_ask = asks[0][0] if asks else 0.0
-        spread_abs = best_ask - best_bid if (best_bid and best_ask) else 0.0
-        mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0.0
+        # Per #188 AC4: a crossed/inverted book (best_ask <= best_bid) is
+        # never legitimate. Flag it via book_valid and zero the derived
+        # spread fields instead of silently emitting a negative spread_bps.
+        book_valid = not (best_bid and best_ask and best_ask <= best_bid)
+        spread_abs = (
+            best_ask - best_bid if (best_bid and best_ask and book_valid) else 0.0
+        )
+        mid_price = (
+            (best_bid + best_ask) / 2 if (best_bid and best_ask and book_valid) else 0.0
+        )
         spread_bps = (spread_abs / mid_price * 10000) if mid_price > 0 else 0.0
+
+        if not book_valid:
+            logger.warning(
+                "Crossed/inverted order book detected: symbol=%s best_bid=%s best_ask=%s",
+                symbol,
+                best_bid,
+                best_ask,
+            )
 
         # Volume-weighted prices
         vwap_bid = self._calculate_vwap(bids) if bids else 0.0
@@ -231,6 +252,7 @@ class DepthAnalyzer:
             total_levels=total_levels,
             strongest_bid_level=strongest_bid,
             strongest_ask_level=strongest_ask,
+            book_valid=book_valid,
         )
 
         # Store current metrics
