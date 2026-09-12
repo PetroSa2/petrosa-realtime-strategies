@@ -34,14 +34,18 @@ MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "petrosa")
 MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 
 # Strategy Configuration
+# NOTE (#197): orderbook_skew/trade_momentum/ticker_velocity have full parameter
+# schemas (strategies/services/config_manager.py) but zero implementing classes —
+# strategies/core/consumer.py never instantiates them. Defaulted to disabled until
+# an implementation exists so "enabled" config doesn't silently mean "does nothing".
 STRATEGY_ENABLED_ORDERBOOK_SKEW = (
-    os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "true").lower() == "true"
+    os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "false").lower() == "true"
 )
 STRATEGY_ENABLED_TRADE_MOMENTUM = (
-    os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "true").lower() == "true"
+    os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "false").lower() == "true"
 )
 STRATEGY_ENABLED_TICKER_VELOCITY = (
-    os.getenv("STRATEGY_ENABLED_TICKER_VELOCITY", "true").lower() == "true"
+    os.getenv("STRATEGY_ENABLED_TICKER_VELOCITY", "false").lower() == "true"
 )
 
 # Market Logic Strategies (from QTZD adaptation)

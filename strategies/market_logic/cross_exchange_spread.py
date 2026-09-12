@@ -122,12 +122,15 @@ class CrossExchangeSpreadStrategy:
         symbol = market_data.symbol
         current_time = time.time()
 
-        # Extract price from market data
+        # Extract price from market data.
+        # NOTE (#197): TickerData/TradeData (strategies/models/market_data.py) expose
+        # `last_price`/`price`, never Binance's raw `c`/`p` keys — this previously made
+        # the hasattr gate always False and price never populated.
         price = None
-        if market_data.is_ticker and hasattr(market_data.data, "c"):
-            price = float(market_data.data.c)  # Close price from ticker
-        elif market_data.is_trade and hasattr(market_data.data, "p"):
-            price = float(market_data.data.p)  # Trade price
+        if market_data.is_ticker and hasattr(market_data.data, "last_price"):
+            price = float(market_data.data.last_price)  # Close price from ticker
+        elif market_data.is_trade and hasattr(market_data.data, "price"):
+            price = float(market_data.data.price)  # Trade price
 
         if price:
             cache_key = f"binance_{symbol}"
