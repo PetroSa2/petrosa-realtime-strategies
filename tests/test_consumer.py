@@ -872,3 +872,37 @@ async def test_consumer_get_health_status_with_subscription(consumer):
     assert "nats_connected" in status
     assert "subscription_active" in status
     assert status["healthy"] is True
+
+
+@pytest.mark.asyncio
+async def test_consumer_windowed_error_rate_replaces_lifetime_cliff(consumer):
+    """#186 AC4: a burst of past errors must not permanently fail health.
+
+    The old logic compared the lifetime `error_count` against a fixed
+    cliff (< 100), so a long-running consumer that had ever accumulated
+    100+ errors stayed unhealthy forever. The windowed tracker instead
+    only counts errors within a recent time window.
+    """
+    consumer.is_running = True
+    consumer.nats_client = AsyncMock()
+    consumer.nats_client.is_connected = True
+    consumer.subscription = AsyncMock()
+
+    # Simulate a large burst of errors that all happened well in the past.
+    old_time = consumer.error_tracker._timestamps
+    for _ in range(150):
+        consumer.error_count += 1
+        old_time.append(0.0)  # epoch: guaranteed to be outside any window
+
+    status = consumer.get_health_status()
+    assert status["error_count"] == 150
+    assert status["recent_error_count"] == 0
+    assert status["healthy"] is True
+
+    # But a burst of *recent* errors still trips the windowed check.
+    for _ in range(consumer.error_tracker.max_errors_in_window):
+        consumer.error_tracker.record_error()
+
+    status = consumer.get_health_status()
+    assert status["recent_error_count"] >= consumer.error_tracker.max_errors_in_window
+    assert status["healthy"] is False

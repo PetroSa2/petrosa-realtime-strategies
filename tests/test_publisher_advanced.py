@@ -608,6 +608,32 @@ async def test_get_health_status_unhealthy(publisher):
 
 
 @pytest.mark.asyncio
+async def test_publisher_windowed_error_rate_replaces_lifetime_cliff(publisher):
+    """#186 AC4: a burst of past errors must not permanently fail health."""
+    publisher.is_running = True
+    publisher.nats_client = AsyncMock()
+    publisher.nats_client.is_connected = True
+
+    # Simulate a large burst of errors that all happened well in the past.
+    for _ in range(150):
+        publisher.error_count += 1
+        publisher.error_tracker._timestamps.append(0.0)  # epoch: outside any window
+
+    status = publisher.get_health_status()
+    assert status["error_count"] == 150
+    assert status["recent_error_count"] == 0
+    assert status["healthy"] is True
+
+    # A burst of *recent* errors still trips the windowed check.
+    for _ in range(publisher.error_tracker.max_errors_in_window):
+        publisher.error_tracker.record_error()
+
+    status = publisher.get_health_status()
+    assert status["recent_error_count"] >= publisher.error_tracker.max_errors_in_window
+    assert status["healthy"] is False
+
+
+@pytest.mark.asyncio
 async def test_get_queue_status(publisher):
     """Test get_queue_status method - covers line 481."""
     # Add some orders to queue
