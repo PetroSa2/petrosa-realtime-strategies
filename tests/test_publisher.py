@@ -54,6 +54,78 @@ def publisher(mock_nats_client):
 
 
 @pytest.mark.asyncio
+async def test_publisher_connect_to_nats_unlimited_reconnect_with_callbacks():
+    """AC1/AC2: connect() must request unlimited reconnects, a jittered
+    reconnect handler, and register all four lifecycle callbacks."""
+    pub = TradeOrderPublisher(nats_url="nats://test:4222", topic="intent.trading.*")
+    mock_nats = AsyncMock()
+    mock_nats.is_connected = True
+    mock_nats.connect = AsyncMock()
+
+    with patch("strategies.core.publisher.nats.NATS", return_value=mock_nats):
+        await pub._connect_to_nats()
+
+    _, kwargs = mock_nats.connect.call_args
+    assert kwargs["max_reconnect_attempts"] == -1
+    assert callable(kwargs["reconnect_to_server_handler"])
+    assert kwargs["error_cb"] == pub._on_nats_error
+    assert kwargs["disconnected_cb"] == pub._on_nats_disconnected
+    assert kwargs["reconnected_cb"] == pub._on_nats_reconnected
+    assert kwargs["closed_cb"] == pub._on_nats_closed
+
+
+@pytest.mark.asyncio
+async def test_publisher_on_nats_disconnected_logs_and_records_error(publisher):
+    """AC3/AC5: disconnected_cb fires -> structured log + error counter increments."""
+    with patch.object(publisher.metrics, "record_error") as mock_record_error:
+        await publisher._on_nats_disconnected()
+
+    mock_record_error.assert_called_once_with("nats_disconnected")
+
+
+@pytest.mark.asyncio
+async def test_publisher_on_nats_error_records_error(publisher):
+    """AC3: error_cb records realtime.errors.total with error_type=nats_error."""
+    with patch.object(publisher.metrics, "record_error") as mock_record_error:
+        await publisher._on_nats_error(Exception("boom"))
+
+    mock_record_error.assert_called_once_with("nats_error")
+
+
+@pytest.mark.asyncio
+async def test_publisher_on_nats_reconnected_records_error(publisher):
+    """AC3: reconnected_cb records realtime.errors.total with error_type=nats_reconnected."""
+    with patch.object(publisher.metrics, "record_error") as mock_record_error:
+        await publisher._on_nats_reconnected()
+
+    mock_record_error.assert_called_once_with("nats_reconnected")
+
+
+@pytest.mark.asyncio
+async def test_publisher_on_nats_closed_records_error(publisher):
+    """AC3: closed_cb records realtime.errors.total with error_type=nats_closed."""
+    with patch.object(publisher.metrics, "record_error") as mock_record_error:
+        await publisher._on_nats_closed()
+
+    mock_record_error.assert_called_once_with("nats_closed")
+
+
+def test_publisher_nats_connected_property_reflects_client_state():
+    """AC4/AC5: nats_connected is synchronously readable and flips with the
+    underlying client's is_connected state -- no client, then connected, then
+    disconnected (simulating the outage -> reconnect lifecycle)."""
+    pub = TradeOrderPublisher(nats_url="nats://test:4222", topic="intent.trading.*")
+    assert pub.nats_connected is False
+
+    pub.nats_client = Mock()
+    pub.nats_client.is_connected = True
+    assert pub.nats_connected is True
+
+    pub.nats_client.is_connected = False
+    assert pub.nats_connected is False
+
+
+@pytest.mark.asyncio
 async def test_publish_signal_success(publisher, mock_nats_client):
     """Test successful signal publishing."""
     # Create a test signal

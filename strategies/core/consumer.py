@@ -47,6 +47,7 @@ from strategies.utils.metrics import (
     RealtimeStrategyMetrics,
     initialize_metrics,
 )
+from strategies.utils.nats_reconnect import make_reconnect_handler
 
 
 # OpenTelemetry tracer - lazy-loaded to ensure it uses the current provider
@@ -254,9 +255,14 @@ class NATSConsumer:
             await self.nats_client.connect(
                 self.nats_url,
                 name=self.consumer_name,
-                reconnect_time_wait=1,
-                max_reconnect_attempts=10,
+                reconnect_time_wait=2,
+                max_reconnect_attempts=-1,  # unlimited: never give up permanently
                 connect_timeout=10,
+                reconnect_to_server_handler=make_reconnect_handler(),
+                error_cb=self._on_nats_error,
+                disconnected_cb=self._on_nats_disconnected,
+                reconnected_cb=self._on_nats_reconnected,
+                closed_cb=self._on_nats_closed,
             )
             self.logger.info(
                 "Connected to NATS server",
@@ -268,6 +274,56 @@ class NATSConsumer:
         except Exception as e:
             self.logger.error("Failed to connect to NATS", error=str(e))
             raise
+
+    async def _on_nats_error(self, exception: Exception) -> None:
+        """Handle NATS client errors (e.g. slow-consumer drops, protocol errors)."""
+        self.logger.warning(
+            "NATS client error",
+            event_type="nats_error",
+            error=str(exception),
+            consumer_name=self.consumer_name,
+        )
+        self.metrics.record_error("nats_error")
+
+    async def _on_nats_disconnected(self) -> None:
+        """Handle NATS disconnection (client will keep retrying indefinitely)."""
+        self.logger.warning(
+            "NATS client disconnected",
+            event_type="nats_disconnected",
+            nats_url=self.nats_url,
+            consumer_name=self.consumer_name,
+        )
+        self.metrics.record_error("nats_disconnected")
+
+    async def _on_nats_reconnected(self) -> None:
+        """Handle successful NATS reconnection after an outage."""
+        self.logger.warning(
+            "NATS client reconnected",
+            event_type="nats_reconnected",
+            nats_url=self.nats_url,
+            consumer_name=self.consumer_name,
+        )
+        self.metrics.record_error("nats_reconnected")
+
+    async def _on_nats_closed(self) -> None:
+        """Handle NATS connection being permanently closed."""
+        self.logger.warning(
+            "NATS connection closed permanently",
+            event_type="nats_closed",
+            nats_url=self.nats_url,
+            consumer_name=self.consumer_name,
+        )
+        self.metrics.record_error("nats_closed")
+
+    @property
+    def nats_connected(self) -> bool:
+        """True connection-state, synchronously readable (no await required).
+
+        Reflects the underlying ``nats_client.is_connected`` value so the
+        health server (and any other caller) can poll live connection state
+        without needing to await a coroutine.
+        """
+        return bool(self.nats_client and self.nats_client.is_connected)
 
     async def _subscribe_to_topic(self) -> None:
         """Subscribe to the specified topic."""
@@ -982,8 +1038,7 @@ class NATSConsumer:
         """Get health status for the consumer."""
         is_healthy = (
             self.is_running
-            and self.nats_client
-            and self.nats_client.is_connected
+            and self.nats_connected
             and self.subscription
             and self.error_count < 100  # Allow some errors
         )
@@ -991,9 +1046,7 @@ class NATSConsumer:
         return {
             "healthy": is_healthy,
             "is_running": self.is_running,
-            "nats_connected": (
-                self.nats_client.is_connected if self.nats_client else False
-            ),
+            "nats_connected": self.nats_connected,
             "subscription_active": self.subscription is not None,
             "message_count": self.message_count,
             "error_count": self.error_count,

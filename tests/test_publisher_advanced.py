@@ -74,11 +74,20 @@ def test_publisher_batch_configuration(publisher):
 
 @pytest.mark.asyncio
 async def test_publisher_start_initializes_state(publisher):
-    """Test start() initializes running state - covers lines 74-97."""
+    """Test start() initializes running state - covers lines 74-97.
+
+    NOTE: must patch `nats.NATS` (the class our code instantiates), not the
+    unrelated module-level `nats.connect` free function -- patching the
+    latter mocks nothing and this test used to "pass" only by accident,
+    racing a real (bounded) socket-connect timeout. With #185's
+    max_reconnect_attempts=-1, an unmocked real connect attempt never gives
+    up and hangs the suite forever, so this mock is now load-bearing.
+    """
     mock_nats_client = AsyncMock()
     mock_nats_client.is_connected = True
+    mock_nats_client.connect = AsyncMock()
 
-    with patch("nats.connect", return_value=mock_nats_client):
+    with patch("strategies.core.publisher.nats.NATS", return_value=mock_nats_client):
         try:
             await publisher.start()
 
@@ -91,15 +100,19 @@ async def test_publisher_start_initializes_state(publisher):
 
 @pytest.mark.asyncio
 async def test_publisher_start_connection_error():
-    """Test start() handles connection errors - covers lines 95-97."""
+    """Test start() handles connection errors - covers lines 95-97.
+
+    See test_publisher_start_initializes_state docstring: must patch
+    `nats.NATS`, not `nats.connect`.
+    """
     publisher = TradeOrderPublisher(
         nats_url="nats://invalid:4222", topic="test.signals"
     )
 
-    with patch(
-        "strategies.core.publisher.nats.connect",
-        side_effect=Exception("Connection failed"),
-    ):
+    mock_nats_client = AsyncMock()
+    mock_nats_client.connect = AsyncMock(side_effect=Exception("Connection failed"))
+
+    with patch("strategies.core.publisher.nats.NATS", return_value=mock_nats_client):
         with pytest.raises(Exception):
             await publisher.start()
 
