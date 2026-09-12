@@ -42,6 +42,7 @@ from strategies.models.market_data import (
     TradeData,
 )
 from strategies.utils.circuit_breaker import CircuitBreaker
+from strategies.utils.error_window import WindowedErrorTracker
 from strategies.utils.metrics import (
     MetricsContext,
     RealtimeStrategyMetrics,
@@ -97,6 +98,7 @@ class NATSConsumer:
         self.shutdown_event = asyncio.Event()
         self.message_count = 0
         self.error_count = 0
+        self.error_tracker = WindowedErrorTracker()
         self.last_message_time = None
 
         # Performance metrics
@@ -353,6 +355,7 @@ class NATSConsumer:
         except Exception as e:
             self.logger.error("Error in message handler", error=str(e))
             self.error_count += 1
+            self.error_tracker.record_error()
 
     async def _processing_loop(self) -> None:
         """Main processing loop for consuming messages."""
@@ -373,6 +376,7 @@ class NATSConsumer:
                     error=str(e),
                 )
                 self.error_count += 1
+                self.error_tracker.record_error()
                 await asyncio.sleep(1)  # Back off on error
 
         self.logger.info(
@@ -515,6 +519,7 @@ class NATSConsumer:
                 message_data=message_data if message_data else None,
             )
             self.error_count += 1
+            self.error_tracker.record_error()
             self.metrics.record_error("message_processing")
 
     def _parse_market_data(
@@ -1040,7 +1045,7 @@ class NATSConsumer:
             self.is_running
             and self.nats_connected
             and self.subscription
-            and self.error_count < 100  # Allow some errors
+            and self.error_tracker.is_within_threshold
         )
 
         return {
@@ -1050,5 +1055,6 @@ class NATSConsumer:
             "subscription_active": self.subscription is not None,
             "message_count": self.message_count,
             "error_count": self.error_count,
+            "recent_error_count": self.error_tracker.count_in_window,
             "last_message_time": self.last_message_time,
         }

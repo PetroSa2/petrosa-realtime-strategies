@@ -244,7 +244,19 @@ class HealthServer:
             self.logger.error(f"Health server error: {e}")
 
     async def _get_health_status(self) -> dict[str, Any]:
-        """Get health status for liveness probe."""
+        """Get health status for the liveness probe (/healthz).
+
+        This endpoint is intentionally liveness-shaped: it must only fail
+        when the process itself is broken beyond recovery (the FastAPI
+        app / uvicorn server is not running), and must NEVER fail because
+        of a transient dependency outage such as a dropped NATS
+        connection. NATS/consumer/publisher dependency state is reported
+        via /ready instead (see `_get_readiness_status`), because failing
+        liveness on a dependency outage would cause Kubernetes to restart
+        an otherwise-healthy pod in a crash loop while it is waiting to
+        reconnect (see #185's reconnect-with-backoff logic), rather than
+        simply routing traffic away from it via readiness.
+        """
         try:
             # Update uptime
             if self.start_time:
@@ -252,7 +264,9 @@ class HealthServer:
             else:
                 uptime = 0
 
-            # Basic health checks - only check essential conditions
+            # Basic health checks - only check essential conditions.
+            # These are informational only; none of them (other than
+            # server_running) affect the liveness verdict below.
             health_checks = {
                 "server_running": self.is_running,
                 "uptime_seconds": uptime >= 0,  # Just check if uptime is valid
@@ -261,7 +275,9 @@ class HealthServer:
                 "cpu_usage": self._get_cpu_usage() >= 0,  # Just check if CPU is valid
             }
 
-            # Determine overall health - only check server running
+            # Determine overall health - liveness only fails if the server
+            # process itself is not running. Dependency outages (NATS down,
+            # subscription lost, etc.) must NOT fail liveness - see /ready.
             is_healthy = self.is_running
 
             status = {
@@ -286,26 +302,61 @@ class HealthServer:
             raise HTTPException(status_code=503, detail=f"Health check failed: {e}")
 
     async def _get_readiness_status(self) -> dict[str, Any]:
-        """Get readiness status for readiness probe."""
-        try:
-            # Get health status first
-            health_status = await self._get_health_status()
+        """Get readiness status for the readiness probe (/ready).
 
-            # Additional readiness checks
-            readiness_checks = {
-                "health_status": health_status["status"] == "healthy",
-                "configuration_loaded": True,  # Add more checks as needed
-                "dependencies_available": True,  # Add more checks as needed
+        Unlike /healthz (liveness, which only checks the process is
+        alive), this endpoint determines whether the pod can currently
+        serve traffic. It fails (503) whenever a NATS-backed dependency
+        is unavailable:
+
+        - the consumer's NATS connection is down, or its subscription is
+          gone
+        - the publisher's NATS connection is down
+
+        so Kubernetes routes traffic away from a pod that is alive but
+        disconnected while the client-level reconnect-with-backoff logic
+        (see #185) does its job in the background. MongoDB is
+        intentionally NOT part of this check: it is a control-plane
+        dependency for configuration, not a trading data-plane one, and
+        must not gate rotation.
+
+        During startup (see main.py), the consumer/publisher are wired
+        onto this health server only after they connect to NATS, so a
+        `None` consumer/publisher here correctly means "not ready yet"
+        rather than raising an error.
+        """
+        try:
+            readiness_checks: dict[str, bool] = {
+                "server_running": self.is_running,
             }
 
-            # Determine readiness
+            if self.consumer is not None:
+                consumer_health = self.consumer.get_health_status()
+                readiness_checks["consumer_nats_connected"] = bool(
+                    consumer_health.get("nats_connected", False)
+                )
+                readiness_checks["consumer_subscribed"] = bool(
+                    consumer_health.get("subscription_active", False)
+                )
+            else:
+                readiness_checks["consumer_nats_connected"] = False
+                readiness_checks["consumer_subscribed"] = False
+
+            if self.publisher is not None:
+                publisher_health = self.publisher.get_health_status()
+                readiness_checks["publisher_nats_connected"] = bool(
+                    publisher_health.get("nats_connected", False)
+                )
+            else:
+                readiness_checks["publisher_nats_connected"] = False
+
+            # Determine readiness - every check above must pass.
             is_ready = all(readiness_checks.values())
 
             status = {
                 "ready": is_ready,
                 "timestamp": time.time(),
                 "checks": readiness_checks,
-                "health_status": health_status,
             }
 
             if not is_ready:
@@ -313,6 +364,8 @@ class HealthServer:
 
             return status
 
+        except HTTPException:
+            raise
         except Exception as e:
             self.logger.error(f"Readiness check failed: {e}")
             raise HTTPException(status_code=503, detail=f"Readiness check failed: {e}")

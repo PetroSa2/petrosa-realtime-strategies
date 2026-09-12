@@ -26,6 +26,7 @@ import constants
 from strategies.adapters.signal_adapter import transform_signal_for_tradeengine
 from strategies.models.orders import OrderResponse, TradeOrder
 from strategies.utils.circuit_breaker import CircuitBreaker
+from strategies.utils.error_window import WindowedErrorTracker
 from strategies.utils.metrics import initialize_metrics
 from strategies.utils.nats_reconnect import make_reconnect_handler
 
@@ -61,6 +62,7 @@ class TradeOrderPublisher:
         self.order_count = 0
         self.signal_count = 0
         self.error_count = 0
+        self.error_tracker = WindowedErrorTracker()
         self.last_order_time = None
 
         # Performance metrics
@@ -266,6 +268,7 @@ class TradeOrderPublisher:
             except Exception as e:
                 self.logger.error("Error in publishing loop", error=str(e))
                 self.error_count += 1
+                self.error_tracker.record_error()
                 await asyncio.sleep(1)  # Back off on error
 
         self.logger.info("Order publishing loop stopped")
@@ -311,6 +314,7 @@ class TradeOrderPublisher:
                 order_count=len(orders),
             )
             self.error_count += 1
+            self.error_tracker.record_error()
 
     async def publish_order(self, order: TradeOrder) -> OrderResponse:
         """Publish a single trade order."""
@@ -353,6 +357,7 @@ class TradeOrderPublisher:
                 order_id=order.order_id,
             )
             self.error_count += 1
+            self.error_tracker.record_error()
 
             # Create error response
             return OrderResponse(
@@ -438,6 +443,7 @@ class TradeOrderPublisher:
                 order_id=order.order_id,
             )
             self.error_count += 1
+            self.error_tracker.record_error()
 
             # Create error response
             return OrderResponse(
@@ -512,6 +518,7 @@ class TradeOrderPublisher:
                 ),
             )
             self.error_count += 1
+            self.error_tracker.record_error()
             raise
 
     def _update_publishing_metrics(self, publishing_time: float) -> None:
@@ -551,7 +558,7 @@ class TradeOrderPublisher:
         is_healthy = (
             self.is_running
             and self.nats_connected
-            and self.error_count < 100  # Allow some errors
+            and self.error_tracker.is_within_threshold
         )
 
         return {
@@ -560,6 +567,7 @@ class TradeOrderPublisher:
             "nats_connected": self.nats_connected,
             "order_count": self.order_count,
             "error_count": self.error_count,
+            "recent_error_count": self.error_tracker.count_in_window,
             "last_order_time": self.last_order_time,
             "queue_size": self.order_queue.qsize(),
         }

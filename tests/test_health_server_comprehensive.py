@@ -20,11 +20,20 @@ def mock_components():
     """Create mock components for health server."""
     consumer = MagicMock()
     consumer.get_metrics.return_value = {"messages_processed": 100}
-    consumer.get_health_status.return_value = {"status": "healthy"}
+    consumer.get_health_status.return_value = {
+        "status": "healthy",
+        "healthy": True,
+        "nats_connected": True,
+        "subscription_active": True,
+    }
 
     publisher = MagicMock()
     publisher.get_metrics.return_value = {"messages_published": 50}
-    publisher.get_health_status.return_value = {"status": "healthy"}
+    publisher.get_health_status.return_value = {
+        "status": "healthy",
+        "healthy": True,
+        "nats_connected": True,
+    }
 
     heartbeat_manager = MagicMock()
     heartbeat_manager.get_heartbeat_status.return_value = {"status": "active"}
@@ -152,7 +161,7 @@ def test_healthz_endpoint_unhealthy(client):
 
 
 def test_ready_endpoint_ready(client):
-    """Test ready endpoint when ready."""
+    """Test ready endpoint when ready (server running, NATS connected/subscribed)."""
     health_server = (
         client.app.state.health_server if hasattr(client.app, "state") else None
     )
@@ -165,11 +174,13 @@ def test_ready_endpoint_ready(client):
     data = response.json()
     assert data["ready"] is True
     assert "checks" in data
-    assert "health_status" in data
+    assert data["checks"]["consumer_nats_connected"] is True
+    assert data["checks"]["consumer_subscribed"] is True
+    assert data["checks"]["publisher_nats_connected"] is True
 
 
 def test_ready_endpoint_not_ready(client):
-    """Test ready endpoint when not ready."""
+    """Test ready endpoint when not ready (server not running)."""
     health_server = (
         client.app.state.health_server if hasattr(client.app, "state") else None
     )
@@ -178,6 +189,107 @@ def test_ready_endpoint_not_ready(client):
 
     response = client.get("/ready")
     assert response.status_code == 503
+
+
+def test_ready_endpoint_consumer_nats_disconnected(client):
+    """AC1/AC5 (#186): /ready must be 503 when the consumer's NATS is down."""
+    health_server = (
+        client.app.state.health_server if hasattr(client.app, "state") else None
+    )
+    health_server.is_running = True
+    health_server.consumer.get_health_status.return_value = {
+        "healthy": False,
+        "nats_connected": False,
+        "subscription_active": True,
+    }
+
+    response = client.get("/ready")
+    assert response.status_code == 503
+    data = response.json()
+    assert data["detail"] == "Service not ready"
+
+
+def test_ready_endpoint_consumer_subscription_missing(client):
+    """AC1/AC5 (#186): /ready must be 503 when the consumer has no active subscription."""
+    health_server = (
+        client.app.state.health_server if hasattr(client.app, "state") else None
+    )
+    health_server.is_running = True
+    health_server.consumer.get_health_status.return_value = {
+        "healthy": False,
+        "nats_connected": True,
+        "subscription_active": False,
+    }
+
+    response = client.get("/ready")
+    assert response.status_code == 503
+
+
+def test_ready_endpoint_publisher_nats_disconnected(client):
+    """AC1/AC5 (#186): /ready must be 503 when the publisher's NATS is down."""
+    health_server = (
+        client.app.state.health_server if hasattr(client.app, "state") else None
+    )
+    health_server.is_running = True
+    health_server.publisher.get_health_status.return_value = {
+        "healthy": False,
+        "nats_connected": False,
+    }
+
+    response = client.get("/ready")
+    assert response.status_code == 503
+
+
+def test_ready_endpoint_consumer_none_during_startup(client):
+    """AC1/#186 startup-ordering: consumer not wired yet -> not ready, no crash."""
+    health_server = (
+        client.app.state.health_server if hasattr(client.app, "state") else None
+    )
+    health_server.is_running = True
+    health_server.consumer = None
+
+    response = client.get("/ready")
+    assert response.status_code == 503
+
+
+def test_ready_endpoint_publisher_none_during_startup(client):
+    """AC1/#186 startup-ordering: publisher not wired yet -> not ready, no crash."""
+    health_server = (
+        client.app.state.health_server if hasattr(client.app, "state") else None
+    )
+    health_server.is_running = True
+    health_server.publisher = None
+
+    response = client.get("/ready")
+    assert response.status_code == 503
+
+
+def test_healthz_endpoint_stays_healthy_during_nats_outage(client):
+    """AC2/AC5 (#186): /healthz must NOT fail on a transient NATS disconnect.
+
+    Liveness must stay independent from NATS dependency state so
+    Kubernetes doesn't restart an otherwise-alive pod that is merely
+    waiting to reconnect (see #185).
+    """
+    health_server = (
+        client.app.state.health_server if hasattr(client.app, "state") else None
+    )
+    health_server.is_running = True
+    health_server.start_time = time.time() - 10
+    health_server.consumer.get_health_status.return_value = {
+        "healthy": False,
+        "nats_connected": False,
+        "subscription_active": False,
+    }
+    health_server.publisher.get_health_status.return_value = {
+        "healthy": False,
+        "nats_connected": False,
+    }
+
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
 
 
 def test_metrics_endpoint(client):
