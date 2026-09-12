@@ -62,6 +62,16 @@ class CrossExchangeSpreadStrategy:
         self.arbitrage_opportunities_found = 0
         self.last_update_time = time.time()
 
+        # Shared HTTP session + rate-limited external fetch (#187):
+        # `_fetch_external_exchange_prices` previously opened a brand-new
+        # `aiohttp.ClientSession` and issued a live HTTP request on EVERY inbound
+        # market message. That is pure overhead on the hot path (and the egress is
+        # blocked by network policy in production), so the external fetch is now
+        # rate-limited to at most once per `min_signal_interval` and reuses a single
+        # lazily-created session across calls instead of opening one per message.
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._last_external_fetch_time: float = 0.0
+
         self.logger.info(
             "Cross-Exchange Spread Strategy initialized",
             spread_threshold=self.spread_threshold,
@@ -141,23 +151,52 @@ class CrossExchangeSpreadStrategy:
                 "symbol": symbol,
             }
 
+    def _get_session(self) -> aiohttp.ClientSession:
+        """Lazily create (or reuse) the shared HTTP session for external exchanges.
+
+        A single session is reused across calls instead of opening a new
+        `aiohttp.ClientSession` per inbound message (#187).
+        """
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5)
+            )
+        return self._session
+
+    async def close(self) -> None:
+        """Close the shared HTTP session, if one was ever created."""
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+
     async def _fetch_external_exchange_prices(self) -> None:
         """
         Fetch current prices from external exchanges.
 
         QTZD-style external data fetching with error handling.
-        """
-        try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as session:
-                tasks = []
-                for exchange in self.exchanges:
-                    if exchange != "binance":  # Binance comes from WebSocket
-                        tasks.append(self._fetch_exchange_price(session, exchange))
 
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
+        Rate-limited (#187): the previous implementation issued a live HTTP
+        request to every non-Binance exchange on EVERY inbound market message
+        (`process_market_data` is called per message). External spot prices do
+        not need sub-second freshness for a strategy whose own signal cooldown
+        (`min_signal_interval`, default 300s) is far coarser, so the fetch is
+        skipped unless at least `min_signal_interval` seconds have passed since
+        the last attempt. This also reuses a single shared `aiohttp.ClientSession`
+        (see `_get_session`) rather than constructing one per call.
+        """
+        now = time.time()
+        if (now - self._last_external_fetch_time) < self.min_signal_interval:
+            return
+        self._last_external_fetch_time = now
+
+        try:
+            session = self._get_session()
+            tasks = []
+            for exchange in self.exchanges:
+                if exchange != "binance":  # Binance comes from WebSocket
+                    tasks.append(self._fetch_exchange_price(session, exchange))
+
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
         except Exception as e:
             self.logger.error("Error fetching external exchange prices", error=str(e))

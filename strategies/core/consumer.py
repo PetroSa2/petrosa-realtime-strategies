@@ -224,6 +224,23 @@ class NATSConsumer:
         self.shutdown_event.set()
         self.is_running = False
 
+        # Close any strategy-owned HTTP sessions (#187: cross_exchange_spread
+        # now holds a shared aiohttp.ClientSession across the strategy's lifetime).
+        cross_exchange_strategy = self.market_logic_strategies.get(
+            "cross_exchange_spread"
+        )
+        if cross_exchange_strategy is not None and hasattr(
+            cross_exchange_strategy, "close"
+        ):
+            try:
+                await cross_exchange_strategy.close()
+            except Exception as e:
+                self.logger.warning(
+                    "Error closing cross_exchange_spread HTTP session",
+                    event_type="strategy_session_close_error",
+                    error=str(e),
+                )
+
         # Close subscription
         if self.subscription:
             await self.subscription.drain()
