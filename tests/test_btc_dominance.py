@@ -218,9 +218,8 @@ async def test_btc_dominance_price_history_cleanup():
     ]
 
     mdm = make_mdm("BTCUSDT")
-    # Code checks for 'c' attribute (Binance format for close price)
-    # Use object.__setattr__ to bypass Pydantic validation
-    object.__setattr__(mdm.data, "c", "52000.0")  # Ensure price is extracted
+    # #197 fix: real field is `last_price` (TickerData), not Binance's raw `c` key.
+    mdm.data.last_price = "52000.0"  # Ensure price is extracted
     strat._update_price_history(mdm)
 
     # Old entries should be removed (window_hours = 24, so cutoff is 25 hours ago)

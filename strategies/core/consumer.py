@@ -72,6 +72,7 @@ class NATSConsumer:
         publisher: TradeOrderPublisher,
         logger: structlog.BoundLogger | None = None,
         depth_analyzer=None,
+        config_manager=None,
     ):
         """Initialize the NATS consumer."""
         self.nats_url = nats_url
@@ -81,6 +82,11 @@ class NATSConsumer:
         self.publisher = publisher
         self.logger = logger or structlog.get_logger()
         self.depth_analyzer = depth_analyzer
+        # Per #197: wires StrategyConfigManager (MongoDB-backed runtime config) into
+        # the actual strategy construction/processing path. Previously this was only
+        # passed to the health server, so `/api/v1/strategies/**` config changes had
+        # zero effect on running strategy instances.
+        self.config_manager = config_manager
 
         # NATS client and subscription
         self.nats_client: NATSClient | None = None
@@ -808,6 +814,41 @@ class NATSConsumer:
         # This will be implemented by the strategy processor
         self.logger.debug("Processing mark price data", symbol=market_data.symbol)
 
+    # Per #197 AC4: config keys returned by StrategyConfigManager._get_from_environment
+    # don't always match the strategy instance's attribute names 1:1. Remap here rather
+    # than renaming attributes across strategy classes (smaller, reversible diff).
+    _CONFIG_ATTR_REMAP: dict[str, dict[str, str]] = {
+        "cross_exchange_spread": {"spread_threshold_percent": "spread_threshold"},
+    }
+
+    async def _apply_dynamic_config(self, strategy_name: str, strategy: Any) -> None:
+        """
+        Apply the live StrategyConfigManager config onto a strategy instance.
+
+        Per #197: strategies were constructed once from frozen `constants.py` values
+        and never re-read config afterwards, so `/api/v1/strategies/**` changes had no
+        runtime effect. This re-applies the *current* resolved config (cache/MongoDB/
+        env/defaults) onto matching instance attributes before each processing call.
+        Unknown parameter keys (i.e. no matching attribute) are ignored — this only
+        ever narrows to parameters the strategy already declares via `constants.py`.
+        """
+        if self.config_manager is None:
+            return
+        try:
+            config = await self.config_manager.get_config(strategy_name)
+        except Exception as e:
+            self.logger.debug(
+                "Dynamic config lookup failed; using strategy's existing values",
+                strategy=strategy_name,
+                error=str(e),
+            )
+            return
+        remap = self._CONFIG_ATTR_REMAP.get(strategy_name, {})
+        for key, value in (config.get("parameters") or {}).items():
+            attr: str = remap.get(key) or key
+            if hasattr(strategy, attr):
+                setattr(strategy, attr, value)
+
     async def _process_market_logic_strategies(
         self, market_data: MarketDataMessage
     ) -> None:
@@ -827,6 +868,7 @@ class NATSConsumer:
                     strategy=strategy_name, symbol=symbol, metrics=self.metrics
                 ) as ctx:
                     try:
+                        await self._apply_dynamic_config(strategy_name, strategy)
                         if strategy_name == "btc_dominance":
                             # Bitcoin Dominance Strategy
                             signal = await strategy.process_market_data(market_data)

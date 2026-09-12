@@ -182,6 +182,7 @@ class StrategiesService:
                 publisher=self.publisher,
                 logger=self.logger,
                 depth_analyzer=self.depth_analyzer,  # NEW
+                config_manager=self.config_manager,  # NEW (#197): live config now reaches strategies
             )
             await self.consumer.start()
             self.logger.info(

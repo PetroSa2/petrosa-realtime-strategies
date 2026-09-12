@@ -34,6 +34,13 @@ class OnChainMetricsStrategy:
     shifts in network usage and adoption.
     """
 
+    #: Data provenance label surfaced in logs/metrics — this strategy has no real
+    #: on-chain data integration yet (#197): every metric comes from `random.randint`
+    #: in `_simulate_btc_metrics`/`_simulate_eth_metrics`. Disabled by default via
+    #: `STRATEGY_ENABLED_ONCHAIN_METRICS`; do not enable in production until wired to
+    #: a real provider (glassnode/messari/coinmetrics).
+    DATA_SOURCE_LABEL = "synthetic-random-nosec-B311"
+
     def __init__(self, logger: structlog.BoundLogger | None = None):
         """Initialize the On-Chain Metrics Strategy."""
         self.logger = logger or structlog.get_logger()
@@ -63,10 +70,13 @@ class OnChainMetricsStrategy:
         self.last_fetch_time = 0
         self.fetch_interval = 3600  # 1 hour between on-chain data fetches
 
-        self.logger.info(
-            "On-Chain Metrics Strategy initialized",
+        self.logger.warning(
+            "On-Chain Metrics Strategy initialized with SYNTHETIC (random) data — "
+            "no real on-chain feed is wired up (#197); signals are noise, not "
+            "fundamentals. Keep STRATEGY_ENABLED_ONCHAIN_METRICS=false in production.",
             network_growth_threshold=self.network_growth_threshold,
             volume_threshold=self.volume_threshold,
+            data_source=self.DATA_SOURCE_LABEL,
         )
 
     async def process_market_data(
