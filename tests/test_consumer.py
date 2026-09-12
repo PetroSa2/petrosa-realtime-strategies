@@ -510,6 +510,100 @@ def test_depth_transform_feeds_nonzero_imbalance_to_analyzer(consumer):
 
 
 @pytest.mark.asyncio
+async def test_consumer_transform_depth_data_drops_zero_quantity_levels(consumer):
+    """Regression test for #188 AC3: a quantity of "0" means "delete this
+    level" on a diff-depth stream. Such levels must never reach
+    OrderBookTracker (which would count the delete-then-restore sequence as
+    an iceberg refill) -- so they must be filtered at the transform layer.
+    """
+    payload = {
+        "s": "BTCUSDT",
+        "E": int(datetime.utcnow().timestamp() * 1000),
+        "b": [["50000.0", "0"], ["49999.0", "1.0"]],
+        "a": [["50001.0", "0.0"], ["50002.0", "2.0"]],
+    }
+
+    result = consumer._transform_depth_data(payload)
+
+    assert result is not None
+    assert len(result.bids) == 1
+    assert result.bids[0].price == "49999.0"
+    assert len(result.asks) == 1
+    assert result.asks[0].price == "50002.0"
+
+
+def test_validate_depth_snapshot_clean_book_has_no_violations(consumer):
+    """A well-formed, sorted, non-crossed book reports no violations."""
+    bids = [(100.0, 1.0), (99.5, 2.0), (99.0, 1.0)]
+    asks = [(100.5, 1.0), (101.0, 2.0), (101.5, 1.0)]
+
+    assert consumer._validate_depth_snapshot(bids, asks) == []
+
+
+def test_validate_depth_snapshot_flags_zero_quantity(consumer):
+    """Defense-in-depth: even if a zero-quantity level slipped through, the
+    validator flags it explicitly (per #188 AC2/AC5)."""
+    bids = [(100.0, 0.0)]
+    asks = [(100.5, 1.0)]
+
+    violations = consumer._validate_depth_snapshot(bids, asks)
+
+    assert "zero_or_negative_bid_quantity" in violations
+
+
+def test_validate_depth_snapshot_flags_unsorted_levels(consumer):
+    """Diff-depth deltas carry no sort guarantee -- unsorted levels must be
+    detected (per #188 AC1/AC2)."""
+    bids = [(99.0, 1.0), (100.0, 1.0)]  # ascending -- wrong for bids
+    asks = [(101.5, 1.0), (100.5, 1.0)]  # descending -- wrong for asks
+
+    violations = consumer._validate_depth_snapshot(bids, asks)
+
+    assert "bids_not_sorted_descending" in violations
+    assert "asks_not_sorted_ascending" in violations
+
+
+def test_validate_depth_snapshot_flags_crossed_book(consumer):
+    """best_ask <= best_bid is never legitimate (per #188 AC4)."""
+    bids = [(100.5, 1.0)]
+    asks = [(100.0, 1.0)]  # best_ask below best_bid
+
+    violations = consumer._validate_depth_snapshot(bids, asks)
+
+    assert "book_crossed_best_bid_gte_best_ask" in violations
+
+
+@pytest.mark.asyncio
+async def test_process_depth_data_records_malformed_depth_error_on_violation(
+    consumer,
+):
+    """Per #188 AC5: a malformed snapshot increments
+    realtime.errors.total{error_type="malformed_depth"} so drift from the
+    expected sorted-snapshot contract is observable, not silent."""
+    from strategies.models.market_data import DepthLevel, DepthUpdate
+
+    consumer.depth_analyzer = DepthAnalyzer()
+    consumer.microstructure_strategies = {}
+    consumer.metrics.record_error = Mock()
+
+    depth_update = DepthUpdate(
+        symbol="BTCUSDT",
+        event_time=1,
+        first_update_id=1,
+        final_update_id=2,
+        bids=[DepthLevel(price="100.0", quantity="1.0")],
+        asks=[DepthLevel(price="99.0", quantity="1.0")],  # crossed book
+    )
+    market_data = MarketDataMessage.model_construct(
+        stream="btcusdt@depth20@100ms", data=depth_update, timestamp=datetime.utcnow()
+    )
+
+    await consumer._process_depth_data(market_data)
+
+    consumer.metrics.record_error.assert_any_call("malformed_depth")
+
+
+@pytest.mark.asyncio
 async def test_consumer_transform_trade_data_error(consumer):
     """Test _transform_trade_data error handling - covers lines 537-539."""
     # Invalid data that will cause exception

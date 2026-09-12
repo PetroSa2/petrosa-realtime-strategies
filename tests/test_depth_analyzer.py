@@ -256,6 +256,47 @@ class TestDepthAnalyzer:
         # Cleanup logic should have executed
         assert True
 
+    def test_crossed_book_flagged_not_negative_spread(self):
+        """Regression test for #188 AC4: best_ask <= best_bid must never
+        produce a negative spread_bps. It must be flagged via book_valid and
+        the spread fields zeroed instead."""
+        analyzer = DepthAnalyzer()
+
+        # Crossed book: best_ask (100.0) below best_bid (100.5)
+        bids = [(100.5, 1.0)]
+        asks = [(100.0, 1.0)]
+
+        metrics = analyzer.analyze_depth("BTCUSDT", bids, asks)
+
+        assert metrics.book_valid is False
+        assert metrics.spread_abs == 0.0
+        assert metrics.spread_bps == 0.0
+        assert metrics.mid_price == 0.0
+        assert metrics.spread_bps >= 0.0
+
+    def test_equal_best_bid_ask_flagged_invalid(self):
+        """best_ask == best_bid is also an invalid/crossed book."""
+        analyzer = DepthAnalyzer()
+
+        bids = [(100.0, 1.0)]
+        asks = [(100.0, 1.0)]
+
+        metrics = analyzer.analyze_depth("BTCUSDT", bids, asks)
+
+        assert metrics.book_valid is False
+        assert metrics.spread_bps == 0.0
+
+    def test_normal_book_flagged_valid(self):
+        """A normal, non-crossed book is flagged valid (default True)."""
+        analyzer = DepthAnalyzer()
+
+        bids = [(100.0, 1.0)]
+        asks = [(100.5, 1.0)]
+
+        metrics = analyzer.analyze_depth("BTCUSDT", bids, asks)
+
+        assert metrics.book_valid is True
+
     def test_depth_levels(self):
         """Test liquidity depth at different levels."""
         analyzer = DepthAnalyzer()
