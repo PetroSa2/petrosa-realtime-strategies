@@ -650,6 +650,129 @@ async def test_add_audit_record_direct_mode(mock_database):
     mock_database.strategy_config_audit.insert_one.assert_called_once_with(audit_data)
 
 
+@pytest.mark.asyncio
+async def test_create_audit_record_data_manager_mode(mock_data_manager_client):
+    """Test create_audit_record routes through Data Manager when use_data_manager=True.
+
+    Regression test for #196: create_audit_record previously had no
+    use_data_manager branch, so in the recommended deployment mode
+    (use_data_manager=True) self.database was None and insert_one raised
+    AttributeError, silently swallowed by the broad except clause. Every
+    config-change audit record write was dropped.
+    """
+    audit_data = {
+        "strategy_id": "test",
+        "symbol": "BTCUSDT",
+        "action": "update",
+        "changed_by": "admin",
+    }
+    mock_data_manager_client.create_audit_record.return_value = "audit_id_123"
+
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
+    ):
+        client = MongoDBClient(use_data_manager=True)
+        result = await client.create_audit_record(audit_data)
+
+        assert result == "audit_id_123"
+        mock_data_manager_client.create_audit_record.assert_called_once_with(audit_data)
+
+
+@pytest.mark.asyncio
+async def test_list_all_strategy_ids_data_manager_mode(mock_data_manager_client):
+    """Test list_all_strategy_ids routes through Data Manager when use_data_manager=True.
+
+    Regression test for #196: list_all_strategy_ids previously had no
+    use_data_manager branch and crashed with AttributeError (None.distinct)
+    in the recommended deployment mode.
+    """
+    mock_data_manager_client.list_all_strategy_ids = AsyncMock(
+        return_value=["strategy_a", "strategy_b"]
+    )
+
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
+    ):
+        client = MongoDBClient(use_data_manager=True)
+        result = await client.list_all_strategy_ids()
+
+        assert result == ["strategy_a", "strategy_b"]
+        mock_data_manager_client.list_all_strategy_ids.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_list_all_strategy_ids_direct_mode(mock_database):
+    """Test list_all_strategy_ids in direct mode."""
+    mock_database.strategy_configs_global.distinct = AsyncMock(
+        return_value=["strategy_a"]
+    )
+    mock_database.strategy_configs_symbol.distinct = AsyncMock(
+        return_value=["strategy_b"]
+    )
+
+    client = MongoDBClient(use_data_manager=False)
+    client.database = mock_database
+    client._connected = True
+
+    result = await client.list_all_strategy_ids()
+
+    assert result == ["strategy_a", "strategy_b"]
+
+
+@pytest.mark.asyncio
+async def test_list_symbol_overrides_data_manager_mode(mock_data_manager_client):
+    """Test list_symbol_overrides routes through Data Manager when use_data_manager=True.
+
+    Regression test for #196: list_symbol_overrides previously had no
+    use_data_manager branch. config_manager.py's list_strategies() calls
+    this method, so GET /api/v1/strategies crashed outright in the
+    recommended deployment mode.
+    """
+    mock_data_manager_client.list_symbol_overrides = AsyncMock(
+        return_value=["BTCUSDT", "ETHUSDT"]
+    )
+
+    with (
+        patch("strategies.db.mongodb_client.DATA_MANAGER_AVAILABLE", True),
+        patch(
+            "strategies.db.mongodb_client.DataManagerClient",
+            return_value=mock_data_manager_client,
+        ),
+    ):
+        client = MongoDBClient(use_data_manager=True)
+        result = await client.list_symbol_overrides("test_strategy")
+
+        assert result == ["BTCUSDT", "ETHUSDT"]
+        mock_data_manager_client.list_symbol_overrides.assert_called_once_with(
+            "test_strategy"
+        )
+
+
+@pytest.mark.asyncio
+async def test_list_symbol_overrides_direct_mode(mock_database):
+    """Test list_symbol_overrides in direct mode."""
+    mock_database.strategy_configs_symbol.distinct = AsyncMock(return_value=["BTCUSDT"])
+
+    client = MongoDBClient(use_data_manager=False)
+    client.database = mock_database
+    client._connected = True
+
+    result = await client.list_symbol_overrides("test_strategy")
+
+    assert result == ["BTCUSDT"]
+    mock_database.strategy_configs_symbol.distinct.assert_called_once_with(
+        "symbol", {"strategy_id": "test_strategy"}
+    )
+
+
 def test_data_manager_availability():
     """Test DATA_MANAGER_AVAILABLE constant."""
     # This tests the import logic

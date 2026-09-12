@@ -441,6 +441,9 @@ class MongoDBClient:
         Returns:
             Audit record ID or None on failure
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.create_audit_record(audit_data)
+
         if not self._connected:
             return None
 
@@ -570,6 +573,9 @@ class MongoDBClient:
         Returns:
             List of unique strategy IDs
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.list_all_strategy_ids()
+
         if not self._connected:
             return []
 
@@ -599,6 +605,9 @@ class MongoDBClient:
         Returns:
             List of symbols with overrides
         """
+        if self.use_data_manager:
+            return await self.data_manager_client.list_symbol_overrides(strategy_id)
+
         if not self._connected:
             return []
 
