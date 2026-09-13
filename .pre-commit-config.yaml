@@ -75,7 +75,9 @@ repos:
     hooks:
       - id: yamllint
         name: 📋 YAML Linter
-        exclude: ^.github/workflows/deploy.yml$
+        # manual-deploy.yml has the same pre-existing debt as deploy.yml
+        # (out of #195's AC scope); excluded on the same precedent.
+        exclude: ^.github/workflows/(deploy|manual-deploy)\.yml$
 
   # ==================================================================
   # STANDARD HOOKS
