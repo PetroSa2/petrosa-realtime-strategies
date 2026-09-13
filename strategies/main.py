@@ -486,7 +486,9 @@ def heartbeat():
                 f"  Messages Processed: {consumer_info.get('message_count', 'unknown')}"
             )
             print(f"  Consumer Errors: {consumer_info.get('error_count', 'unknown')}")
-            print(f"  Orders Published: {publisher_info.get('order_count', 'unknown')}")
+            print(
+                f"  Signals Published: {publisher_info.get('signal_count', 'unknown')}"
+            )
             print(f"  Publisher Errors: {publisher_info.get('error_count', 'unknown')}")
         else:
             print(f"❌ Failed to get heartbeat status: {response.status_code}")

@@ -54,7 +54,7 @@ class HeartbeatManager:
         self.previous_stats = {
             "consumer_messages": 0,
             "consumer_errors": 0,
-            "publisher_orders": 0,
+            "publisher_signals": 0,
             "publisher_errors": 0,
         }
 
@@ -144,16 +144,16 @@ class HeartbeatManager:
                 # Delta stats (since last heartbeat)
                 "messages_processed_delta": delta_stats["consumer_messages"],
                 "consumer_errors_delta": delta_stats["consumer_errors"],
-                "orders_published_delta": delta_stats["publisher_orders"],
+                "signals_published_delta": delta_stats["publisher_signals"],
                 "publisher_errors_delta": delta_stats["publisher_errors"],
                 # Rate stats (per second)
                 "messages_per_second": rate_stats["messages_per_second"],
-                "orders_per_second": rate_stats["orders_per_second"],
+                "signals_per_second": rate_stats["signals_per_second"],
                 "error_rate_per_second": rate_stats["error_rate_per_second"],
                 # Total stats (since startup)
                 "total_messages_processed": current_stats["consumer_messages"],
                 "total_consumer_errors": current_stats["consumer_errors"],
-                "total_orders_published": current_stats["publisher_orders"],
+                "total_signals_published": current_stats["publisher_signals"],
                 "total_publisher_errors": current_stats["publisher_errors"],
             }
 
@@ -176,7 +176,7 @@ class HeartbeatManager:
         stats = {
             "consumer_messages": 0,
             "consumer_errors": 0,
-            "publisher_orders": 0,
+            "publisher_signals": 0,
             "publisher_errors": 0,
         }
 
@@ -189,11 +189,14 @@ class HeartbeatManager:
             except Exception as e:
                 self.logger.warning("Failed to get consumer metrics", error=str(e))
 
-        # Collect publisher stats
+        # Collect publisher stats.
+        # Per #194: the live publish path is publish_signal() (order_count is
+        # dead -- the order path was removed in #190/#205), so signal_count is
+        # the only field that ever increments.
         if self.publisher:
             try:
                 publisher_metrics = self.publisher.get_metrics()
-                stats["publisher_orders"] = publisher_metrics.get("order_count", 0)
+                stats["publisher_signals"] = publisher_metrics.get("signal_count", 0)
                 stats["publisher_errors"] = publisher_metrics.get("error_count", 0)
             except Exception as e:
                 self.logger.warning("Failed to get publisher metrics", error=str(e))
@@ -207,8 +210,8 @@ class HeartbeatManager:
             - self.previous_stats["consumer_messages"],
             "consumer_errors": current_stats["consumer_errors"]
             - self.previous_stats["consumer_errors"],
-            "publisher_orders": current_stats["publisher_orders"]
-            - self.previous_stats["publisher_orders"],
+            "publisher_signals": current_stats["publisher_signals"]
+            - self.previous_stats["publisher_signals"],
             "publisher_errors": current_stats["publisher_errors"]
             - self.previous_stats["publisher_errors"],
         }
@@ -218,7 +221,7 @@ class HeartbeatManager:
         if self.interval_seconds <= 0:
             return {
                 "messages_per_second": 0.0,
-                "orders_per_second": 0.0,
+                "signals_per_second": 0.0,
                 "error_rate_per_second": 0.0,
             }
 
@@ -226,8 +229,8 @@ class HeartbeatManager:
             "messages_per_second": round(
                 delta_stats["consumer_messages"] / self.interval_seconds, 2
             ),
-            "orders_per_second": round(
-                delta_stats["publisher_orders"] / self.interval_seconds, 2
+            "signals_per_second": round(
+                delta_stats["publisher_signals"] / self.interval_seconds, 2
             ),
             "error_rate_per_second": round(
                 (delta_stats["consumer_errors"] + delta_stats["publisher_errors"])

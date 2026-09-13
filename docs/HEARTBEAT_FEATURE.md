@@ -60,16 +60,16 @@ HEARTBEAT_INCLUDE_DETAILED_STATS: "true"
 
   "messages_processed_delta": 150,
   "consumer_errors_delta": 0,
-  "orders_published_delta": 12,
+  "signals_published_delta": 12,
   "publisher_errors_delta": 0,
 
   "messages_per_second": 2.5,
-  "orders_per_second": 0.2,
+  "signals_per_second": 0.2,
   "error_rate_per_second": 0.0,
 
   "total_messages_processed": 750,
   "total_consumer_errors": 2,
-  "total_orders_published": 60,
+  "total_signals_published": 60,
   "total_publisher_errors": 0
 }
 ```

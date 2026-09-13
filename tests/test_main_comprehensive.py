@@ -437,7 +437,7 @@ def test_cli_heartbeat_command_success():
                     "interval_seconds": 30,
                 },
                 "consumer": {"message_count": 1000, "error_count": 0},
-                "publisher": {"order_count": 50, "error_count": 0},
+                "publisher": {"signal_count": 50, "error_count": 0},
             }
         }
         mock_get.return_value = mock_response
@@ -447,6 +447,7 @@ def test_cli_heartbeat_command_success():
         assert result.exit_code == 0
         assert "💓 Heartbeat Status:" in result.output
         assert "📊 Current Stats:" in result.output
+        assert "Signals Published: 50" in result.output
 
 
 def test_cli_heartbeat_command_failure():
