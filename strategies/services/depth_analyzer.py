@@ -7,10 +7,17 @@ Analyzes order book depth data to provide real-time market metrics including:
 - Liquidity depth
 - Bid-ask spread
 - Volume-weighted metrics
+
+Clock policy (per #193): ``DepthAnalyzer`` is **processing-time**
+throughout. TTL/staleness bookkeeping (``_last_update`` and
+``_cleanup_expired_metrics``) must reflect real wall-clock elapsed time
+regardless of message spacing — a symbol that stops producing updates
+should still expire on schedule — so both the eviction clock and the
+``timestamp`` default consult the same injected ``Clock`` (never a raw
+``time.time()`` or naive-``datetime`` wall-clock call).
 """
 
 import logging
-import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +25,7 @@ from typing import Optional
 
 from prometheus_client import Gauge
 
+from strategies.core.clock import Clock, SystemClock
 from strategies.utils.bounded_state import SymbolActivityTracker
 
 logger = logging.getLogger(__name__)
@@ -114,6 +122,7 @@ class DepthAnalyzer:
         history_window_seconds: int = 900,  # 15 minutes
         max_symbols: int = 100,
         metrics_ttl_seconds: int = 300,  # 5 minutes
+        clock: Clock | None = None,
     ):
         """
         Initialize depth analyzer.
@@ -129,10 +138,14 @@ class DepthAnalyzer:
                 last update is older than this is purged from all four
                 symbol-keyed dicts by _cleanup_expired_metrics (per #189,
                 previously only _current_metrics/_last_update)
+            clock: Injected clock (per #193). Defaults to ``SystemClock``.
+                See module docstring — this class is processing-time
+                throughout.
         """
         self.history_window = history_window_seconds
         self.max_symbols = max_symbols
         self.metrics_ttl = metrics_ttl_seconds
+        self.clock: Clock = clock or SystemClock()
 
         # Current metrics for each symbol
         self._current_metrics: dict[str, DepthMetrics] = {}
@@ -192,7 +205,7 @@ class DepthAnalyzer:
             DepthMetrics object with calculated metrics
         """
         if timestamp is None:
-            timestamp = datetime.utcnow()
+            timestamp = self.clock.now()
 
         # Calculate basic volumes
         bid_volume = sum(qty for _, qty in bids) if bids else 0.0
@@ -292,7 +305,7 @@ class DepthAnalyzer:
         # Per #189 AC2-style: bound the symbol dimension across all four
         # symbol-keyed dicts owned by this analyzer. If this touch evicts
         # a different (LRU) symbol, purge it everywhere in one place.
-        now = time.time()
+        now = self.clock.time()
         evicted_symbol = self._symbol_tracker.touch(symbol, now=now)
         if evicted_symbol is not None and evicted_symbol != symbol:
             self._current_metrics.pop(evicted_symbol, None)
@@ -422,7 +435,7 @@ class DepthAnalyzer:
         total_liquidity = sum(m.total_liquidity for m in self._current_metrics.values())
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": self.clock.now().isoformat(),
             "symbols_tracked": len(self._current_metrics),
             "market_sentiment": {
                 "bullish_symbols": symbols_bullish,
@@ -476,7 +489,7 @@ class DepthAnalyzer:
         symbol dimension grew forever even though the metrics TTL had
         long since expired the symbol elsewhere. Now purges all four.
         """
-        current_time = time.time()
+        current_time = self.clock.time()
         expired_symbols = [
             symbol
             for symbol, last_update in self._last_update.items()

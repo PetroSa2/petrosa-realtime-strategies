@@ -6,7 +6,7 @@ for configuration management and market data access.
 """
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from data_manager_client import DataManagerClient as BaseDataManagerClient
@@ -159,7 +159,7 @@ class DataManagerClient:
             Configuration ID or None on failure
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
             # Get existing config to check version
             existing = await self.get_global_config(strategy_id)
@@ -223,7 +223,7 @@ class DataManagerClient:
             Configuration ID or None on failure
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
             # Get existing config to check version
             existing = await self.get_symbol_config(strategy_id, symbol)
@@ -336,7 +336,7 @@ class DataManagerClient:
             Audit record ID or None on failure
         """
         try:
-            audit_data["changed_at"] = datetime.utcnow()
+            audit_data["changed_at"] = datetime.now(UTC)
 
             result = await self._client.insert(
                 database="mongodb",

@@ -1,6 +1,6 @@
 """Realistic market data fixtures for testing strategies."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 # Realistic Bitcoin price action over 1 hour
 BTCUSDT_REALISTIC_SEQUENCE = [
@@ -126,7 +126,7 @@ def generate_realistic_klines(
 
     klines = []
     current_price = start_price
-    timestamp = datetime.utcnow()
+    timestamp = datetime.now(UTC)
 
     for i in range(count):
         # Random walk with slight upward bias
@@ -184,7 +184,7 @@ def generate_depth_updates(symbol: str, count: int = 50):
         updates.append(
             {
                 "symbol": symbol,
-                "timestamp": datetime.utcnow() + timedelta(seconds=i),
+                "timestamp": datetime.now(UTC) + timedelta(seconds=i),
                 "bids": bids,
                 "asks": asks,
             }

@@ -5,7 +5,7 @@ Unit and integration tests for configuration rollback in Realtime Strategies.
 import asyncio
 import os
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -53,7 +53,7 @@ def sample_history():
             old_parameters={"rsi": 14, "version": 2},
             new_parameters={"rsi": 21, "version": 3},
             changed_by="user1",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(UTC),
         ),
         StrategyConfigAudit(
             id="audit_2",
@@ -62,7 +62,7 @@ def sample_history():
             old_parameters={"rsi": 10, "version": 1},
             new_parameters={"rsi": 14, "version": 2},
             changed_by="user1",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(UTC),
         ),
         StrategyConfigAudit(
             id="audit_1",
@@ -70,7 +70,7 @@ def sample_history():
             action="CREATE",
             new_parameters={"rsi": 10, "version": 1},
             changed_by="user1",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(UTC),
         ),
     ]
 
@@ -171,7 +171,7 @@ class TestStrategyConfigRollback:
             action="CREATE",
             new_parameters={"rsi": 99, "version": 1},
             changed_by="tester",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(UTC),
         )
 
         with patch.object(
@@ -313,7 +313,7 @@ class TestStrategyConfigRollback:
                     "action": "CREATE",
                     "new_parameters": {"p": 1},
                     "changed_by": "u1",
-                    "changed_at": datetime.utcnow(),
+                    "changed_at": datetime.now(UTC),
                 }
             ]
         )
@@ -470,7 +470,7 @@ class TestStrategyConfigRollback:
                     action="CREATE",
                     new_parameters={"p": 1, "version": 5},
                     changed_by="u1",
-                    changed_at=datetime.utcnow(),
+                    changed_at=datetime.now(UTC),
                 )
             ],
         ):

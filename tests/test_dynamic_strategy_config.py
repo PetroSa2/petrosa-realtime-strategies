@@ -4,7 +4,7 @@ and the real market-data price field extraction (was gated on nonexistent
 `c`/`p` hasattr checks).
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -48,7 +48,7 @@ def make_mdm(symbol: str, last_price: str) -> MarketDataMessage:
     return MarketDataMessage(
         stream=f"{symbol.lower()}@ticker",
         data=make_ticker(symbol, last_price),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
 

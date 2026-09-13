@@ -5,7 +5,7 @@ This module tests the transformation of realtime-strategies Signal objects
 to tradeengine contract format.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -106,7 +106,7 @@ class TestSignalAdapter:
 
     def test_timestamp_conversion(self):
         """Test that timestamp is properly converted to ISO format."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         signal = Signal(
             strategy_id="test",
             symbol="BTCUSDT",

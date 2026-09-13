@@ -2,7 +2,7 @@
 Strategy configuration models for runtime parameter management.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -26,10 +26,11 @@ class StrategyConfig(BaseModel):
     )
     version: int = Field(1, description="Configuration version number")
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When config was created"
+        default_factory=lambda: datetime.now(UTC), description="When config was created"
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When config was last updated"
+        default_factory=lambda: datetime.now(UTC),
+        description="When config was last updated",
     )
     created_by: str = Field(..., description="Who/what created this config")
     metadata: dict[str, Any] = Field(
@@ -78,7 +79,8 @@ class StrategyConfigAudit(BaseModel):
     )
     changed_by: str = Field(..., description="Who/what made the change")
     changed_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When the change occurred"
+        default_factory=lambda: datetime.now(UTC),
+        description="When the change occurred",
     )
     reason: str | None = Field(None, description="Reason for the change")
 

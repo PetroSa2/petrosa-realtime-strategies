@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -40,7 +40,7 @@ def make_mdm(symbol: str) -> MarketDataMessage:
     return MarketDataMessage(
         stream=f"{symbol.lower()}@ticker",
         data=make_ticker(symbol),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -122,7 +122,7 @@ async def test_onchain_rate_limiting_prevents_signal():
     ] * 24
     strategy.metrics_cache["BTC"] = strategy.metrics_history["BTC"][-1]
     # Mark last signal as just emitted -> enforce min interval
-    strategy.last_signal_times["BTC_onchain"] = datetime.utcnow()
+    strategy.last_signal_times["BTC_onchain"] = datetime.now(UTC)
 
     mdm = make_mdm("BTCUSDT")
     signal = await strategy.process_market_data(mdm)
@@ -318,7 +318,7 @@ async def test_onchain_price_extraction_from_trade():
     mdm = MarketDataMessage(
         stream="btcusdt@trade",
         data=trade,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     signal = await strategy.process_market_data(mdm)

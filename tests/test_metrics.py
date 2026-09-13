@@ -2,7 +2,7 @@
 Tests for custom business metrics.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -324,7 +324,7 @@ class TestMetricsContext:
             confidence_score=0.85,
             price=50000.0,
             strategy_name="test_strategy",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
         )
 
         with MetricsContext(

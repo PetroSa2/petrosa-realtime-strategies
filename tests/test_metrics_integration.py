@@ -112,7 +112,8 @@ class TestConsumerMetricsIntegration:
         consumer, metrics = consumer_with_metrics
 
         # Create message with timestamp 5 seconds in the past
-        # The consumer calculates lag from market_data.timestamp which is set to utcnow()
+        # The consumer calculates lag from market_data.timestamp which is set
+        # to datetime.now(UTC) (per #193)
         # during parsing, so we need to manually update the lag after processing
         message_data = {
             "stream": "btcusdt@trade",

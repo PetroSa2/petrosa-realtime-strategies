@@ -8,9 +8,19 @@ Strategy Type: Market Microstructure
 Timeframe: Real-time (tick-by-tick)
 Win Rate Target: 60-70%
 Signal Frequency: 2-5 per symbol per day
+
+Clock policy (per #193): the iceberg-pattern classification itself is
+event-time, delegated entirely to ``OrderBookTracker`` (see that module's
+docstring). Signal rate-limiting in ``_generate_signal`` is a distinct,
+intentional **processing-time** decision — "don't re-signal on this level
+within N wall-clock seconds" is about real elapsed time regardless of how
+message timestamps are spaced, so it consults the injected ``clock``
+directly instead of the message timestamp. Both decisions go through the
+same injected ``Clock`` instance (shared with the internal
+``OrderBookTracker``), never a raw ``time.time()`` or naive-``datetime``
+wall-clock call.
 """
 
-import time
 from datetime import datetime
 from typing import Optional
 
@@ -18,6 +28,7 @@ import structlog
 from opentelemetry import trace
 from prometheus_client import Gauge
 
+from strategies.core.clock import Clock, SystemClock
 from strategies.models.orderbook_tracker import IcebergPattern, OrderBookTracker
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 from strategies.utils.bounded_state import TTLBoundedDict
@@ -75,6 +86,7 @@ class IcebergDetectorStrategy:
         min_signal_interval_seconds: float = 120.0,
         # Per #189 AC1: explicit bound on last_signal_time regardless of TTL
         max_tracked_signal_keys: int = 5000,
+        clock: Clock | None = None,
     ):
         """
         Initialize strategy.
@@ -92,6 +104,9 @@ class IcebergDetectorStrategy:
             max_tracked_signal_keys: Hard cap (LRU-evicted) on the number of
                 (symbol, price, side) rate-limit keys tracked in
                 ``last_signal_time``, independent of the TTL sweep below.
+            clock: Injected clock (per #193), shared with the internal
+                ``OrderBookTracker``. Defaults to ``SystemClock``. See
+                module docstring for the event-time/processing-time split.
         """
         self.min_refill_count = min_refill_count
         self.refill_speed_threshold = refill_speed_threshold_seconds
@@ -102,6 +117,7 @@ class IcebergDetectorStrategy:
         self.history_window = history_window_seconds
         self.max_symbols = max_symbols
         self.min_signal_interval = min_signal_interval_seconds
+        self.clock: Clock = clock or SystemClock()
 
         # Order book tracker
         self.tracker = OrderBookTracker(
@@ -110,6 +126,7 @@ class IcebergDetectorStrategy:
             refill_speed_threshold_seconds=refill_speed_threshold_seconds,
             consistency_threshold=consistency_threshold,
             min_refill_count=min_refill_count,
+            clock=self.clock,
         )
 
         # Last signal time: {(symbol, price, side): timestamp}
@@ -160,7 +177,7 @@ class IcebergDetectorStrategy:
             span.set_attribute("symbol", symbol)
 
             if timestamp is None:
-                timestamp = datetime.utcnow()
+                timestamp = self.clock.now()
 
             # Validate inputs
             if not bids or not asks:
@@ -220,9 +237,11 @@ class IcebergDetectorStrategy:
             span.set_attribute("iceberg.price", iceberg.price)
             span.set_attribute("iceberg.side", iceberg.side)
 
-            # Rate limiting per (symbol, price, side)
+            # Rate limiting per (symbol, price, side). Per #193: this is a
+            # deliberate processing-time decision (see module docstring) —
+            # consult the injected clock, never a raw time.time().
             signal_key = (iceberg.symbol, round(iceberg.price, 2), iceberg.side)
-            current_time = time.time()
+            current_time = self.clock.time()
 
             # Per #189 AC1: sweep stale rate-limit keys on the hot path
             # (cheap — one dict scan bounded by max_tracked_signal_keys)
