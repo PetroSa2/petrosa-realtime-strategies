@@ -120,8 +120,15 @@ class DepthAnalyzer:
 
         Args:
             history_window_seconds: How long to keep historical data
-            max_symbols: Maximum number of symbols to track
-            metrics_ttl_seconds: TTL for metrics cache
+            max_symbols: Hard cap (LRU-evicted via SymbolActivityTracker,
+                per #189) on distinct symbols tracked across
+                _current_metrics/_last_update/_pressure_history/
+                _imbalance_history. Exceeding it evicts the
+                least-recently-updated symbol from all four dicts.
+            metrics_ttl_seconds: TTL for metrics cache — a symbol whose
+                last update is older than this is purged from all four
+                symbol-keyed dicts by _cleanup_expired_metrics (per #189,
+                previously only _current_metrics/_last_update)
         """
         self.history_window = history_window_seconds
         self.max_symbols = max_symbols
