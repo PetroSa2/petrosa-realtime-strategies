@@ -249,30 +249,7 @@ class StrategyConfigManager:
         """
         env_params = {}
 
-        if strategy_id == "orderbook_skew":
-            env_params = {
-                "top_levels": constants.ORDERBOOK_SKEW_TOP_LEVELS,
-                "buy_threshold": constants.ORDERBOOK_SKEW_BUY_THRESHOLD,
-                "sell_threshold": constants.ORDERBOOK_SKEW_SELL_THRESHOLD,
-                "min_spread_percent": constants.ORDERBOOK_SKEW_MIN_SPREAD_PERCENT,
-            }
-        elif strategy_id == "trade_momentum":
-            env_params = {
-                "price_weight": constants.TRADE_MOMENTUM_PRICE_WEIGHT,
-                "quantity_weight": constants.TRADE_MOMENTUM_QUANTITY_WEIGHT,
-                "maker_weight": constants.TRADE_MOMENTUM_MAKER_WEIGHT,
-                "buy_threshold": constants.TRADE_MOMENTUM_BUY_THRESHOLD,
-                "sell_threshold": constants.TRADE_MOMENTUM_SELL_THRESHOLD,
-                "min_quantity": constants.TRADE_MOMENTUM_MIN_QUANTITY,
-            }
-        elif strategy_id == "ticker_velocity":
-            env_params = {
-                "time_window": constants.TICKER_VELOCITY_TIME_WINDOW,
-                "buy_threshold": constants.TICKER_VELOCITY_BUY_THRESHOLD,
-                "sell_threshold": constants.TICKER_VELOCITY_SELL_THRESHOLD,
-                "min_price_change": constants.TICKER_VELOCITY_MIN_PRICE_CHANGE,
-            }
-        elif strategy_id == "btc_dominance":
+        if strategy_id == "btc_dominance":
             env_params = {
                 "high_threshold": constants.BTC_DOMINANCE_HIGH_THRESHOLD,
                 "low_threshold": constants.BTC_DOMINANCE_LOW_THRESHOLD,
