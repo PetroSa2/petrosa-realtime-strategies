@@ -38,17 +38,15 @@ class TestModuleImports:
 
     def test_import_models(self):
         """Test importing all model modules."""
-        from strategies.models import market_data, orders, signals
+        from strategies.models import market_data, signals
 
         assert market_data is not None
-        assert orders is not None
         assert signals is not None
 
     def test_import_utils(self):
         """Test importing util modules."""
-        from strategies.utils import circuit_breaker, logger, metrics
+        from strategies.utils import logger, metrics
 
-        assert circuit_breaker is not None
         assert logger is not None
         assert metrics is not None
 
@@ -88,22 +86,3 @@ class TestModuleConstants:
         assert SignalConfidence.HIGH
         assert SignalConfidence.MEDIUM
         assert SignalConfidence.LOW
-
-    def test_order_enums(self):
-        """Test order enums are accessible."""
-        from strategies.models.orders import OrderSide, OrderType, TimeInForce
-
-        # OrderSide
-        assert OrderSide.BUY
-        assert OrderSide.SELL
-
-        # OrderType
-        assert OrderType.MARKET
-        assert OrderType.LIMIT
-        assert OrderType.STOP_MARKET
-        assert OrderType.STOP_LIMIT
-
-        # TimeInForce
-        assert TimeInForce.GTC
-        assert TimeInForce.IOC
-        assert TimeInForce.FOK

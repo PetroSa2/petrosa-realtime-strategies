@@ -335,41 +335,6 @@ async def test_consumer_process_microstructure_strategies_error(consumer):
 
 
 @pytest.mark.asyncio
-async def test_consumer_processing_loop_basic(consumer):
-    """Test _processing_loop basic operation."""
-    consumer.is_running = True
-    consumer.subscription = AsyncMock()
-
-    # Mock message handler
-    consumer._message_handler = AsyncMock()
-
-    # Set shutdown event to stop loop quickly
-    consumer.shutdown_event.set()
-
-    try:
-        await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except TimeoutError:
-        # Expected: timeout is used to stop the loop for testing
-        pass
-
-
-@pytest.mark.asyncio
-async def test_consumer_processing_loop_exception(consumer):
-    """Test _processing_loop exception handling."""
-    consumer.is_running = True
-    consumer.subscription = AsyncMock()
-    consumer.subscription.fetch = AsyncMock(side_effect=Exception("Fetch error"))
-
-    consumer.shutdown_event.set()
-
-    try:
-        await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except (TimeoutError, Exception):
-        # Expected: timeout or exception stops the loop for testing
-        pass
-
-
-@pytest.mark.asyncio
 async def test_consumer_get_metrics(consumer):
     """Test get_metrics method."""
     consumer.message_count = 10
@@ -630,58 +595,6 @@ async def test_consumer_transform_ticker_data_error(consumer):
 
 
 @pytest.mark.asyncio
-async def test_consumer_processing_loop_with_messages(consumer):
-    """Test _processing_loop with actual messages - covers lines 296-315."""
-    consumer.is_running = True
-    consumer.subscription = AsyncMock()
-
-    # Mock fetch to return messages
-    mock_msg1 = Mock()
-    mock_msg1.data = json.dumps(
-        {
-            "stream": "btcusdt@depth@20ms",
-            "data": {
-                "e": "depthUpdate",
-                "E": int(datetime.utcnow().timestamp() * 1000),
-                "s": "BTCUSDT",
-                "U": 1,
-                "u": 1,
-                "b": [["50000.0", "1.0"]],
-                "a": [["50001.0", "1.0"]],
-            },
-        }
-    ).encode()
-
-    consumer.subscription.fetch = AsyncMock(return_value=[mock_msg1])
-    consumer._message_handler = AsyncMock()
-
-    # Set shutdown event to stop loop after processing
-    consumer.shutdown_event.set()
-
-    try:
-        await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except TimeoutError:
-        # Expected: timeout is used to stop the loop for testing
-        pass
-
-
-@pytest.mark.asyncio
-async def test_consumer_processing_loop_timeout(consumer):
-    """Test _processing_loop timeout handling."""
-    consumer.is_running = True
-    consumer.subscription = AsyncMock()
-    consumer.subscription.fetch = AsyncMock(return_value=[])  # No messages
-
-    consumer.shutdown_event.set()
-
-    try:
-        await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-    except TimeoutError:
-        # Expected: timeout is used to stop the loop for testing
-        pass
-
-
-@pytest.mark.asyncio
 async def test_consumer_process_trade_data(consumer):
     """Test _process_trade_data method."""
     from strategies.models.market_data import TradeData
@@ -833,96 +746,6 @@ async def test_publish_market_logic_signals_uses_publish_signal(
     await consumer._publish_market_logic_signals([signal])
 
     mock_publisher.publish_signal.assert_called_once_with(signal)
-    mock_publisher.publish_order.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_consumer_signal_to_order_conversion(consumer):
-    """Test _signal_to_order method - covers lines 758-760, 779, 781."""
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
-        InMemorySpanExporter,
-    )
-
-    from strategies.models.signals import (
-        Signal,
-        SignalAction,
-        SignalConfidence,
-        SignalType,
-    )
-
-    # Setup in-memory span exporter for testing
-    # Note: If tracer provider is already set (e.g., by conftest.py), we can't override it
-    # Instead, we'll use the current provider and add our exporter to it
-    span_exporter = InMemorySpanExporter()
-    current_provider = trace.get_tracer_provider()
-
-    if isinstance(current_provider, TracerProvider):
-        # Provider already set, add our exporter to it
-        current_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-    else:
-        # Provider not set yet, create new one
-        tracer_provider = TracerProvider()
-        tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
-        try:
-            trace.set_tracer_provider(tracer_provider)
-        except Exception:
-            # Provider already set by another test, use current one
-            if isinstance(trace.get_tracer_provider(), TracerProvider):
-                trace.get_tracer_provider().add_span_processor(
-                    SimpleSpanProcessor(span_exporter)
-                )
-
-    signal = Signal(
-        symbol="BTCUSDT",
-        signal_type=SignalType.BUY,
-        signal_action=SignalAction.OPEN_LONG,
-        confidence=SignalConfidence.HIGH,
-        confidence_score=0.85,
-        price=50000.0,
-        strategy_name="test_strategy",
-        signal_id="test-signal-12345",
-    )
-
-    # _signal_to_order returns a dict, not a TradeOrder object
-    # current_price is extracted from signal.price, not passed as parameter
-    order = consumer._signal_to_order(signal)
-    assert order is not None
-    assert isinstance(order, dict)
-    assert order["symbol"] == "BTCUSDT"
-    assert order["action"] in ["buy", "sell"]
-
-    # Verify span attributes are set correctly (only if spans were recorded)
-    spans = span_exporter.get_finished_spans()
-
-    # Find the signal_to_order span if any spans were emitted
-    signal_to_order_span = None
-    for span in spans:
-        if span.name == "consumer.signal_to_order":
-            signal_to_order_span = span
-            break
-
-    # If the consumer emits spans, verify their attributes
-    if signal_to_order_span is not None:
-        attributes = signal_to_order_span.attributes
-        assert attributes.get("symbol") == "BTCUSDT", "Expected symbol attribute"
-        assert attributes.get("signal.type") == "buy", "Expected signal.type attribute"
-        assert attributes.get("signal.strength") == 0.85, (
-            "Expected signal.strength attribute"
-        )
-        assert attributes.get("strategy.name") == "test_strategy", (
-            "Expected strategy.name attribute"
-        )
-        assert attributes.get("order.side") == "buy", "Expected order.side attribute"
-        assert attributes.get("order.quantity_pct") == 0.05, (
-            "Expected order.quantity_pct attribute"
-        )
-        assert attributes.get("order.created") is True, (
-            "Expected order.created attribute"
-        )
-        assert attributes.get("result") == "success", "Expected result attribute"
 
 
 @pytest.mark.asyncio

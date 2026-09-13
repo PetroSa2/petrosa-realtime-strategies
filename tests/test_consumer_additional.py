@@ -52,24 +52,6 @@ async def test_consumer_start_success(consumer):
 
 
 @pytest.mark.asyncio
-async def test_consumer_processing_loop_exception(consumer):
-    """Test _processing_loop exception handling - covers lines 303-313."""
-    consumer.is_running = True
-    consumer.subscription = AsyncMock()
-
-    # Mock sleep to raise exception
-    async def mock_sleep(delay):
-        raise Exception("Sleep error")
-
-    with patch("asyncio.sleep", side_effect=mock_sleep):
-        consumer.shutdown_event.set()
-        try:
-            await asyncio.wait_for(consumer._processing_loop(), timeout=0.5)
-        except (TimeoutError, Exception):
-            pass
-
-
-@pytest.mark.asyncio
 async def test_consumer_process_message_invalid_market_data(consumer):
     """Test _process_message with invalid market data - covers lines 358-368."""
     mock_msg = Mock()
@@ -229,85 +211,6 @@ async def test_consumer_process_market_logic_strategies_list_signals(consumer):
 
     await consumer._process_market_logic_strategies(market_data)
     # Should handle list of signals
-
-
-@pytest.mark.asyncio
-async def test_consumer_signal_to_order_open_short(consumer):
-    """Test _signal_to_order with OPEN_SHORT - covers lines 780-781."""
-    from strategies.models.signals import (
-        Signal,
-        SignalAction,
-        SignalConfidence,
-        SignalType,
-    )
-
-    signal = Signal(
-        symbol="BTCUSDT",
-        signal_type=SignalType.SELL,
-        signal_action=SignalAction.OPEN_SHORT,
-        confidence=SignalConfidence.HIGH,
-        confidence_score=0.85,
-        price=50000.0,
-        strategy_name="test",
-        signal_id="test-signal-12345",
-    )
-
-    order = consumer._signal_to_order(signal)
-    assert order["action"] == "sell"
-
-
-@pytest.mark.asyncio
-async def test_consumer_signal_to_order_else_action(consumer):
-    """Test _signal_to_order with else action - covers lines 782-783."""
-    from strategies.models.signals import (
-        Signal,
-        SignalAction,
-        SignalConfidence,
-        SignalType,
-    )
-
-    # Create a signal with signal_action that's not OPEN_LONG or OPEN_SHORT
-    # Use CLOSE_LONG or HOLD to trigger the else branch
-    signal = Signal(
-        symbol="BTCUSDT",
-        signal_type=SignalType.BUY,
-        signal_action=SignalAction.CLOSE_LONG,  # Not OPEN_LONG or OPEN_SHORT
-        confidence=SignalConfidence.HIGH,
-        confidence_score=0.85,
-        price=50000.0,
-        strategy_name="test",
-        signal_id="test-signal-12345",
-    )
-
-    order = consumer._signal_to_order(signal)
-    assert order["action"] in ["buy", "close"]  # Should use signal_type.lower()
-
-
-@pytest.mark.asyncio
-async def test_consumer_signal_to_order_sell_action(consumer):
-    """Test _signal_to_order with sell action - covers lines 801-802."""
-    from strategies.models.signals import (
-        Signal,
-        SignalAction,
-        SignalConfidence,
-        SignalType,
-    )
-
-    signal = Signal(
-        symbol="BTCUSDT",
-        signal_type=SignalType.SELL,
-        signal_action=SignalAction.OPEN_SHORT,
-        confidence=SignalConfidence.HIGH,
-        confidence_score=0.85,
-        price=50000.0,
-        strategy_name="test",
-        signal_id="test-signal-12345",
-    )
-
-    order = consumer._signal_to_order(signal)
-    assert order["action"] == "sell"
-    assert "stop_loss" in order
-    assert "take_profit" in order
 
 
 @pytest.mark.asyncio
