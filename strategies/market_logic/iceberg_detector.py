@@ -16,11 +16,20 @@ from typing import Optional
 
 import structlog
 from opentelemetry import trace
+from prometheus_client import Gauge
 
 from strategies.models.orderbook_tracker import IcebergPattern, OrderBookTracker
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+from strategies.utils.bounded_state import TTLBoundedDict
 
 logger = structlog.get_logger(__name__)
+
+# Per #189 AC7: gauge exposing the size of the bounded last_signal_time dict,
+# so growth is observable rather than inferred from RSS.
+ICEBERG_LAST_SIGNAL_TIME_SIZE = Gauge(
+    "iceberg_detector_last_signal_time_size",
+    "Number of (symbol, price, side) keys currently tracked for iceberg signal rate-limiting",
+)
 
 
 # Get tracer for this module
@@ -64,6 +73,8 @@ class IcebergDetectorStrategy:
         max_symbols: int = 100,
         # Rate limiting
         min_signal_interval_seconds: float = 120.0,
+        # Per #189 AC1: explicit bound on last_signal_time regardless of TTL
+        max_tracked_signal_keys: int = 5000,
     ):
         """
         Initialize strategy.
@@ -78,6 +89,9 @@ class IcebergDetectorStrategy:
             history_window_seconds: Order book history window
             max_symbols: Maximum symbols to track
             min_signal_interval_seconds: Minimum time between signals per symbol
+            max_tracked_signal_keys: Hard cap (LRU-evicted) on the number of
+                (symbol, price, side) rate-limit keys tracked in
+                ``last_signal_time``, independent of the TTL sweep below.
         """
         self.min_refill_count = min_refill_count
         self.refill_speed_threshold = refill_speed_threshold_seconds
@@ -99,7 +113,15 @@ class IcebergDetectorStrategy:
         )
 
         # Last signal time: {(symbol, price, side): timestamp}
-        self.last_signal_time: dict[tuple[str, float, str], float] = {}
+        # Per #189 AC1: bounded on two independent axes so it can never grow
+        # unbounded — (a) TTL-swept: entries older than min_signal_interval
+        # are useless for rate-limiting and are dropped on each generate call;
+        # (b) hard LRU cap at max_tracked_signal_keys as a defensive backstop
+        # in case the TTL sweep interval is misconfigured.
+        self.last_signal_time: TTLBoundedDict = TTLBoundedDict(
+            max_size=max_tracked_signal_keys,
+            ttl_seconds=min_signal_interval_seconds,
+        )
 
         # Statistics
         self.signals_generated = 0
@@ -202,6 +224,13 @@ class IcebergDetectorStrategy:
             signal_key = (iceberg.symbol, round(iceberg.price, 2), iceberg.side)
             current_time = time.time()
 
+            # Per #189 AC1: sweep stale rate-limit keys on the hot path
+            # (cheap — one dict scan bounded by max_tracked_signal_keys)
+            # before checking/writing, so the dict never accumulates keys
+            # past their useful TTL.
+            self.last_signal_time.sweep_expired(current_time)
+            ICEBERG_LAST_SIGNAL_TIME_SIZE.set(len(self.last_signal_time))
+
             if signal_key in self.last_signal_time:
                 time_since_last = current_time - self.last_signal_time[signal_key]
                 if time_since_last < self.min_signal_interval:
@@ -285,6 +314,7 @@ class IcebergDetectorStrategy:
 
             # Update last signal time
             self.last_signal_time[signal_key] = current_time
+            ICEBERG_LAST_SIGNAL_TIME_SIZE.set(len(self.last_signal_time))
 
             logger.info(
                 f"Iceberg signal generated: {signal_type.value}",

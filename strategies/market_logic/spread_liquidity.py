@@ -17,14 +17,26 @@ from typing import Optional
 
 import structlog
 from opentelemetry import trace
+from prometheus_client import Gauge
 
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 from strategies.models.spread_metrics import SpreadEvent, SpreadMetrics, SpreadSnapshot
+from strategies.utils.bounded_state import SymbolActivityTracker
 
 logger = structlog.get_logger(__name__)
 
 # OpenTelemetry tracer for manual spans
 tracer = trace.get_tracer(__name__)
+
+# Per #189 AC7: gauges exposing bounded-structure sizes.
+SPREAD_LIQUIDITY_SYMBOLS = Gauge(
+    "spread_liquidity_symbols_tracked",
+    "Number of symbols currently tracked by SpreadLiquidityStrategy",
+)
+SPREAD_LIQUIDITY_WIDE_EVENTS = Gauge(
+    "spread_liquidity_wide_spread_events_size",
+    "Number of unresolved wide-spread events currently tracked",
+)
 
 
 class SpreadLiquidityStrategy:
@@ -61,6 +73,9 @@ class SpreadLiquidityStrategy:
         lookback_ticks: int = 20,
         # Rate limiting
         min_signal_interval_seconds: float = 60.0,
+        # Per #189 AC1/AC5: explicit bounds on symbol-dimension growth
+        max_symbols: int = 200,
+        wide_spread_event_ttl_seconds: float | None = None,
     ):
         """
         Initialize strategy.
@@ -74,6 +89,15 @@ class SpreadLiquidityStrategy:
             base_confidence: Base confidence for signals
             lookback_ticks: Number of ticks to track for averages
             min_signal_interval_seconds: Minimum time between signals per symbol
+            max_symbols: Hard cap (LRU-evicted) on the number of distinct
+                symbols tracked across spread_history/wide_spread_events/
+                last_signal_time (per #189 AC5 — previously only the
+                per-symbol deque was bounded, not the symbol dimension).
+            wide_spread_event_ttl_seconds: An unresolved wide-spread event
+                older than this expires and is dropped (per #189 AC4/AC5 —
+                previously only removed on a successful narrowing event, so
+                a symbol that widened and never narrowed held its entry
+                forever). Defaults to 10x persistence_threshold_seconds.
         """
         self.spread_threshold_bps = spread_threshold_bps
         self.spread_ratio_threshold = spread_ratio_threshold
@@ -83,15 +107,30 @@ class SpreadLiquidityStrategy:
         self.base_confidence = base_confidence
         self.lookback_ticks = lookback_ticks
         self.min_signal_interval = min_signal_interval_seconds
+        self.max_symbols = max_symbols
+        self.wide_spread_event_ttl_seconds = (
+            wide_spread_event_ttl_seconds
+            if wide_spread_event_ttl_seconds is not None
+            else persistence_threshold_seconds * 10
+        )
 
-        # History tracking: {symbol: deque[SpreadMetrics]}
+        # Per #189 AC5: tracks last-activity per symbol so the symbol
+        # dimension of every companion dict below is bounded together.
+        self._symbol_tracker = SymbolActivityTracker(max_symbols=max_symbols)
+
+        # History tracking: {symbol: deque[SpreadMetrics]} — the deque
+        # itself is bounded (maxlen=lookback_ticks); the symbol dimension
+        # is bounded by _symbol_tracker above.
         self.spread_history: dict[str, deque] = defaultdict(
             lambda: deque(maxlen=lookback_ticks)
         )
 
         # Event tracking: {symbol: {"start_time": timestamp, "spread_bps": value}}
+        # Per #189 AC4: TTL-swept via wide_spread_event_ttl_seconds so an
+        # event that never narrows doesn't hold its entry forever.
         self.wide_spread_events: dict[str, dict] = {}
-        self.narrow_spread_events: dict[str, dict] = {}
+        # Per #189 AC7 (#7 in the ticket table): dead field, never written
+        # or read anywhere in the codebase — removed rather than bounded.
 
         # Last signal time: {symbol: timestamp}
         self.last_signal_time: dict[str, float] = {}
@@ -149,8 +188,20 @@ class SpreadLiquidityStrategy:
             span.set_attribute("spread_bps", metrics.spread_bps)
             span.set_attribute("mid_price", metrics.mid_price)
 
+            # Per #189 AC5: bound the symbol dimension. If this touch
+            # evicts a different (LRU) symbol, purge it from every
+            # companion dict so nothing outlives the tracker.
+            evicted_symbol = self._symbol_tracker.touch(
+                symbol, now=timestamp.timestamp()
+            )
+            if evicted_symbol is not None and evicted_symbol != symbol:
+                self.spread_history.pop(evicted_symbol, None)
+                self.wide_spread_events.pop(evicted_symbol, None)
+                self.last_signal_time.pop(evicted_symbol, None)
+
             # Update history
             self.spread_history[symbol].append(metrics)
+            self._update_gauges()
 
             # Need history for comparison
             if len(self.spread_history[symbol]) < 3:
@@ -285,6 +336,11 @@ class SpreadLiquidityStrategy:
         """Detect spread widening or narrowing event."""
         current_time = timestamp.timestamp()
         metrics = snapshot.metrics
+
+        # Per #189 AC4/AC5: sweep wide_spread_events entries older than
+        # the TTL before evaluating — an unresolved event that never
+        # narrows must not hold its entry forever.
+        self._prune_expired_wide_spread_events(current_time)
 
         # Event 1: Spread Normalization (BUY signal)
         # Wide spread that has been persistent, now narrowing
@@ -519,6 +575,28 @@ class SpreadLiquidityStrategy:
             )
 
             return signal
+
+    def _prune_expired_wide_spread_events(self, current_time: float) -> int:
+        """
+        Remove wide_spread_events entries older than the configured TTL.
+
+        Per #189 #4/AC5: previously entries were removed only on a
+        successful narrowing event; a symbol that widened and never
+        narrowed held its entry forever.
+        """
+        expired = [
+            symbol
+            for symbol, event in self.wide_spread_events.items()
+            if current_time - event["start_time"] > self.wide_spread_event_ttl_seconds
+        ]
+        for symbol in expired:
+            del self.wide_spread_events[symbol]
+        return len(expired)
+
+    def _update_gauges(self) -> None:
+        """Update Prometheus gauges reflecting current structure sizes."""
+        SPREAD_LIQUIDITY_SYMBOLS.set(len(self._symbol_tracker))
+        SPREAD_LIQUIDITY_WIDE_EVENTS.set(len(self.wide_spread_events))
 
     def get_statistics(self) -> dict:
         """Get strategy statistics."""

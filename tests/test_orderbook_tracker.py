@@ -181,3 +181,70 @@ class TestOrderbookTracker:
         assert "active_bid_levels" in stats
         assert "active_ask_levels" in stats
         assert stats["symbols_tracked"] == 2
+
+
+class TestOrderBookTrackerBoundedState:
+    """Per #189: explicit bounds + eviction for symbol and price-level dims."""
+
+    def test_ac2_max_symbols_enforced(self):
+        """AC2: feeding max_symbols + 10 distinct symbols never exceeds cap."""
+        max_symbols = 10
+        tracker = OrderBookTracker(max_symbols=max_symbols)
+        bids = [(50000.0, 1.0)]
+        asks = [(50001.0, 1.0)]
+
+        for i in range(max_symbols + 10):
+            tracker.update_orderbook(f"SYM{i:03d}USDT", bids, asks)
+
+        assert len(tracker.bid_levels) <= max_symbols
+        assert len(tracker._symbol_tracker) <= max_symbols
+
+    def test_ac3_detect_icebergs_does_not_create_symbol_entry(self):
+        """AC3: detect_icebergs("NEVERSEEN") must not create a symbol entry."""
+        tracker = OrderBookTracker()
+
+        patterns = tracker.detect_icebergs("NEVERSEEN", current_price=50000.0)
+
+        assert patterns == []
+        assert len(tracker.bid_levels) == 0
+        assert len(tracker.ask_levels) == 0
+        assert "NEVERSEEN" not in tracker.bid_levels
+        assert "NEVERSEEN" not in tracker.ask_levels
+
+    def test_ac4_sweep_covers_idle_symbols_not_just_the_updating_one(self):
+        """AC4: updating symbol B must also sweep symbol A's expired levels."""
+        tracker = OrderBookTracker(history_window_seconds=100)
+        base_time = datetime.utcnow()
+
+        # Symbol A gets one update, then goes idle.
+        tracker.update_orderbook(
+            "AAAUSDT", [(1.0, 1.0)], [(1.1, 1.0)], timestamp=base_time
+        )
+        assert "AAAUSDT" in tracker.bid_levels
+
+        # Symbol B is updated well past A's history window — A was never
+        # touched again, so before the fix its levels lived forever.
+        far_future = base_time + timedelta(seconds=500)
+        tracker.update_orderbook(
+            "BBBUSDT", [(2.0, 1.0)], [(2.1, 1.0)], timestamp=far_future
+        )
+
+        assert "AAAUSDT" not in tracker.bid_levels
+        assert "AAAUSDT" not in tracker.ask_levels
+
+    def test_max_levels_per_symbol_enforced(self):
+        """Per-symbol price-level cap evicts oldest level when exceeded."""
+        tracker = OrderBookTracker(max_levels_per_symbol=5)
+        base_time = datetime.utcnow()
+
+        for i in range(20):
+            price = 50000.0 + i
+            tracker.update_orderbook(
+                "BTCUSDT",
+                [(price, 1.0)],
+                [(price + 1000, 1.0)],
+                timestamp=base_time + timedelta(seconds=i),
+            )
+
+        assert len(tracker.bid_levels["BTCUSDT"]) <= 5
+        assert len(tracker.ask_levels["BTCUSDT"]) <= 5

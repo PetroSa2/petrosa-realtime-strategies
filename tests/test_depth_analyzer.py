@@ -7,6 +7,7 @@ Tests the market depth analysis system including:
 - Market summary aggregation
 """
 
+import time
 from datetime import datetime, timedelta
 
 import pytest
@@ -513,6 +514,56 @@ class TestDepthAnalyzer:
 
         # Verify cleanup was attempted
         assert True  # If we get here, cleanup logic executed
+
+
+class TestDepthAnalyzerBoundedState:
+    """Per #189: AC6 cleanup-trigger fix + symbol-dimension bound (item #6)."""
+
+    def test_ac6_cleanup_runs_with_three_symbol_workload(self):
+        """AC6: the len(_current_metrics) % 100 == 0 trigger never fired
+        with a realistic (small) TRADING_SYMBOLS workload — replaced with a
+        monotonic call counter that fires deterministically every 100 calls
+        regardless of symbol count."""
+        analyzer = DepthAnalyzer()
+        symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+
+        for i in range(150):
+            symbol = symbols[i % len(symbols)]
+            analyzer.analyze_depth(symbol, [(100.0, 1.0)], [(100.5, 1.0)])
+
+        # With the old `% 100 == 0` trigger keyed on len(_current_metrics)
+        # (which never exceeds 3), cleanup would NEVER run. With the fixed
+        # call-counter trigger, it ran at least once (after call 100).
+        assert analyzer._analyze_call_count == 150
+        assert analyzer._analyze_call_count % 100 == 50  # sanity on counter
+
+    def test_cleanup_purges_pressure_and_imbalance_history_too(self):
+        """Previously _cleanup_expired_metrics only evicted _current_metrics
+        and _last_update, never _pressure_history/_imbalance_history."""
+        analyzer = DepthAnalyzer()
+        analyzer.analyze_depth("OLDUSDT", [(100.0, 1.0)], [(100.5, 1.0)])
+        assert "OLDUSDT" in analyzer._pressure_history
+        assert "OLDUSDT" in analyzer._imbalance_history
+
+        analyzer._last_update["OLDUSDT"] = time.time() - (analyzer.metrics_ttl + 10)
+        analyzer._cleanup_expired_metrics()
+
+        assert "OLDUSDT" not in analyzer._current_metrics
+        assert "OLDUSDT" not in analyzer._pressure_history
+        assert "OLDUSDT" not in analyzer._imbalance_history
+
+    def test_symbol_dimension_bounded_by_max_symbols(self):
+        """Per #189 item #6: symbol dimension of pressure/imbalance history
+        is now bounded via SymbolActivityTracker, not just the deque itself."""
+        max_symbols = 5
+        analyzer = DepthAnalyzer(max_symbols=max_symbols, metrics_ttl_seconds=3600)
+
+        for i in range(max_symbols + 10):
+            analyzer.analyze_depth(f"SYM{i:03d}USDT", [(100.0, 1.0)], [(100.5, 1.0)])
+
+        assert len(analyzer._pressure_history) <= max_symbols
+        assert len(analyzer._imbalance_history) <= max_symbols
+        assert len(analyzer._symbol_tracker) <= max_symbols
 
 
 if __name__ == "__main__":

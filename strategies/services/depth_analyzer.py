@@ -16,7 +16,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from prometheus_client import Gauge
+
+from strategies.utils.bounded_state import SymbolActivityTracker
+
 logger = logging.getLogger(__name__)
+
+# Per #189 AC7: gauges exposing bounded-structure sizes.
+DEPTH_ANALYZER_SYMBOLS = Gauge(
+    "depth_analyzer_symbols_tracked",
+    "Number of symbols currently tracked by DepthAnalyzer",
+)
 
 
 @dataclass
@@ -120,7 +130,11 @@ class DepthAnalyzer:
         # Current metrics for each symbol
         self._current_metrics: dict[str, DepthMetrics] = {}
 
-        # Historical data for trend analysis
+        # Historical data for trend analysis. The deques themselves are
+        # bounded (maxlen=900); per #189 AC1/#6, the *symbol* dimension is
+        # now bounded too via _symbol_tracker below — previously
+        # _cleanup_expired_metrics() only evicted _current_metrics and
+        # _last_update, never touching these two dicts.
         self._pressure_history: dict[str, deque] = defaultdict(
             lambda: deque(maxlen=900)  # 15 min @ 1 update/sec
         )
@@ -130,6 +144,19 @@ class DepthAnalyzer:
 
         # Timestamps for TTL management
         self._last_update: dict[str, float] = {}
+
+        # Per #189 AC2-style enforcement for the symbol dimension across
+        # all four dicts above: evicts the least-recently-active symbol
+        # once max_symbols is exceeded.
+        self._symbol_tracker = SymbolActivityTracker(max_symbols=max_symbols)
+
+        # Per #189: the periodic-cleanup trigger below was keyed on
+        # len(self._current_metrics) % 100 == 0 — with TRADING_SYMBOLS
+        # capped at a handful of symbols that condition was never true.
+        # Replaced with a monotonic call counter so cleanup runs
+        # deterministically every 100 analyze_depth() calls regardless of
+        # symbol count.
+        self._analyze_call_count = 0
 
         logger.info(
             f"Depth analyzer initialized: "
@@ -255,17 +282,35 @@ class DepthAnalyzer:
             book_valid=book_valid,
         )
 
+        # Per #189 AC2-style: bound the symbol dimension across all four
+        # symbol-keyed dicts owned by this analyzer. If this touch evicts
+        # a different (LRU) symbol, purge it everywhere in one place.
+        now = time.time()
+        evicted_symbol = self._symbol_tracker.touch(symbol, now=now)
+        if evicted_symbol is not None and evicted_symbol != symbol:
+            self._current_metrics.pop(evicted_symbol, None)
+            self._last_update.pop(evicted_symbol, None)
+            self._pressure_history.pop(evicted_symbol, None)
+            self._imbalance_history.pop(evicted_symbol, None)
+
         # Store current metrics
         self._current_metrics[symbol] = metrics
-        self._last_update[symbol] = time.time()
+        self._last_update[symbol] = now
 
         # Update historical data
         self._pressure_history[symbol].append((timestamp, net_pressure))
         self._imbalance_history[symbol].append((timestamp, imbalance_ratio))
 
-        # Cleanup old data periodically
-        if len(self._current_metrics) % 100 == 0:
+        # Per #189 AC6: replaced the `len(self._current_metrics) % 100 == 0`
+        # trigger — keyed on tracked-symbol count, which with
+        # TRADING_SYMBOLS=BTCUSDT,ETHUSDT,BNBUSDT (len=3) was NEVER true —
+        # with a monotonic call counter so cleanup runs deterministically
+        # every 100 analyze_depth() calls regardless of symbol count.
+        self._analyze_call_count += 1
+        if self._analyze_call_count % 100 == 0:
             self._cleanup_expired_metrics()
+
+        DEPTH_ANALYZER_SYMBOLS.set(len(self._symbol_tracker))
 
         return metrics
 
@@ -415,7 +460,15 @@ class DepthAnalyzer:
         }
 
     def _cleanup_expired_metrics(self):
-        """Remove metrics that have expired based on TTL."""
+        """
+        Remove metrics that have expired based on TTL.
+
+        Per #189 (defect noted alongside AC6): previously this evicted
+        only ``_current_metrics``/``_last_update`` and never touched
+        ``_pressure_history``/``_imbalance_history``, so those two dicts'
+        symbol dimension grew forever even though the metrics TTL had
+        long since expired the symbol elsewhere. Now purges all four.
+        """
         current_time = time.time()
         expired_symbols = [
             symbol
@@ -426,6 +479,9 @@ class DepthAnalyzer:
         for symbol in expired_symbols:
             self._current_metrics.pop(symbol, None)
             self._last_update.pop(symbol, None)
+            self._pressure_history.pop(symbol, None)
+            self._imbalance_history.pop(symbol, None)
+            self._symbol_tracker.discard(symbol)
 
         if expired_symbols:
             logger.debug(f"Cleaned up metrics for {len(expired_symbols)} symbols")
