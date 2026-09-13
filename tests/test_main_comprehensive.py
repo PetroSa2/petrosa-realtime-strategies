@@ -139,6 +139,49 @@ async def test_start_error_handling(service):
 
 
 @pytest.mark.asyncio
+async def test_start_survives_mongodb_down(service, mock_components):
+    """Per #192 AC5 (defect 6): MongoDB unavailability must not abort startup.
+    The service must start and consume NATS with Mongo down for both the
+    config-manager's general client and the rate limiter's direct client.
+    """
+    with (
+        patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo,
+        patch(
+            "strategies.services.config_manager.StrategyConfigManager"
+        ) as mock_config_mgr,
+        patch("strategies.services.depth_analyzer.DepthAnalyzer") as mock_depth,
+        patch("strategies.main.HealthServer") as mock_health,
+        patch("strategies.main.TradeOrderPublisher") as mock_publisher,
+        patch("strategies.main.NATSConsumer") as mock_consumer,
+        patch("strategies.main.HeartbeatManager") as mock_heartbeat,
+        patch("strategies.main.ConfigRateLimiter") as mock_rate_limiter_cls,
+    ):
+        # Both the config-manager's general Mongo client and the rate limiter's
+        # dedicated direct client fail to connect (Mongo entirely down).
+        mock_mongo_instance = MagicMock()
+        mock_mongo_instance.connect = AsyncMock(return_value=False)
+        mock_mongo.return_value = mock_mongo_instance
+        mock_config_mgr.return_value = mock_components["config_manager"]
+        mock_depth.return_value = mock_components["depth_analyzer"]
+        mock_health.return_value = mock_components["health_server"]
+        mock_publisher.return_value = mock_components["publisher"]
+        mock_consumer.return_value = mock_components["consumer"]
+        mock_heartbeat.return_value = mock_components["heartbeat_manager"]
+
+        service.shutdown_event.set()
+
+        await service.start()
+
+        # Startup completed despite Mongo being down on both clients.
+        mock_components["config_manager"].start.assert_called_once()
+        mock_components["consumer"].start.assert_called_once()
+        mock_components["heartbeat_manager"].start.assert_called_once()
+        # Rate limiter must be disabled, not constructed, when its Mongo client
+        # failed to connect.
+        mock_rate_limiter_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_stop_success(service, mock_components):
     """Test successful service stop."""
     # Set up components

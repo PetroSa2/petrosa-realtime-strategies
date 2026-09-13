@@ -833,6 +833,12 @@ class NATSConsumer:
                     strategy=strategy_name, symbol=symbol, metrics=self.metrics
                 ) as ctx:
                     try:
+                        # Per #192: microstructure strategies were never re-read from
+                        # live config after construction (only market_logic strategies
+                        # were wired in #197). Apply the same pattern here so
+                        # /api/v1/strategies/** writes reach spread_liquidity and
+                        # iceberg_detector too.
+                        await self._apply_dynamic_config(strategy_name, strategy)
                         # Analyze order book
                         signal = strategy.analyze(symbol=symbol, bids=bids, asks=asks)
 
