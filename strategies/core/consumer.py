@@ -488,7 +488,12 @@ class NATSConsumer:
                     # Record message processed with OpenTelemetry metrics
                     self.metrics.record_message_processed(symbol, message_type)
 
-                    # Update consumer lag (time since message was created)
+                    # Update consumer lag: time.time() (endpoint 1, now, when we
+                    # finish processing) minus market_data.timestamp (endpoint 2,
+                    # the upstream event/ingest time resolved in
+                    # `_resolve_event_timestamp` -- envelope timestamp from
+                    # petrosa-socket-client, else Binance `E`). Per #194 this
+                    # must be a genuine upstream time, not one generated here.
                     if hasattr(market_data, "timestamp") and market_data.timestamp:
                         lag_seconds = time.time() - market_data.timestamp.timestamp()
                         self.metrics.update_consumer_lag(max(0, lag_seconds))
@@ -542,9 +547,17 @@ class NATSConsumer:
                 return None
 
             # Create market data message using model_construct to bypass Union validation
-            # since we've already validated the specific type in the transformation
+            # since we've already validated the specific type in the transformation.
+            #
+            # Per #194: `timestamp` here is the reference used to compute
+            # `realtime.consumer.lag` (see `_process_message`), so it MUST be
+            # a genuine upstream event/ingest time -- never a value generated
+            # here at parse time (that previously made lag structurally
+            # incapable of exceeding a few milliseconds).
             market_data = MarketDataMessage.model_construct(
-                stream=stream, data=transformed_data, timestamp=datetime.now(UTC)
+                stream=stream,
+                data=transformed_data,
+                timestamp=self._resolve_event_timestamp(message_data, transformed_data),
             )
 
             return market_data
@@ -552,6 +565,61 @@ class NATSConsumer:
         except Exception as e:
             self.logger.error("Failed to parse market data", error=str(e))
             return None
+
+    def _resolve_event_timestamp(
+        self,
+        message_data: dict[str, Any],
+        transformed_data: Union[DepthUpdate, TradeData, TickerData, MarkPriceData],
+    ) -> datetime:
+        """Resolve the true upstream timestamp used for consumer-lag measurement.
+
+        Per #194, `realtime.consumer.lag` must measure real pipeline lag, i.e.
+        `time.time() - <endpoint 2>`, where endpoint 2 is chosen with this
+        priority (most authoritative first):
+
+        1. The NATS envelope `timestamp` set by `petrosa-socket-client` at
+           websocket-frame-ingest time (`socket_client/models/message.py`
+           `WebSocketMessage.to_nats_message`) -- present on every message
+           regardless of stream type.
+        2. The Binance-native `event_time` (`E` field) carried on the
+           transformed payload, used only if the envelope field is missing
+           or unparseable.
+        3. `datetime.now(UTC)` as a last resort when neither source is
+           available -- this degrades lag to ~0 for that single message
+           (the pre-existing behavior), it is not a new failure mode.
+        """
+        raw_envelope_ts = message_data.get("timestamp")
+        if raw_envelope_ts:
+            try:
+                normalized = (
+                    raw_envelope_ts[:-1] + "+00:00"
+                    if isinstance(raw_envelope_ts, str)
+                    and raw_envelope_ts.endswith("Z")
+                    else raw_envelope_ts
+                )
+                parsed = datetime.fromisoformat(normalized)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                return parsed
+            except (ValueError, TypeError) as e:
+                self.logger.warning(
+                    "Failed to parse envelope timestamp, falling back to event_time",
+                    raw_timestamp=raw_envelope_ts,
+                    error=str(e),
+                )
+
+        event_time_ms = getattr(transformed_data, "event_time", None)
+        if event_time_ms:
+            try:
+                return datetime.fromtimestamp(event_time_ms / 1000, tz=UTC)
+            except (ValueError, OSError, TypeError) as e:
+                self.logger.warning(
+                    "Failed to parse Binance event_time, falling back to now()",
+                    event_time=event_time_ms,
+                    error=str(e),
+                )
+
+        return datetime.now(UTC)
 
     def _transform_binance_data(
         self, stream: str, data: dict[str, Any]

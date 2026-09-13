@@ -8,7 +8,7 @@ actual message processing and strategy execution.
 import asyncio
 import json
 import time
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -108,15 +108,20 @@ class TestConsumerMetricsIntegration:
     async def test_consumer_lag_calculation(
         self, consumer_with_metrics, mock_publisher
     ):
-        """Test that consumer lag is calculated correctly."""
+        """Test that consumer lag reflects real upstream lag (per #194 AC2).
+
+        The envelope `timestamp` (set by petrosa-socket-client at ingest
+        time) is 5 seconds in the past. The reported lag must be
+        approximately 5.0, not approximately 0 -- confirming
+        `_resolve_event_timestamp` is used instead of a parse-time
+        `datetime.now(UTC)`.
+        """
         consumer, metrics = consumer_with_metrics
 
-        # Create message with timestamp 5 seconds in the past
-        # The consumer calculates lag from market_data.timestamp which is set
-        # to datetime.now(UTC) (per #193)
-        # during parsing, so we need to manually update the lag after processing
+        five_seconds_ago = datetime.now(UTC) - timedelta(seconds=5)
         message_data = {
             "stream": "btcusdt@trade",
+            "timestamp": five_seconds_ago.isoformat().replace("+00:00", "Z"),
             "data": {
                 "s": "BTCUSDT",
                 "t": 12345,
@@ -136,9 +141,40 @@ class TestConsumerMetricsIntegration:
         # Process message
         await consumer._process_message(mock_msg)
 
-        # Test that lag can be updated manually (this is how it works in production)
-        metrics.update_consumer_lag(5.5)
-        assert metrics._consumer_lag_value == 5.5
+        # The consumer must have derived the lag from the envelope timestamp,
+        # not from a self-generated "now" -- so it should read ~5.0s, never ~0.
+        assert metrics._consumer_lag_value == pytest.approx(5.0, abs=0.5)
+
+    @pytest.mark.asyncio
+    async def test_consumer_lag_falls_back_to_binance_event_time(
+        self, consumer_with_metrics, mock_publisher
+    ):
+        """No envelope `timestamp` -> fall back to Binance `E` (per #194)."""
+        consumer, metrics = consumer_with_metrics
+
+        five_seconds_ago_ms = int((time.time() - 5) * 1000)
+        message_data = {
+            "stream": "btcusdt@trade",
+            # No top-level "timestamp" -- envelope field absent.
+            "data": {
+                "s": "BTCUSDT",
+                "t": 12345,
+                "p": "50000.00",
+                "q": "0.1",
+                "b": 0,
+                "a": 0,
+                "T": five_seconds_ago_ms,
+                "m": False,
+                "E": five_seconds_ago_ms,
+            },
+        }
+
+        mock_msg = Mock()
+        mock_msg.data = json.dumps(message_data).encode()
+
+        await consumer._process_message(mock_msg)
+
+        assert metrics._consumer_lag_value == pytest.approx(5.0, abs=0.5)
 
     @pytest.mark.asyncio
     async def test_message_type_tracking(self, consumer_with_metrics, mock_publisher):
