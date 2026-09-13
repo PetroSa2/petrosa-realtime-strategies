@@ -335,6 +335,48 @@ async def test_consumer_process_microstructure_strategies_error(consumer):
 
 
 @pytest.mark.asyncio
+async def test_consumer_microstructure_strategies_apply_dynamic_config(consumer):
+    """Per #192: microstructure strategies must be re-applied live config on each
+    processing call, exactly like market_logic strategies were wired in #197.
+    Previously spread_liquidity/iceberg_detector were never passed through
+    _apply_dynamic_config, so /api/v1/strategies/** writes had zero effect on them.
+    """
+    strategy = Mock()
+    strategy.analyze = Mock(return_value=None)
+    strategy.spread_threshold_bps = 10.0
+    consumer.microstructure_strategies = {"spread_liquidity": strategy}
+
+    consumer.config_manager = AsyncMock()
+    consumer.config_manager.get_config = AsyncMock(
+        return_value={"parameters": {"spread_threshold_bps": 25.0}}
+    )
+
+    await consumer._process_microstructure_strategies(
+        "BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)]
+    )
+
+    consumer.config_manager.get_config.assert_awaited_once_with("spread_liquidity")
+    assert strategy.spread_threshold_bps == 25.0
+    strategy.analyze.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_consumer_microstructure_strategies_no_config_manager_noop(consumer):
+    """When no config_manager is wired (e.g. Mongo unavailable at startup), dynamic
+    config application must be a no-op rather than raising."""
+    strategy = Mock()
+    strategy.analyze = Mock(return_value=None)
+    consumer.microstructure_strategies = {"iceberg_detector": strategy}
+    consumer.config_manager = None
+
+    await consumer._process_microstructure_strategies(
+        "BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)]
+    )
+
+    strategy.analyze.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_consumer_get_metrics(consumer):
     """Test get_metrics method."""
     consumer.message_count = 10
