@@ -40,9 +40,6 @@ except ImportError:
     config_rate_limit_middleware = None
 
 # Prometheus metrics
-CIRCUIT_BREAKER_STATE = Gauge(
-    "circuit_breaker_state", "Circuit breaker state (0=closed, 1=open)", ["component"]
-)
 MEMORY_USAGE_BYTES = Gauge("memory_usage_bytes", "Memory usage in bytes")
 CPU_USAGE_PERCENT = Gauge("cpu_usage_percent", "CPU usage percentage")
 SERVICE_UPTIME = Gauge("service_uptime_seconds", "Service uptime in seconds")
@@ -387,16 +384,6 @@ class HealthServer:
             # Update enabled strategies count
             enabled_strategies = constants.get_enabled_strategies()
             ENABLED_STRATEGIES_COUNT.set(len(enabled_strategies))
-
-            # Update component metrics (circuit breakers)
-            components = self._get_component_metrics()
-            for component_name, component_data in components.items():
-                if isinstance(component_data, dict):
-                    # Update circuit breaker state
-                    cb_state = component_data.get("circuit_breaker_state", "CLOSED")
-                    CIRCUIT_BREAKER_STATE.labels(component=component_name).set(
-                        1 if cb_state == "OPEN" else 0
-                    )
 
             # Generate Prometheus-format metrics
             metrics_output = generate_latest()

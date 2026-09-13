@@ -267,9 +267,6 @@ class HeartbeatManager:
                         "consumer_max_processing_time_ms": round(
                             consumer_metrics.get("max_processing_time_ms", 0), 2
                         ),
-                        "consumer_circuit_breaker_state": consumer_metrics.get(
-                            "circuit_breaker_state", "unknown"
-                        ),
                     }
                 )
             except Exception as e:
@@ -292,7 +289,6 @@ class HeartbeatManager:
                         "publisher_nats_connected": publisher_health.get(
                             "nats_connected", False
                         ),
-                        "publisher_queue_size": publisher_metrics.get("queue_size", 0),
                         "publisher_last_order_time": publisher_metrics.get(
                             "last_order_time"
                         ),
@@ -301,9 +297,6 @@ class HeartbeatManager:
                         ),
                         "publisher_max_publishing_time_ms": round(
                             publisher_metrics.get("max_publishing_time_ms", 0), 2
-                        ),
-                        "publisher_circuit_breaker_state": publisher_metrics.get(
-                            "circuit_breaker_state", "unknown"
                         ),
                     }
                 )

@@ -1075,12 +1075,11 @@ realtime_strategies_messages_errors_total 0
 realtime_strategies_processing_latency_seconds 0.002
 
 # Signal generation
-realtime_strategies_signals_generated_total{strategy="orderbook_skew"} 3000
-realtime_strategies_signals_generated_total{strategy="trade_momentum"} 2500
+realtime_strategies_signals_generated_total{strategy="spread_liquidity"} 3000
+realtime_strategies_signals_generated_total{strategy="iceberg_detector"} 2500
 
 # Connection health
 realtime_strategies_nats_connected 1
-realtime_strategies_circuit_breaker_state{name="nats"} 0
 ```
 
 **Grafana Dashboards:**
