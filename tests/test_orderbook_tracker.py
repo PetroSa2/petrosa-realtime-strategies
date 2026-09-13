@@ -79,7 +79,11 @@ class TestOrderbookTracker:
         assert stats["symbols_tracked"] == 1
 
     def test_cleanup_expired_levels(self, tracker):
-        """Test cleanup removes expired levels - covers lines 273, 282."""
+        """Test cleanup removes expired levels.
+
+        Per #191 AC4: `update_orderbook` no longer sweeps internally, so
+        eviction is triggered explicitly via `sweep_expired_levels()`.
+        """
         bids = [(50000.0, 1.0)]
         asks = [(50001.0, 1.0)]
 
@@ -94,17 +98,23 @@ class TestOrderbookTracker:
         tracker.update_orderbook("BTCUSDT", old_bids, old_asks, timestamp=old_time)
 
         # Add more recent snapshots (within history_window)
+        now = datetime.utcnow()
         for i in range(5):
             tracker.update_orderbook(
                 "BTCUSDT",
                 bids,
                 asks,
-                timestamp=datetime.utcnow() - timedelta(seconds=i),
+                timestamp=now - timedelta(seconds=i),
             )
 
-        # Cleanup is called internally during update_orderbook
-        # Lines 273 and 282 execute when deleting expired levels
-        # Verify cleanup happened by checking that old levels are removed
+        # The two old levels (400s stale) must still be present -- sweeping
+        # is no longer an update_orderbook side effect (per #191 AC4).
+        assert 49900.0 in tracker.bid_levels["BTCUSDT"]
+
+        removed = tracker.sweep_expired_levels(current_time=now.timestamp())
+        assert removed >= 1
+        assert 49900.0 not in tracker.bid_levels["BTCUSDT"]
+
         stats = tracker.get_statistics()
         # Should still have recent levels
         assert stats["symbols_tracked"] == 1
@@ -212,7 +222,14 @@ class TestOrderBookTrackerBoundedState:
         assert "NEVERSEEN" not in tracker.ask_levels
 
     def test_ac4_sweep_covers_idle_symbols_not_just_the_updating_one(self):
-        """AC4: updating symbol B must also sweep symbol A's expired levels."""
+        """AC4 (#189): a sweep covers symbol A's expired levels even though
+        only symbol B is currently being updated.
+
+        Per #191 AC4: `update_orderbook` no longer triggers this sweep as a
+        side effect (that per-message call site is exactly what #191
+        removes) -- the test now drives `sweep_expired_levels()` explicitly,
+        the same way `start_periodic_sweep`'s background task would.
+        """
         tracker = OrderBookTracker(history_window_seconds=100)
         base_time = datetime.utcnow()
 
@@ -223,14 +240,80 @@ class TestOrderBookTrackerBoundedState:
         assert "AAAUSDT" in tracker.bid_levels
 
         # Symbol B is updated well past A's history window — A was never
-        # touched again, so before the fix its levels lived forever.
+        # touched again, so before #189's fix its levels lived forever.
         far_future = base_time + timedelta(seconds=500)
         tracker.update_orderbook(
             "BBBUSDT", [(2.0, 1.0)], [(2.1, 1.0)], timestamp=far_future
         )
 
+        # Per #191 AC4: no automatic sweep on update_orderbook anymore.
+        assert "AAAUSDT" in tracker.bid_levels
+
+        tracker.sweep_expired_levels(current_time=far_future.timestamp())
+
         assert "AAAUSDT" not in tracker.bid_levels
         assert "AAAUSDT" not in tracker.ask_levels
+
+    def test_ac4_update_orderbook_does_not_sweep_synchronously(self):
+        """AC4 (#191): update_orderbook must not evict expired levels as a
+        side effect anymore -- eviction only happens via
+        `sweep_expired_levels`/`start_periodic_sweep`."""
+        tracker = OrderBookTracker(history_window_seconds=10)
+        base_time = datetime.utcnow()
+
+        tracker.update_orderbook(
+            "BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)], timestamp=base_time
+        )
+
+        # Far past the 10s history window -- would have been evicted by the
+        # old unconditional per-message sweep.
+        later = base_time + timedelta(seconds=100)
+        tracker.update_orderbook(
+            "BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)], timestamp=later
+        )
+
+        assert 50000.0 in tracker.bid_levels["BTCUSDT"]
+
+        removed = tracker.sweep_expired_levels(current_time=later.timestamp())
+        assert removed == 0  # the level was just refreshed by the 2nd update
+
+    def test_ac4_sweep_expired_levels_evicts_stale_entries(self):
+        """AC4 (#191): `sweep_expired_levels()` is the public periodic-sweep
+        entry point and correctly evicts levels older than history_window."""
+        tracker = OrderBookTracker(history_window_seconds=10)
+        base_time = datetime.utcnow()
+
+        tracker.update_orderbook(
+            "BTCUSDT", [(50000.0, 1.0)], [(50001.0, 1.0)], timestamp=base_time
+        )
+
+        later = base_time + timedelta(seconds=100)
+        removed = tracker.sweep_expired_levels(current_time=later.timestamp())
+
+        assert removed >= 1
+        assert 50000.0 not in tracker.bid_levels.get("BTCUSDT", {})
+
+    def test_start_stop_periodic_sweep_without_event_loop_is_noop(self):
+        """start_periodic_sweep is a safe no-op when there is no running
+        event loop (e.g. a plain sync unit test)."""
+        tracker = OrderBookTracker()
+        tracker.start_periodic_sweep()
+        assert tracker._sweep_task is None
+        tracker.stop_periodic_sweep()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_start_stop_periodic_sweep_with_event_loop(self):
+        """start_periodic_sweep schedules a background task when a loop is
+        running; stop_periodic_sweep cancels it cleanly."""
+        tracker = OrderBookTracker(cleanup_interval_seconds=0.01)
+        tracker.start_periodic_sweep()
+        assert tracker._sweep_task is not None
+
+        tracker.start_periodic_sweep()  # second call is a no-op
+        assert tracker._sweep_task is not None
+
+        tracker.stop_periodic_sweep()
+        assert tracker._sweep_task is None
 
     def test_max_levels_per_symbol_enforced(self):
         """Per-symbol price-level cap evicts oldest level when exceeded."""

@@ -339,7 +339,8 @@ async def test_consumer_get_metrics(consumer):
     """Test get_metrics method."""
     consumer.message_count = 10
     consumer.error_count = 2
-    consumer.processing_times = [0.1, 0.2, 0.3]
+    for value in (0.1, 0.2, 0.3):
+        consumer.processing_times.add(value)
 
     metrics = consumer.get_metrics()
     assert "message_count" in metrics
@@ -750,9 +751,8 @@ async def test_publish_market_logic_signals_uses_publish_signal(
 
 @pytest.mark.asyncio
 async def test_consumer_update_processing_metrics(consumer):
-    """Test _update_processing_metrics method - covers lines 844-845, 848-849, 852-853."""
-    consumer.processing_times = []
-
+    """Test _update_processing_metrics method (per #191: RollingStats-backed,
+    O(1) per update instead of the previous list-slice + `sum()` pattern)."""
     # Add processing times
     consumer._update_processing_metrics(0.1)
     consumer._update_processing_metrics(0.2)
@@ -765,11 +765,12 @@ async def test_consumer_update_processing_metrics(consumer):
 
 @pytest.mark.asyncio
 async def test_consumer_update_processing_metrics_cleanup(consumer):
-    """Test _update_processing_metrics cleanup - covers lines 844-845."""
-    # Add more than 1000 processing times
-    consumer.processing_times = [0.1] * 1500
+    """Test _update_processing_metrics enforces the 1000-sample window
+    (per #191 AC1: fixed-size ring buffer, no unbounded growth)."""
+    for _ in range(1500):
+        consumer._update_processing_metrics(0.1)
+    assert len(consumer.processing_times) == 1000
 
-    # Update metrics - should trim to last 1000
     consumer._update_processing_metrics(0.2)
     assert len(consumer.processing_times) <= 1000
 

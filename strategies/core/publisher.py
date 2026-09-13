@@ -27,6 +27,7 @@ from strategies.adapters.signal_adapter import transform_signal_for_tradeengine
 from strategies.utils.error_window import WindowedErrorTracker
 from strategies.utils.metrics import initialize_metrics
 from strategies.utils.nats_reconnect import make_reconnect_handler
+from strategies.utils.rolling_stats import RollingStats
 
 
 class TradeOrderPublisher:
@@ -56,10 +57,10 @@ class TradeOrderPublisher:
         self.error_tracker = WindowedErrorTracker()
         self.last_order_time = None
 
-        # Performance metrics
-        self.publishing_times = []
-        self.max_publishing_time = 0.0
-        self.avg_publishing_time = 0.0
+        # Performance metrics.
+        # Per #191 AC1/AC3: fixed-size ring buffer with O(1) running sum and
+        # a true windowed max (not a lifetime high-water mark).
+        self.publishing_times = RollingStats(maxlen=1000)
 
     async def start(self) -> None:
         """Start the trade order publisher."""
@@ -265,21 +266,22 @@ class TradeOrderPublisher:
             raise
 
     def _update_publishing_metrics(self, publishing_time: float) -> None:
-        """Update publishing time metrics."""
-        self.publishing_times.append(publishing_time)
+        """Update publishing time metrics.
 
-        # Keep only last 1000 publishing times
-        if len(self.publishing_times) > 1000:
-            self.publishing_times = self.publishing_times[-1000:]
+        Per #191 AC1: O(1) amortized -- no list slice-rebuild, no `sum()`
+        over the window. See `strategies/utils/rolling_stats.py`.
+        """
+        self.publishing_times.add(publishing_time)
 
-        # Update max publishing time
-        if publishing_time > self.max_publishing_time:
-            self.max_publishing_time = publishing_time
+    @property
+    def max_publishing_time(self) -> float:
+        """Windowed max publishing time (per #191 AC3 -- decays, not lifetime)."""
+        return self.publishing_times.windowed_max
 
-        # Update average publishing time
-        self.avg_publishing_time = sum(self.publishing_times) / len(
-            self.publishing_times
-        )
+    @property
+    def avg_publishing_time(self) -> float:
+        """Average publishing time over the current window."""
+        return self.publishing_times.average
 
     def get_metrics(self) -> dict[str, Any]:
         """Get publisher metrics."""
@@ -291,7 +293,7 @@ class TradeOrderPublisher:
             "last_order_time": self.last_order_time,
             "max_publishing_time_ms": self.max_publishing_time,
             "avg_publishing_time_ms": self.avg_publishing_time,
-            "publishing_times_count": len(self.publishing_times),
+            "publishing_times_count": self.publishing_times.count,
         }
 
     def get_health_status(self) -> dict[str, Any]:
