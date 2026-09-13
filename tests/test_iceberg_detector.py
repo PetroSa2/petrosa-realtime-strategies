@@ -611,3 +611,45 @@ class TestIcebergDetectorStrategy:
 
                     assert signal.metadata["strategy_id"] == "iceberg_detector"
                     return
+
+
+class TestIcebergDetectorBoundedState:
+    """Per #189 AC1: last_signal_time is TTL-swept and hard-capped."""
+
+    def test_last_signal_time_is_bounded_dict(self):
+        from strategies.utils.bounded_state import TTLBoundedDict
+
+        strategy = IcebergDetectorStrategy(min_signal_interval_seconds=120.0)
+
+        assert isinstance(strategy.last_signal_time, TTLBoundedDict)
+        assert strategy.last_signal_time.ttl_seconds == strategy.min_signal_interval
+
+    def test_stale_rate_limit_keys_are_swept(self):
+        import time as time_module
+
+        strategy = IcebergDetectorStrategy(min_signal_interval_seconds=1.0)
+
+        key = ("BTCUSDT", 50000.0, "bid")
+        strategy.last_signal_time[key] = time_module.time()
+        # Backdate the internal write-timestamp past the TTL directly,
+        # mirroring TTLBoundedDict's own unit tests.
+        strategy.last_signal_time._data[key] = (
+            time_module.time(),
+            time_module.time() - 10.0,
+        )
+
+        removed = strategy.last_signal_time.sweep_expired()
+
+        assert removed == 1
+        assert len(strategy.last_signal_time) == 0
+
+    def test_max_tracked_signal_keys_enforced(self):
+        strategy = IcebergDetectorStrategy(
+            min_signal_interval_seconds=100000.0,  # effectively no TTL sweep
+            max_tracked_signal_keys=5,
+        )
+
+        for i in range(20):
+            strategy.last_signal_time[(f"SYM{i}", 1.0, "bid")] = float(i)
+
+        assert len(strategy.last_signal_time) == 5

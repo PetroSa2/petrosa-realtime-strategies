@@ -701,3 +701,80 @@ class TestSpreadLiquidityStrategy:
             from strategies.models.signals import SignalConfidence
 
             assert signal_low.confidence < 0.5
+
+
+class TestSpreadLiquidityBoundedState:
+    """Per #189: AC4/AC5 — wide_spread_events TTL + symbol-dimension cap."""
+
+    def test_ac5_wide_spread_event_expires_after_ttl(self):
+        """AC5: an unresolved wide-spread event older than the TTL is gone."""
+        strategy = SpreadLiquidityStrategy(
+            persistence_threshold_seconds=30.0,
+            wide_spread_event_ttl_seconds=60.0,
+        )
+        base_time = datetime.utcnow()
+
+        # Manually seed an unresolved wide-spread event (never narrows).
+        strategy.wide_spread_events["BTCUSDT"] = {
+            "start_time": base_time.timestamp(),
+            "spread_bps": 50.0,
+        }
+        assert "BTCUSDT" in strategy.wide_spread_events
+
+        from strategies.models.spread_metrics import SpreadMetrics, SpreadSnapshot
+
+        later = base_time + timedelta(seconds=120)  # past the 60s TTL
+        metrics = SpreadMetrics(
+            symbol="BTCUSDT",
+            timestamp=later,
+            best_bid=50000.0,
+            best_ask=50001.0,
+            mid_price=50000.5,
+            spread_abs=1.0,
+            spread_bps=2.0,
+            spread_pct=0.002,
+            bid_volume_top5=5.0,
+            ask_volume_top5=5.0,
+            total_depth=10.0,
+        )
+        snapshot = SpreadSnapshot(
+            metrics=metrics,
+            spread_ratio=1.0,
+            spread_velocity=0.0,
+            persistence_seconds=0.0,
+            is_widening=False,
+            is_narrowing=False,
+            is_abnormal=False,
+            depth_reduction_pct=0.0,
+        )
+
+        strategy._detect_event("BTCUSDT", snapshot, later)
+
+        assert "BTCUSDT" not in strategy.wide_spread_events
+
+    def test_ac5_max_symbols_bounds_symbol_dimension(self):
+        """AC5: symbol dimension across companion dicts is bounded."""
+        max_symbols = 5
+        strategy = SpreadLiquidityStrategy(max_symbols=max_symbols)
+        base_time = datetime.utcnow()
+
+        bids = [(50000.0, 1.0), (49999.0, 1.0)]
+        asks = [(50001.0, 1.0), (50002.0, 1.0)]
+
+        for i in range(max_symbols + 10):
+            symbol = f"SYM{i:03d}USDT"
+            for tick in range(3):
+                strategy.analyze(
+                    symbol=symbol,
+                    bids=bids,
+                    asks=asks,
+                    timestamp=base_time + timedelta(seconds=tick),
+                )
+
+        assert len(strategy.spread_history) <= max_symbols
+        assert len(strategy._symbol_tracker) <= max_symbols
+
+    def test_narrow_spread_events_field_removed(self):
+        """#189 item 7: narrow_spread_events was a dead field — deleted."""
+        strategy = SpreadLiquidityStrategy()
+        assert not hasattr(strategy, "narrow_spread_events")

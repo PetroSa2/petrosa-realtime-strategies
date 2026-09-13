@@ -6,10 +6,25 @@ iceberg order patterns (repeated refills, consistent sizing, price anchoring).
 """
 
 import time
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+
+from prometheus_client import Gauge
+
+from strategies.utils.bounded_state import SymbolActivityTracker
+
+# Per #189 AC7: gauges exposing the size of the bounded structures below.
+ORDERBOOK_TRACKER_SYMBOLS = Gauge(
+    "orderbook_tracker_symbols_tracked",
+    "Number of symbols currently tracked by OrderBookTracker",
+)
+ORDERBOOK_TRACKER_PRICE_LEVELS = Gauge(
+    "orderbook_tracker_price_levels_total",
+    "Total number of price levels currently tracked across all symbols",
+    ["side"],
+)
 
 
 @dataclass
@@ -99,7 +114,18 @@ class OrderBookTracker:
     - Persistence detection (level stays active)
     - Configurable thresholds and windows
 
-    Memory: ~60MB for 50 symbols with 300-second history
+    Memory (per #189): NOT ~60MB for 50 symbols as previously (incorrectly)
+    documented — each ``LevelHistory`` holds up to 100 ``LevelSnapshot``
+    objects (~20-25KB in CPython with dataclass + deque overhead), and a
+    single moving BTC book can touch thousands of distinct float prices in
+    a 5-minute window. The two structures below are now explicitly bounded
+    instead:
+      - **symbol dimension**: capped at ``max_symbols`` (LRU-evicted via
+        ``SymbolActivityTracker`` — the previously-unenforced parameter).
+      - **price-level dimension**: capped at ``max_levels_per_symbol`` per
+        symbol (LRU-evicted by last-seen) AND swept every update across
+        ALL tracked symbols (not just the one being updated), so an idle
+        symbol's levels are reclaimed even though it stops producing ticks.
     """
 
     def __init__(
@@ -109,26 +135,39 @@ class OrderBookTracker:
         refill_speed_threshold_seconds: float = 5.0,
         consistency_threshold: float = 0.1,  # Low std dev = consistent
         min_refill_count: int = 3,
+        max_levels_per_symbol: int = 1000,
     ):
         """
         Initialize tracker.
 
         Args:
             history_window_seconds: How long to track each level
-            max_symbols: Maximum symbols to track simultaneously
+            max_symbols: Maximum symbols to track simultaneously (enforced,
+                LRU-evicted — per #189 AC2)
             refill_speed_threshold_seconds: Max time for refill to be considered fast
             consistency_threshold: Max std dev ratio for consistent sizing
             min_refill_count: Minimum refills to consider iceberg
+            max_levels_per_symbol: Hard cap (LRU by last-seen) on distinct
+                price levels tracked per symbol, per side (per #189 AC1/AC4)
         """
         self.history_window = history_window_seconds
         self.max_symbols = max_symbols
         self.refill_speed_threshold = refill_speed_threshold_seconds
         self.consistency_threshold = consistency_threshold
         self.min_refill_count = min_refill_count
+        self.max_levels_per_symbol = max_levels_per_symbol
 
         # Storage: {symbol: {price: LevelHistory}}
-        self.bid_levels: dict[str, dict[float, LevelHistory]] = defaultdict(dict)
-        self.ask_levels: dict[str, dict[float, LevelHistory]] = defaultdict(dict)
+        # Per #189 AC3: plain dicts (not defaultdict) so that read paths
+        # (detect_icebergs) cannot create symbol entries as a side effect
+        # of reading. Only _update_level (a write path) creates entries.
+        self.bid_levels: dict[str, dict[float, LevelHistory]] = {}
+        self.ask_levels: dict[str, dict[float, LevelHistory]] = {}
+
+        # Per #189 AC2: enforces max_symbols (previously stored but never
+        # read again). Evicts the least-recently-updated symbol's levels
+        # from both sides when the cap is exceeded.
+        self._symbol_tracker = SymbolActivityTracker(max_symbols=max_symbols)
 
         # Statistics
         self.total_levels_tracked = 0
@@ -155,6 +194,17 @@ class OrderBookTracker:
 
         unix_ts = timestamp.timestamp()
 
+        # Per #189 AC2: enforce max_symbols. If this touch evicts a
+        # different (LRU) symbol, purge that symbol's levels entirely.
+        evicted_symbol = self._symbol_tracker.touch(symbol, now=unix_ts)
+        if evicted_symbol is not None and evicted_symbol != symbol:
+            evicted_bid = self.bid_levels.pop(evicted_symbol, None)
+            evicted_ask = self.ask_levels.pop(evicted_symbol, None)
+            if evicted_bid or evicted_ask:
+                self.total_levels_tracked -= len(evicted_bid or {}) + len(
+                    evicted_ask or {}
+                )
+
         # Update bid levels
         for price, qty in bids:
             self._update_level(symbol, price, qty, unix_ts, "bid")
@@ -163,18 +213,32 @@ class OrderBookTracker:
         for price, qty in asks:
             self._update_level(symbol, price, qty, unix_ts, "ask")
 
-        # Cleanup old levels
-        self._cleanup_old_levels(symbol, unix_ts)
+        # Per #189 AC4: sweep expired levels across ALL tracked symbols on
+        # every update, not just the symbol currently being updated — a
+        # symbol that stops producing ticks must still have its stale
+        # levels reclaimed by activity on other symbols.
+        self._cleanup_old_levels(unix_ts)
+        self._update_gauges()
 
     def _update_level(
         self, symbol: str, price: float, quantity: float, timestamp: float, side: str
     ) -> None:
         """Update a single price level."""
         levels = self.bid_levels if side == "bid" else self.ask_levels
+        symbol_levels = levels.setdefault(symbol, {})
 
         # Get or create level history
-        if price not in levels[symbol]:
-            levels[symbol][price] = LevelHistory(
+        if price not in symbol_levels:
+            # Per #189 AC1: explicit per-symbol cap on distinct price
+            # levels, evicting the level least-recently seen when full.
+            if len(symbol_levels) >= self.max_levels_per_symbol:
+                oldest_price = min(
+                    symbol_levels, key=lambda p: symbol_levels[p].last_seen
+                )
+                del symbol_levels[oldest_price]
+                self.total_levels_tracked -= 1
+
+            symbol_levels[price] = LevelHistory(
                 price=price,
                 side=side,
                 snapshots=deque(maxlen=100),  # Limit snapshots
@@ -184,7 +248,7 @@ class OrderBookTracker:
             )
             self.total_levels_tracked += 1
 
-        history = levels[symbol][price]
+        history = symbol_levels[price]
 
         # Add snapshot
         snapshot = LevelSnapshot(
@@ -259,27 +323,40 @@ class OrderBookTracker:
             cv = std_dev / mean_vol  # Coefficient of variation
             history.consistent_volume = cv < self.consistency_threshold
 
-    def _cleanup_old_levels(self, symbol: str, current_time: float) -> None:
-        """Remove levels outside history window."""
+    def _cleanup_old_levels(self, current_time: float) -> None:
+        """
+        Remove levels outside history window.
+
+        Per #189 AC4: sweeps ALL tracked symbols (both sides), not only
+        the symbol currently being updated. Previously a symbol that
+        stopped producing updates leaked its entire level map permanently
+        because this only ever ran for the one symbol passed in.
+        """
         cutoff_time = current_time - self.history_window
 
-        # Clean bids
-        to_remove = [
-            price
-            for price, hist in self.bid_levels[symbol].items()
-            if hist.last_seen < cutoff_time
-        ]
-        for price in to_remove:
-            del self.bid_levels[symbol][price]
+        for symbol_levels in (self.bid_levels, self.ask_levels):
+            for symbol in list(symbol_levels.keys()):
+                levels = symbol_levels[symbol]
+                to_remove = [
+                    price
+                    for price, hist in levels.items()
+                    if hist.last_seen < cutoff_time
+                ]
+                for price in to_remove:
+                    del levels[price]
+                    self.total_levels_tracked -= 1
+                if not levels:
+                    del symbol_levels[symbol]
 
-        # Clean asks
-        to_remove = [
-            price
-            for price, hist in self.ask_levels[symbol].items()
-            if hist.last_seen < cutoff_time
-        ]
-        for price in to_remove:
-            del self.ask_levels[symbol][price]
+    def _update_gauges(self) -> None:
+        """Update Prometheus gauges reflecting current structure sizes."""
+        ORDERBOOK_TRACKER_SYMBOLS.set(len(self._symbol_tracker))
+        ORDERBOOK_TRACKER_PRICE_LEVELS.labels(side="bid").set(
+            sum(len(levels) for levels in self.bid_levels.values())
+        )
+        ORDERBOOK_TRACKER_PRICE_LEVELS.labels(side="ask").set(
+            sum(len(levels) for levels in self.ask_levels.values())
+        )
 
     def detect_icebergs(
         self, symbol: str, current_price: float, proximity_pct: float = 1.0
@@ -302,15 +379,17 @@ class OrderBookTracker:
         min_price = current_price - price_range
         max_price = current_price + price_range
 
+        # Per #189 AC3: `.get(symbol, {})` — read paths must never create
+        # symbol entries as a side effect (that was the defaultdict bug).
         # Check bid levels
-        for price, history in self.bid_levels[symbol].items():
+        for price, history in self.bid_levels.get(symbol, {}).items():
             if min_price <= price <= max_price:
                 pattern = self._check_iceberg_pattern(symbol, price, history)
                 if pattern:
                     icebergs.append(pattern)
 
         # Check ask levels
-        for price, history in self.ask_levels[symbol].items():
+        for price, history in self.ask_levels.get(symbol, {}).items():
             if min_price <= price <= max_price:
                 pattern = self._check_iceberg_pattern(symbol, price, history)
                 if pattern:
