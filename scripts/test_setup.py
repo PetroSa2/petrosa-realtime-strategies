@@ -44,15 +44,6 @@ def test_imports():
 
         print("✅ signal models imported successfully")
 
-        from strategies.models.orders import (
-            OrderSide,
-            OrderType,
-            PositionType,
-            TradeOrder,
-        )
-
-        print("✅ order models imported successfully")
-
         from strategies.core.consumer import NATSConsumer
 
         print("✅ NATS consumer imported successfully")
@@ -68,10 +59,6 @@ def test_imports():
         from strategies.utils.logger import setup_logging
 
         print("✅ logger utility imported successfully")
-
-        from strategies.utils.circuit_breaker import CircuitBreaker
-
-        print("✅ circuit breaker imported successfully")
 
         assert True  # All imports successful
         return True
@@ -141,12 +128,6 @@ def test_models():
 
     try:
         from strategies.models.market_data import DepthUpdate
-        from strategies.models.orders import (
-            OrderSide,
-            OrderType,
-            PositionType,
-            TradeOrder,
-        )
         from strategies.models.signals import (
             Signal,
             SignalAction,
@@ -178,23 +159,8 @@ def test_models():
         )
         print("✅ Signal model created successfully")
 
-        # Test order
-        order = TradeOrder(
-            order_id="test_order_123456789",
-            symbol="BTCUSDT",
-            side=OrderSide.BUY,
-            order_type=OrderType.MARKET,
-            quantity=1.0,
-            position_type=PositionType.LONG,
-            strategy_name="test_strategy",
-            signal_id="test_signal_123456789",
-            confidence_score=0.8,
-        )
-        print("✅ Trade order model created successfully")
-
         assert depth_update is not None
         assert signal is not None
-        assert order is not None
         return True
 
     except Exception as e:

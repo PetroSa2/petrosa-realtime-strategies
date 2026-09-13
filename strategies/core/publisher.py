@@ -24,8 +24,6 @@ except ImportError:
 
 import constants
 from strategies.adapters.signal_adapter import transform_signal_for_tradeengine
-from strategies.models.orders import OrderResponse, TradeOrder
-from strategies.utils.circuit_breaker import CircuitBreaker
 from strategies.utils.error_window import WindowedErrorTracker
 from strategies.utils.metrics import initialize_metrics
 from strategies.utils.nats_reconnect import make_reconnect_handler
@@ -49,13 +47,6 @@ class TradeOrderPublisher:
         # NATS client
         self.nats_client: NATSClient | None = None
 
-        # Circuit breaker for NATS connection
-        self.circuit_breaker = CircuitBreaker(
-            failure_threshold=constants.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
-            recovery_timeout=constants.CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
-            expected_exception=Exception,
-        )
-
         # Publishing state
         self.is_running = False
         self.shutdown_event = asyncio.Event()
@@ -70,24 +61,6 @@ class TradeOrderPublisher:
         self.max_publishing_time = 0.0
         self.avg_publishing_time = 0.0
 
-        # Order queue for batching
-        self.order_queue = asyncio.Queue(maxsize=1000)
-        self.batch_size = constants.BATCH_SIZE
-        self.batch_timeout = constants.BATCH_TIMEOUT
-
-    def _signal_subject_for_order(self, order: TradeOrder) -> str:
-        """
-        Build NATS subject routing orders through the CIO intent topic.
-
-        Always uses constants.NATS_TOPIC_INTENTS (not self.topic) so all
-        orders pass through LLM governance before reaching the tradeengine.
-        self.topic is retained for display/health reporting only.
-        NATS subjects cannot contain spaces — normalize strategy_name accordingly.
-        """
-        base = constants.NATS_TOPIC_INTENTS.rstrip(".*>")
-        strategy_token = order.strategy_name.replace(" ", "_").replace(".", "_")
-        return f"{base}.{strategy_token}"
-
     async def start(self) -> None:
         """Start the trade order publisher."""
         self.logger.info(
@@ -100,11 +73,9 @@ class TradeOrderPublisher:
             # Connect to NATS
             await self._connect_to_nats()
 
-            # Start publishing loop as background task
             self.is_running = True
-            asyncio.create_task(self._publishing_loop())
 
-            # Return immediately after starting the background task
+            # Return immediately after connecting
             self.logger.info(
                 "Trade order publisher started",
                 event_type="publisher_started",
@@ -228,234 +199,6 @@ class TradeOrderPublisher:
         """
         return bool(self.nats_client and self.nats_client.is_connected)
 
-    async def _publishing_loop(self) -> None:
-        """Main publishing loop for sending orders."""
-        self.logger.info(
-            "Starting order publishing loop",
-            event_type="publishing_loop_started",
-            batch_size=self.batch_size,
-            batch_timeout=self.batch_timeout,
-        )
-
-        while self.is_running and not self.shutdown_event.is_set():
-            try:
-                # Collect orders for batching
-                orders = []
-                start_time = time.time()
-
-                # Collect orders until batch is full or timeout
-                while (
-                    len(orders) < self.batch_size
-                    and (time.time() - start_time) < self.batch_timeout
-                ):
-                    try:
-                        # Try to get order from queue with timeout
-                        order = await asyncio.wait_for(
-                            self.order_queue.get(), timeout=0.1
-                        )
-                        orders.append(order)
-                    except TimeoutError:
-                        # No orders available, continue
-                        break
-
-                if orders:
-                    # Publish orders in batch
-                    await self._publish_orders_batch(orders)
-
-                # Small delay to prevent busy waiting
-                await asyncio.sleep(0.001)
-
-            except Exception as e:
-                self.logger.error("Error in publishing loop", error=str(e))
-                self.error_count += 1
-                self.error_tracker.record_error()
-                await asyncio.sleep(1)  # Back off on error
-
-        self.logger.info("Order publishing loop stopped")
-
-    async def _publish_orders_batch(self, orders: list[TradeOrder]) -> None:
-        """Publish a batch of orders."""
-        start_time = time.time()
-        publishing_time = 0.0
-
-        try:
-            # Convert orders to JSON and publish each on a strategy-scoped subject
-            for order in orders:
-                order_dict = order.to_dict()
-                order_dict_with_trace = inject_trace_context(order_dict)
-                order_message = json.dumps(order_dict_with_trace)
-                subject = self._signal_subject_for_order(order)
-                await self.nats_client.publish(
-                    subject=subject,
-                    payload=order_message.encode(),
-                )
-
-            # Update metrics
-            self.order_count += len(orders)
-            self.last_order_time = time.time()
-            publishing_time = (
-                time.time() - start_time
-            ) * 1000  # Convert to milliseconds
-
-            # Update publishing time metrics
-            self._update_publishing_metrics(publishing_time)
-
-            self.logger.info(
-                "Published orders batch",
-                order_count=len(orders),
-                total_orders=self.order_count,
-                publishing_time_ms=publishing_time,
-            )
-
-        except Exception as e:
-            self.logger.error(
-                "Error publishing orders batch",
-                error=str(e),
-                order_count=len(orders),
-            )
-            self.error_count += 1
-            self.error_tracker.record_error()
-
-    async def publish_order(self, order: TradeOrder) -> OrderResponse:
-        """Publish a single trade order."""
-        start_time = time.time()
-        publishing_time = 0.0
-
-        try:
-            # Add order to queue
-            await self.order_queue.put(order)
-
-            # Wait for order to be processed (with timeout)
-            publishing_time = (time.time() - start_time) * 1000
-
-            # Create success response
-            response = OrderResponse(
-                order_id=order.order_id,
-                status="submitted",
-                message="Order submitted successfully",
-                metadata={
-                    "publishing_time_ms": publishing_time,
-                    "queue_size": self.order_queue.qsize(),
-                },
-            )
-
-            self.logger.info(
-                "Order submitted for publishing",
-                order_id=order.order_id,
-                symbol=order.symbol,
-                side=order.side.value,
-                order_type=order.order_type.value,
-                publishing_time_ms=publishing_time,
-            )
-
-            return response
-
-        except Exception as e:
-            self.logger.error(
-                "Error submitting order for publishing",
-                error=str(e),
-                order_id=order.order_id,
-            )
-            self.error_count += 1
-            self.error_tracker.record_error()
-
-            # Create error response
-            return OrderResponse(
-                order_id=order.order_id,
-                status="error",
-                message=f"Failed to submit order: {str(e)}",
-                metadata={
-                    "publishing_time_ms": publishing_time,
-                    "error": str(e),
-                },
-            )
-
-    async def publish_order_sync(self, order: TradeOrder) -> OrderResponse:
-        """Publish a single trade order synchronously (immediate publish)."""
-        start_time = time.time()
-        publishing_time = 0.0
-
-        try:
-            # Convert order to JSON
-            order_dict = order.to_dict()
-            # Inject trace context into order for distributed tracing
-            order_dict_with_trace = inject_trace_context(order_dict)
-            order_message = json.dumps(order_dict_with_trace)
-
-            # Set decision.* OTel span attributes for this intent
-            try:
-                from opentelemetry import trace as _trace
-                from petrosa_otel import set_decision_context
-
-                set_decision_context(
-                    _trace.get_current_span(),
-                    intent_id=order.intent_id,
-                    strategy_id=order.strategy_name,
-                    symbol=order.symbol,
-                    action=order.side.value.lower(),
-                    confidence=order.confidence_score,
-                )
-            except ImportError:
-                pass
-            except Exception as _exc:
-                self.logger.debug("set_decision_context failed: %s", _exc)
-
-            # Publish message to NATS (strategy-scoped subject for tradeengine wildcard)
-            await self.nats_client.publish(
-                subject=self._signal_subject_for_order(order),
-                payload=order_message.encode(),
-            )
-
-            # Update metrics
-            self.order_count += 1
-            self.last_order_time = time.time()
-            publishing_time = (time.time() - start_time) * 1000
-
-            # Update publishing time metrics
-            self._update_publishing_metrics(publishing_time)
-
-            # Create success response
-            response = OrderResponse(
-                order_id=order.order_id,
-                status="published",
-                message="Order published successfully",
-                metadata={
-                    "publishing_time_ms": publishing_time,
-                    "published_at": self.last_order_time,
-                },
-            )
-
-            self.logger.info(
-                "Order published successfully",
-                order_id=order.order_id,
-                symbol=order.symbol,
-                side=order.side.value,
-                order_type=order.order_type.value,
-                publishing_time_ms=publishing_time,
-            )
-
-            return response
-
-        except Exception as e:
-            self.logger.error(
-                "Error publishing order",
-                error=str(e),
-                order_id=order.order_id,
-            )
-            self.error_count += 1
-            self.error_tracker.record_error()
-
-            # Create error response
-            return OrderResponse(
-                order_id=order.order_id,
-                status="error",
-                message=f"Failed to publish order: {str(e)}",
-                metadata={
-                    "publishing_time_ms": publishing_time,
-                    "error": str(e),
-                },
-            )
-
     async def publish_signal(self, signal: Any) -> None:
         """Publish a trading signal to NATS.
 
@@ -549,8 +292,6 @@ class TradeOrderPublisher:
             "max_publishing_time_ms": self.max_publishing_time,
             "avg_publishing_time_ms": self.avg_publishing_time,
             "publishing_times_count": len(self.publishing_times),
-            "queue_size": self.order_queue.qsize(),
-            "circuit_breaker_state": self.circuit_breaker.state.value,
         }
 
     def get_health_status(self) -> dict[str, Any]:
@@ -569,14 +310,4 @@ class TradeOrderPublisher:
             "error_count": self.error_count,
             "recent_error_count": self.error_tracker.count_in_window,
             "last_order_time": self.last_order_time,
-            "queue_size": self.order_queue.qsize(),
-        }
-
-    async def get_queue_status(self) -> dict[str, Any]:
-        """Get queue status information."""
-        return {
-            "queue_size": self.order_queue.qsize(),
-            "queue_maxsize": self.order_queue.maxsize,
-            "queue_full": self.order_queue.full(),
-            "queue_empty": self.order_queue.empty(),
         }

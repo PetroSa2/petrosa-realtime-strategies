@@ -46,8 +46,6 @@ dependencies = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-semantic-conventions>=0.41b0",
     "typer>=0.9.0",
-    "orjson>=3.9.0",
-    "pybreaker>=1.0.0",
     "python-dateutil>=2.8.2",
     "aiohttp>=3.8.0",
     "prometheus-client>=0.19.0",
@@ -169,8 +167,6 @@ show_error_codes = true
 module = [
     "nats.*",
     "aiohttp.*",
-    "orjson.*",
-    "pybreaker.*",
     "fastapi.*",
     "uvicorn.*",
     "httpx.*",

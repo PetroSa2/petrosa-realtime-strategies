@@ -58,7 +58,7 @@ class TestPublisherSmoke:
 
     def test_has_publish_method(self):
         """Test publisher has publish method."""
-        assert hasattr(publisher.TradeOrderPublisher, "publish_order")
+        assert hasattr(publisher.TradeOrderPublisher, "publish_signal")
 
 
 class TestConsumerSmoke:

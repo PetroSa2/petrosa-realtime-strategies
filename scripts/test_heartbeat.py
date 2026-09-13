@@ -43,7 +43,6 @@ class MockConsumer:
             "avg_processing_time_ms": self.avg_processing_time_ms,
             "max_processing_time_ms": self.max_processing_time_ms,
             "processing_times_count": 100,
-            "circuit_breaker_state": "closed",
         }
 
     def get_health_status(self):
@@ -68,7 +67,6 @@ class MockPublisher:
         self.last_order_time = time.time()
         self.avg_publishing_time_ms = 3.1
         self.max_publishing_time_ms = 8.9
-        self.queue_size = 5
 
     def get_metrics(self):
         # Simulate increasing order count
@@ -84,8 +82,6 @@ class MockPublisher:
             "avg_publishing_time_ms": self.avg_publishing_time_ms,
             "max_publishing_time_ms": self.max_publishing_time_ms,
             "publishing_times_count": 50,
-            "queue_size": self.queue_size,
-            "circuit_breaker_state": "closed",
         }
 
     def get_health_status(self):
@@ -96,7 +92,6 @@ class MockPublisher:
             "order_count": self.order_count,
             "error_count": self.error_count,
             "last_order_time": self.last_order_time,
-            "queue_size": self.queue_size,
         }
 
 

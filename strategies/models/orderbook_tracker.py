@@ -259,7 +259,7 @@ class OrderBookTracker:
         history.total_appearances += 1
 
         # Detect refill
-        if self._is_refill(history, quantity):
+        if self._is_refill(history):
             history.refill_count += 1
             history.last_refill_time = timestamp
 
@@ -273,7 +273,7 @@ class OrderBookTracker:
         # Update statistics
         self._update_statistics(history)
 
-    def _is_refill(self, history: LevelHistory, current_qty: float) -> bool:
+    def _is_refill(self, history: LevelHistory) -> bool:
         """
         Detect if current quantity represents a refill.
 

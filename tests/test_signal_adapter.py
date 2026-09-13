@@ -13,7 +13,6 @@ from strategies.adapters.signal_adapter import (
     _calculate_default_quantity,
     _calculate_default_stop_loss,
     _calculate_default_take_profit,
-    _map_confidence_to_strength,
     transform_signal_for_tradeengine,
 )
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
@@ -144,30 +143,6 @@ class TestSignalAdapter:
         assert result["take_profit_pct"] == 0.05  # 5% for high confidence
         assert result["stop_loss"] == 50000.0 * 0.98
         assert result["take_profit"] == 50000.0 * 1.05
-
-
-class TestConfidenceToStrengthMapping:
-    """Tests for confidence to strength mapping."""
-
-    def test_extreme_confidence(self):
-        """Test mapping of extreme confidence (>= 0.9)."""
-        assert _map_confidence_to_strength(0.95) == "extreme"
-        assert _map_confidence_to_strength(0.9) == "extreme"
-
-    def test_strong_confidence(self):
-        """Test mapping of strong confidence (0.7-0.89)."""
-        assert _map_confidence_to_strength(0.85) == "strong"
-        assert _map_confidence_to_strength(0.7) == "strong"
-
-    def test_medium_confidence(self):
-        """Test mapping of medium confidence (0.5-0.69)."""
-        assert _map_confidence_to_strength(0.65) == "medium"
-        assert _map_confidence_to_strength(0.5) == "medium"
-
-    def test_weak_confidence(self):
-        """Test mapping of weak confidence (< 0.5)."""
-        assert _map_confidence_to_strength(0.45) == "weak"
-        assert _map_confidence_to_strength(0.1) == "weak"
 
 
 class TestQuantityCalculation:

@@ -20,7 +20,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from strategies.core.consumer import NATSConsumer
 from strategies.core.publisher import TradeOrderPublisher
-from strategies.models.orders import TradeOrder
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 
 
@@ -266,46 +265,6 @@ async def test_consumer_handles_missing_trace_context(
     assert consumer_span is not None, (
         f"Expected span 'process_market_data_message' but got spans: {[s.name for s in spans]}"
     )
-
-
-@pytest.mark.asyncio
-async def test_publisher_injects_trace_context(
-    publisher, span_exporter, tracer_provider
-):
-    """Test that publisher injects trace context into messages"""
-    # Create a test order with all required fields
-    order = TradeOrder(
-        order_id="test_order_123",
-        symbol="BTCUSDT",
-        side="BUY",
-        order_type="MARKET",
-        quantity=0.001,
-        position_type="LONG",
-        strategy_name="test_strategy",
-        signal_id="signal_123",
-        confidence_score=0.85,
-    )
-
-    # Create a span to simulate active trace
-    with trace.get_tracer(__name__).start_as_current_span("test_span"):
-        # Publish order
-        await publisher._publish_orders_batch([order])
-
-    # Verify publish was called
-    assert publisher.nats_client.publish.called
-
-    # Get the published message
-    call_args = publisher.nats_client.publish.call_args
-    published_payload = call_args.kwargs["payload"]
-    published_data = json.loads(published_payload.decode())
-
-    # Verify trace context was injected (may be no-op in CI)
-    # In local dev with petrosa_otel, this will be injected
-    # In CI without petrosa_otel, this will be unchanged
-    assert published_data is not None
-    # If trace context is injected, verify it has the right structure
-    if "_otel_trace_context" in published_data:
-        assert "traceparent" in published_data["_otel_trace_context"]
 
 
 @pytest.mark.asyncio

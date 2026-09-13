@@ -8,7 +8,7 @@ The Petrosa Realtime Strategies service now includes a comprehensive heartbeat s
 
 ### 📊 Statistics Tracking
 - **Message Processing Stats**: Tracks messages processed, errors, processing times
-- **Order Publishing Stats**: Tracks orders published, errors, publishing times  
+- **Order Publishing Stats**: Tracks orders published, errors, publishing times
 - **Rate Calculations**: Messages per second, orders per second, error rates
 - **Delta Tracking**: Shows changes since last heartbeat
 - **Performance Metrics**: Average and maximum processing/publishing times
@@ -57,16 +57,16 @@ HEARTBEAT_INCLUDE_DETAILED_STATS: "true"
   "uptime_minutes": 5.01,
   "uptime_hours": 0.08,
   "interval_seconds": 60,
-  
+
   "messages_processed_delta": 150,
   "consumer_errors_delta": 0,
   "orders_published_delta": 12,
   "publisher_errors_delta": 0,
-  
+
   "messages_per_second": 2.5,
   "orders_per_second": 0.2,
   "error_rate_per_second": 0.0,
-  
+
   "total_messages_processed": 750,
   "total_consumer_errors": 2,
   "total_orders_published": 60,
@@ -80,7 +80,7 @@ HEARTBEAT_INCLUDE_DETAILED_STATS: "true"
 {
   "event": "💓 HEARTBEAT - System Statistics",
   // ... basic stats ...
-  
+
   "consumer_is_running": true,
   "consumer_is_healthy": true,
   "consumer_nats_connected": true,
@@ -88,16 +88,13 @@ HEARTBEAT_INCLUDE_DETAILED_STATS: "true"
   "consumer_last_message_time": 1640995200.123,
   "consumer_avg_processing_time_ms": 5.2,
   "consumer_max_processing_time_ms": 12.8,
-  "consumer_circuit_breaker_state": "closed",
-  
+
   "publisher_is_running": true,
   "publisher_is_healthy": true,
   "publisher_nats_connected": true,
-  "publisher_queue_size": 3,
   "publisher_last_order_time": 1640995180.456,
   "publisher_avg_publishing_time_ms": 3.1,
-  "publisher_max_publishing_time_ms": 8.9,
-  "publisher_circuit_breaker_state": "closed"
+  "publisher_max_publishing_time_ms": 8.9
 }
 ```
 
@@ -276,9 +273,9 @@ Example alerting rules based on heartbeat data:
 - alert: HighErrorRate
   expr: error_rate_per_second > 0.1
   for: 5m
-  
+
 # Low message processing rate
-- alert: LowMessageRate  
+- alert: LowMessageRate
   expr: messages_per_second < 0.5
   for: 10m
 ```

@@ -25,10 +25,10 @@ class TestConfigManager:
         await manager.start()
 
         try:
-            config = await manager.get_config("orderbook_skew")
+            config = await manager.get_config("btc_dominance")
 
-            assert config["parameters"]["top_levels"] == 5
-            assert config["parameters"]["buy_threshold"] == 1.2
+            assert config["parameters"]["window_hours"] == 24
+            assert config["parameters"]["high_threshold"] == 70.0
             assert config["source"] in ["default", "environment"]
         finally:
             await manager.stop()
@@ -37,12 +37,12 @@ class TestConfigManager:
     async def test_validate_parameters_valid(self):
         """Test parameter validation with valid parameters."""
         valid_params = {
-            "top_levels": 10,
-            "buy_threshold": 1.5,
-            "sell_threshold": 0.7,
+            "window_hours": 48,
+            "high_threshold": 75.0,
+            "low_threshold": 35.0,
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", valid_params)
+        is_valid, errors = validate_parameters("btc_dominance", valid_params)
 
         assert is_valid
         assert len(errors) == 0
@@ -51,10 +51,10 @@ class TestConfigManager:
     async def test_validate_parameters_invalid_range(self):
         """Test parameter validation with out-of-range values."""
         invalid_params = {
-            "top_levels": -5,  # Invalid: min is 1
+            "window_hours": -5,  # Invalid: min is 12
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
 
         assert not is_valid
         assert len(errors) > 0
@@ -64,10 +64,10 @@ class TestConfigManager:
     async def test_validate_parameters_invalid_type(self):
         """Test parameter validation with wrong type."""
         invalid_params = {
-            "top_levels": "invalid",  # Should be int
+            "window_hours": "invalid",  # Should be int
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
 
         assert not is_valid
         assert len(errors) > 0
@@ -80,7 +80,7 @@ class TestConfigManager:
             "unknown_param": 123,  # Not in schema
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
 
         assert not is_valid
         assert len(errors) > 0
@@ -90,10 +90,10 @@ class TestConfigManager:
     async def test_validate_parameters_float_type_invalid(self):
         """Test float parameter validation with wrong type - covers lines 678-679."""
         invalid_params = {
-            "buy_threshold": "not_a_float",  # Should be float
+            "high_threshold": "not_a_float",  # Should be float
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
 
         assert not is_valid
         assert len(errors) > 0
@@ -109,7 +109,7 @@ class TestConfigManager:
 
         # This covers the bool type check code path
         # Result depends on whether schema has bool params
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
         # Either unknown param or type error
         assert not is_valid or is_valid  # Code path exercised
 
@@ -121,7 +121,7 @@ class TestConfigManager:
             "some_string_param": 123,  # Would be string if schema has one
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
         # Either unknown param or type error
         assert not is_valid or is_valid  # Code path exercised
 
@@ -129,10 +129,10 @@ class TestConfigManager:
     async def test_validate_parameters_max_range_exceeded(self):
         """Test parameter validation with value exceeding max - covers line 694."""
         invalid_params = {
-            "top_levels": 100000,  # Exceeds max in schema
+            "window_hours": 100000,  # Exceeds max in schema
         }
 
-        is_valid, errors = validate_parameters("orderbook_skew", invalid_params)
+        is_valid, errors = validate_parameters("btc_dominance", invalid_params)
 
         assert not is_valid
         assert len(errors) > 0
@@ -146,10 +146,10 @@ class TestConfigManager:
 
         try:
             # First call (cache miss)
-            config1 = await manager.get_config("orderbook_skew")
+            config1 = await manager.get_config("btc_dominance")
 
             # Second call (cache hit)
-            config2 = await manager.get_config("orderbook_skew")
+            config2 = await manager.get_config("btc_dominance")
 
             # Should return same data
             assert config1["parameters"] == config2["parameters"]
@@ -166,11 +166,10 @@ class TestConfigManager:
 
         all_strategies = list_all_strategies()
 
-        # Should have all 8 strategies (including microstructure strategies)
-        assert len(all_strategies) == 8
-        assert "orderbook_skew" in all_strategies
-        assert "trade_momentum" in all_strategies
-        assert "ticker_velocity" in all_strategies
+        # Per #190: orderbook_skew/trade_momentum/ticker_velocity (phantom
+        # strategies with no implementing class) were removed. Should have
+        # the 5 strategies actually registered in consumer.py.
+        assert len(all_strategies) == 5
         assert "btc_dominance" in all_strategies
         assert "cross_exchange_spread" in all_strategies
         assert "onchain_metrics" in all_strategies
@@ -200,38 +199,36 @@ class TestConfigManager:
 class TestParameterSchemas:
     """Test suite for parameter schemas."""
 
-    def test_orderbook_skew_schema(self):
-        """Test orderbook_skew strategy schema."""
+    def test_btc_dominance_schema(self):
+        """Test btc_dominance strategy schema."""
         from strategies.market_logic.defaults import get_parameter_schema
 
-        schema = get_parameter_schema("orderbook_skew")
+        schema = get_parameter_schema("btc_dominance")
 
-        assert "top_levels" in schema
-        assert schema["top_levels"]["type"] == "int"
-        assert schema["top_levels"]["min"] == 1
-        assert schema["top_levels"]["max"] == 20
+        assert "window_hours" in schema
+        assert schema["window_hours"]["type"] == "int"
+        assert schema["window_hours"]["min"] == 12
+        assert schema["window_hours"]["max"] == 72
 
-    def test_trade_momentum_schema(self):
-        """Test trade_momentum strategy schema."""
+    def test_cross_exchange_spread_schema(self):
+        """Test cross_exchange_spread strategy schema."""
         from strategies.market_logic.defaults import get_parameter_schema
 
-        schema = get_parameter_schema("trade_momentum")
+        schema = get_parameter_schema("cross_exchange_spread")
 
-        assert "price_weight" in schema
-        assert schema["price_weight"]["type"] == "float"
-        assert schema["price_weight"]["min"] == 0.0
-        assert schema["price_weight"]["max"] == 1.0
+        assert "spread_threshold_percent" in schema
+        assert schema["spread_threshold_percent"]["type"] == "float"
+        assert schema["spread_threshold_percent"]["min"] == 0.1
+        assert schema["spread_threshold_percent"]["max"] == 5.0
 
-    def test_ticker_velocity_schema(self):
-        """Test ticker_velocity strategy schema."""
+    def test_spread_liquidity_schema(self):
+        """Test spread_liquidity strategy schema."""
         from strategies.market_logic.defaults import get_parameter_schema
 
-        schema = get_parameter_schema("ticker_velocity")
+        schema = get_parameter_schema("spread_liquidity")
 
-        assert "time_window" in schema
-        assert schema["time_window"]["type"] == "int"
-        assert "volume_confirmation" in schema
-        assert schema["volume_confirmation"]["type"] == "bool"
+        assert "lookback_ticks" in schema
+        assert schema["lookback_ticks"]["type"] == "int"
 
 
 if __name__ == "__main__":

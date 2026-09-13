@@ -211,9 +211,9 @@ class TestStrategyConfigRollback:
 
     async def test_set_config_validation(self, config_manager):
         """Test parameter validation in set_config."""
-        # Invalid parameter for orderbook_skew (if we use a known strategy)
+        # Invalid parameter for btc_dominance (if we use a known strategy)
         success, config, errors = await config_manager.set_config(
-            strategy_id="orderbook_skew",
+            strategy_id="btc_dominance",
             parameters={"invalid_param": 123},
             changed_by="admin",
         )
@@ -246,7 +246,7 @@ class TestStrategyConfigRollback:
         strategies = await config_manager.list_strategies()
         assert len(strategies) > 0
         # Check if one of them is correctly populated
-        s = next(st for st in strategies if st["strategy_id"] == "orderbook_skew")
+        s = next(st for st in strategies if st["strategy_id"] == "btc_dominance")
         assert s["has_global_config"] is True
         assert "BTCUSDT" in s["symbol_overrides"]
 
@@ -257,13 +257,13 @@ class TestStrategyConfigRollback:
         mock_mongodb_client.create_audit_record = AsyncMock()
 
         success, config, errors = await config_manager.set_config(
-            strategy_id="orderbook_skew",
-            parameters={"top_levels": 5},
+            strategy_id="btc_dominance",
+            parameters={"window_hours": 48},
             changed_by="admin",
         )
 
         assert success is True
-        assert config.parameters["top_levels"] == 5
+        assert config.parameters["window_hours"] == 48
         mock_mongodb_client.upsert_global_config.assert_called_once()
         mock_mongodb_client.create_audit_record.assert_called_once()
 
@@ -273,14 +273,15 @@ class TestStrategyConfigRollback:
         mock_mongodb_client.get_global_config = AsyncMock(return_value=None)
 
         with patch("strategies.services.config_manager.constants") as mock_const:
-            mock_const.ORDERBOOK_SKEW_TOP_LEVELS = 42
+            mock_const.BTC_DOMINANCE_HIGH_THRESHOLD = 42.0
             # Need to mock other values used in the dict
-            mock_const.ORDERBOOK_SKEW_BUY_THRESHOLD = 1.2
-            mock_const.ORDERBOOK_SKEW_SELL_THRESHOLD = 0.8
-            mock_const.ORDERBOOK_SKEW_MIN_SPREAD_PERCENT = 0.1
+            mock_const.BTC_DOMINANCE_LOW_THRESHOLD = 40.0
+            mock_const.BTC_DOMINANCE_CHANGE_THRESHOLD = 5.0
+            mock_const.BTC_DOMINANCE_WINDOW_HOURS = 24
+            mock_const.BTC_DOMINANCE_MIN_SIGNAL_INTERVAL = 14400
 
-            config = await config_manager.get_config("orderbook_skew")
-            assert config["parameters"]["top_levels"] == 42
+            config = await config_manager.get_config("btc_dominance")
+            assert config["parameters"]["high_threshold"] == 42.0
             assert config["source"] == "environment"
 
     async def test_get_config_default_fallback(
@@ -437,7 +438,7 @@ class TestStrategyConfigRollback:
         )  # Failure
 
         success, config, errors = await config_manager.set_config(
-            "orderbook_skew", {"top_levels": 5}, "admin"
+            "btc_dominance", {"window_hours": 48}, "admin"
         )
         assert success is False
         assert "Failed to save" in errors[0]

@@ -10,7 +10,6 @@ from strategies.models.market_data import (
     TickerData,
     TradeData,
 )
-from strategies.models.orders import OrderSide, OrderType, PositionType, TradeOrder
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 
 
@@ -138,51 +137,6 @@ class TestSignalModels:
         # Verify the error message mentions confidence score
         error_str = str(exc_info.value).lower()
         assert "confidence" in error_str or "score" in error_str
-
-
-@pytest.mark.unit
-class TestOrderModels:
-    """Test order models."""
-
-    def test_trade_order_creation(self):
-        """Test creating a trade order."""
-        order = TradeOrder(
-            order_id="test_order_123456789",
-            symbol="BTCUSDT",
-            side=OrderSide.BUY,
-            order_type=OrderType.MARKET,
-            quantity=1.0,
-            position_type=PositionType.LONG,
-            strategy_name="test_strategy",
-            signal_id="test_signal_123456789",
-            confidence_score=0.8,
-        )
-
-        assert order.symbol == "BTCUSDT"
-        assert order.side == OrderSide.BUY
-        assert order.order_type == OrderType.MARKET
-        assert order.is_market_order is True
-        assert order.is_buy_order is True
-        assert order.is_long_position is True
-
-    def test_order_validation(self):
-        """Test order validation."""
-        # Test invalid order ID
-        with pytest.raises(ValueError) as exc_info:
-            TradeOrder(
-                order_id="short",  # Too short
-                symbol="BTCUSDT",
-                side=OrderSide.BUY,
-                order_type=OrderType.MARKET,
-                quantity=1.0,
-                position_type=PositionType.LONG,
-                strategy_name="test_strategy",
-                signal_id="test_signal_123456789",
-                confidence_score=0.8,
-            )
-        # Verify the error message mentions order_id
-        error_str = str(exc_info.value).lower()
-        assert "order_id" in error_str or "order" in error_str or "id" in error_str
 
 
 @pytest.mark.unit

@@ -33,21 +33,6 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "petrosa")
 MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 
-# Strategy Configuration
-# NOTE (#197): orderbook_skew/trade_momentum/ticker_velocity have full parameter
-# schemas (strategies/services/config_manager.py) but zero implementing classes —
-# strategies/core/consumer.py never instantiates them. Defaulted to disabled until
-# an implementation exists so "enabled" config doesn't silently mean "does nothing".
-STRATEGY_ENABLED_ORDERBOOK_SKEW = (
-    os.getenv("STRATEGY_ENABLED_ORDERBOOK_SKEW", "false").lower() == "true"
-)
-STRATEGY_ENABLED_TRADE_MOMENTUM = (
-    os.getenv("STRATEGY_ENABLED_TRADE_MOMENTUM", "false").lower() == "true"
-)
-STRATEGY_ENABLED_TICKER_VELOCITY = (
-    os.getenv("STRATEGY_ENABLED_TICKER_VELOCITY", "false").lower() == "true"
-)
-
 # Market Logic Strategies (from QTZD adaptation)
 STRATEGY_ENABLED_BTC_DOMINANCE = (
     os.getenv("STRATEGY_ENABLED_BTC_DOMINANCE", "true").lower() == "true"
@@ -65,38 +50,6 @@ STRATEGY_ENABLED_SPREAD_LIQUIDITY = (
 )
 STRATEGY_ENABLED_ICEBERG_DETECTOR = (
     os.getenv("STRATEGY_ENABLED_ICEBERG_DETECTOR", "true").lower() == "true"
-)
-
-# Order Book Skew Strategy Parameters
-ORDERBOOK_SKEW_TOP_LEVELS = int(os.getenv("ORDERBOOK_SKEW_TOP_LEVELS", "5"))
-ORDERBOOK_SKEW_BUY_THRESHOLD = float(os.getenv("ORDERBOOK_SKEW_BUY_THRESHOLD", "1.2"))
-ORDERBOOK_SKEW_SELL_THRESHOLD = float(os.getenv("ORDERBOOK_SKEW_SELL_THRESHOLD", "0.8"))
-ORDERBOOK_SKEW_MIN_SPREAD_PERCENT = float(
-    os.getenv("ORDERBOOK_SKEW_MIN_SPREAD_PERCENT", "0.1")
-)
-
-# Trade Momentum Strategy Parameters
-TRADE_MOMENTUM_PRICE_WEIGHT = float(os.getenv("TRADE_MOMENTUM_PRICE_WEIGHT", "0.4"))
-TRADE_MOMENTUM_QUANTITY_WEIGHT = float(
-    os.getenv("TRADE_MOMENTUM_QUANTITY_WEIGHT", "0.3")
-)
-TRADE_MOMENTUM_MAKER_WEIGHT = float(os.getenv("TRADE_MOMENTUM_MAKER_WEIGHT", "0.3"))
-TRADE_MOMENTUM_BUY_THRESHOLD = float(os.getenv("TRADE_MOMENTUM_BUY_THRESHOLD", "0.7"))
-TRADE_MOMENTUM_SELL_THRESHOLD = float(
-    os.getenv("TRADE_MOMENTUM_SELL_THRESHOLD", "-0.7")
-)
-TRADE_MOMENTUM_MIN_QUANTITY = float(os.getenv("TRADE_MOMENTUM_MIN_QUANTITY", "0.001"))
-
-# Ticker Velocity Strategy Parameters
-TICKER_VELOCITY_TIME_WINDOW = int(
-    os.getenv("TICKER_VELOCITY_TIME_WINDOW", "60")
-)  # seconds
-TICKER_VELOCITY_BUY_THRESHOLD = float(os.getenv("TICKER_VELOCITY_BUY_THRESHOLD", "0.5"))
-TICKER_VELOCITY_SELL_THRESHOLD = float(
-    os.getenv("TICKER_VELOCITY_SELL_THRESHOLD", "-0.5")
-)
-TICKER_VELOCITY_MIN_PRICE_CHANGE = float(
-    os.getenv("TICKER_VELOCITY_MIN_PRICE_CHANGE", "0.1")
 )
 
 # Bitcoin Dominance Strategy Parameters (from QTZD adaptation)
@@ -158,14 +111,6 @@ RISK_STOP_LOSS_PERCENT = float(os.getenv("RISK_STOP_LOSS_PERCENT", "2.0"))
 RISK_TAKE_PROFIT_PERCENT = float(os.getenv("RISK_TAKE_PROFIT_PERCENT", "4.0"))
 RISK_MAX_DRAWDOWN_PERCENT = float(os.getenv("RISK_MAX_DRAWDOWN_PERCENT", "10.0"))
 
-# TradeEngine API Configuration
-TRADEENGINE_API_URL = os.getenv(
-    "TRADEENGINE_API_URL", "http://petrosa-tradeengine:8080"
-)
-TRADEENGINE_API_TIMEOUT = int(os.getenv("TRADEENGINE_API_TIMEOUT", "30"))
-TRADEENGINE_API_RETRY_ATTEMPTS = int(os.getenv("TRADEENGINE_API_RETRY_ATTEMPTS", "3"))
-TRADEENGINE_API_RETRY_DELAY = float(os.getenv("TRADEENGINE_API_RETRY_DELAY", "1.0"))
-
 # Health Check Configuration
 HEALTH_CHECK_PORT = int(os.getenv("HEALTH_CHECK_PORT", "8080"))
 HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
@@ -179,24 +124,6 @@ HEARTBEAT_INCLUDE_DETAILED_STATS = (
     os.getenv("HEARTBEAT_INCLUDE_DETAILED_STATS", "true").lower() == "true"
 )
 
-# Circuit Breaker Configuration
-CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(
-    os.getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5")
-)
-CIRCUIT_BREAKER_RECOVERY_TIMEOUT = int(
-    os.getenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "60")
-)
-CIRCUIT_BREAKER_EXPECTED_EXCEPTION = os.getenv(
-    "CIRCUIT_BREAKER_EXPECTED_EXCEPTION", "Exception"
-)
-
-# Performance Configuration
-MAX_MEMORY_MB = int(os.getenv("MAX_MEMORY_MB", "512"))
-MAX_CPU_PERCENT = int(os.getenv("MAX_CPU_PERCENT", "80"))
-MESSAGE_PROCESSING_TIMEOUT = float(os.getenv("MESSAGE_PROCESSING_TIMEOUT", "1.0"))
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "100"))
-BATCH_TIMEOUT = float(os.getenv("BATCH_TIMEOUT", "1.0"))
-
 # OpenTelemetry Configuration
 ENABLE_OTEL = os.getenv("ENABLE_OTEL", "true").lower() == "true"
 OTEL_SERVICE_VERSION = os.getenv("OTEL_SERVICE_VERSION", SERVICE_VERSION)
@@ -208,7 +135,6 @@ OTEL_TRACES_EXPORTER = os.getenv("OTEL_TRACES_EXPORTER", "otlp")
 OTEL_LOGS_EXPORTER = os.getenv("OTEL_LOGS_EXPORTER", "otlp")
 
 # Prometheus Metrics Configuration
-PROMETHEUS_PORT = int(os.getenv("PROMETHEUS_PORT", "9090"))
 PROMETHEUS_ENABLED = os.getenv("PROMETHEUS_ENABLED", "true").lower() == "true"
 
 # Logging Configuration
@@ -216,28 +142,6 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
 LOG_LEVEL_STRATEGIES = os.getenv("LOG_LEVEL_STRATEGIES", "INFO")
 LOG_LEVEL_NATS = os.getenv("LOG_LEVEL_NATS", "WARNING")
 LOG_LEVEL_HTTP = os.getenv("LOG_LEVEL_HTTP", "WARNING")
-
-# Message Processing Configuration
-MESSAGE_TTL_SECONDS = int(os.getenv("MESSAGE_TTL_SECONDS", "60"))
-MESSAGE_MAX_RETRIES = int(os.getenv("MESSAGE_MAX_RETRIES", "3"))
-MESSAGE_RETRY_DELAY = float(os.getenv("MESSAGE_RETRY_DELAY", "1.0"))
-
-# Validation Configuration
-VALIDATE_MESSAGES = os.getenv("VALIDATE_MESSAGES", "true").lower() == "true"
-VALIDATE_ORDERS = os.getenv("VALIDATE_ORDERS", "true").lower() == "true"
-VALIDATE_SYMBOLS = os.getenv("VALIDATE_SYMBOLS", "true").lower() == "true"
-
-# Development Configuration
-DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
-DRY_RUN_MODE = os.getenv("DRY_RUN_MODE", "false").lower() == "true"
-SIMULATION_MODE = os.getenv("SIMULATION_MODE", "false").lower() == "true"
-
-# Default strategy weights (for signal aggregation)
-STRATEGY_WEIGHTS = {
-    "orderbook_skew": float(os.getenv("STRATEGY_WEIGHT_ORDERBOOK_SKEW", "0.4")),
-    "trade_momentum": float(os.getenv("STRATEGY_WEIGHT_TRADE_MOMENTUM", "0.3")),
-    "ticker_velocity": float(os.getenv("STRATEGY_WEIGHT_TICKER_VELOCITY", "0.3")),
-}
 
 # Signal confidence thresholds
 SIGNAL_CONFIDENCE_HIGH = float(os.getenv("SIGNAL_CONFIDENCE_HIGH", "0.8"))
@@ -271,7 +175,6 @@ ERROR_CODES = {
     "VALIDATION_ERROR": "E005",
     "CONFIGURATION_ERROR": "E006",
     "TIMEOUT_ERROR": "E007",
-    "CIRCUIT_BREAKER_OPEN": "E008",
 }
 
 # Success codes
@@ -281,18 +184,6 @@ SUCCESS_CODES = {
     "MESSAGE_PROCESSED": "S003",
     "HEALTH_CHECK_PASSED": "S004",
 }
-
-
-def get_enabled_strategies() -> list[str]:
-    """Get list of enabled strategies."""
-    strategies = []
-    if STRATEGY_ENABLED_ORDERBOOK_SKEW:
-        strategies.append("orderbook_skew")
-    if STRATEGY_ENABLED_TRADE_MOMENTUM:
-        strategies.append("trade_momentum")
-    if STRATEGY_ENABLED_TICKER_VELOCITY:
-        strategies.append("ticker_velocity")
-    return strategies
 
 
 def get_trading_config() -> dict:
@@ -319,14 +210,13 @@ def get_risk_config() -> dict:
 
 
 def get_enabled_strategies() -> list[str]:
-    """Get list of enabled strategies."""
+    """Get list of enabled strategies.
+
+    Per #190: returns only strategies actually registered in
+    strategies/core/consumer.py's __init__ (market_logic_strategies +
+    microstructure_strategies). Order matches consumer.py registration order.
+    """
     enabled = []
-    if STRATEGY_ENABLED_ORDERBOOK_SKEW:
-        enabled.append("orderbook_skew")
-    if STRATEGY_ENABLED_TRADE_MOMENTUM:
-        enabled.append("trade_momentum")
-    if STRATEGY_ENABLED_TICKER_VELOCITY:
-        enabled.append("ticker_velocity")
     if STRATEGY_ENABLED_BTC_DOMINANCE:
         enabled.append("btc_dominance")
     if STRATEGY_ENABLED_CROSS_EXCHANGE_SPREAD:
@@ -342,28 +232,4 @@ def get_enabled_strategies() -> list[str]:
 
 def get_strategy_config() -> dict:
     """Get strategy configuration as a dictionary."""
-    return {
-        "orderbook_skew": {
-            "enabled": STRATEGY_ENABLED_ORDERBOOK_SKEW,
-            "top_levels": ORDERBOOK_SKEW_TOP_LEVELS,
-            "buy_threshold": ORDERBOOK_SKEW_BUY_THRESHOLD,
-            "sell_threshold": ORDERBOOK_SKEW_SELL_THRESHOLD,
-            "min_spread_percent": ORDERBOOK_SKEW_MIN_SPREAD_PERCENT,
-        },
-        "trade_momentum": {
-            "enabled": STRATEGY_ENABLED_TRADE_MOMENTUM,
-            "price_weight": TRADE_MOMENTUM_PRICE_WEIGHT,
-            "quantity_weight": TRADE_MOMENTUM_QUANTITY_WEIGHT,
-            "maker_weight": TRADE_MOMENTUM_MAKER_WEIGHT,
-            "buy_threshold": TRADE_MOMENTUM_BUY_THRESHOLD,
-            "sell_threshold": TRADE_MOMENTUM_SELL_THRESHOLD,
-            "min_quantity": TRADE_MOMENTUM_MIN_QUANTITY,
-        },
-        "ticker_velocity": {
-            "enabled": STRATEGY_ENABLED_TICKER_VELOCITY,
-            "time_window": TICKER_VELOCITY_TIME_WINDOW,
-            "buy_threshold": TICKER_VELOCITY_BUY_THRESHOLD,
-            "sell_threshold": TICKER_VELOCITY_SELL_THRESHOLD,
-            "min_price_change": TICKER_VELOCITY_MIN_PRICE_CHANGE,
-        },
-    }
+    return {}
