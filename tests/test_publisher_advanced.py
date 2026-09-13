@@ -174,11 +174,12 @@ async def test_publisher_start_success(publisher):
 
 @pytest.mark.asyncio
 async def test_update_publishing_metrics_cleanup(publisher):
-    """Test _update_publishing_metrics cleanup - covers line 432."""
-    # Add more than 1000 publishing times
-    publisher.publishing_times = [0.1] * 1500
+    """Test _update_publishing_metrics enforces the 1000-sample window
+    (per #191 AC1: fixed-size ring buffer, no unbounded growth)."""
+    for _ in range(1500):
+        publisher._update_publishing_metrics(0.1)
+    assert len(publisher.publishing_times) == 1000
 
-    # Update metrics - should trim to last 1000
     publisher._update_publishing_metrics(0.2)
     assert len(publisher.publishing_times) <= 1000
 

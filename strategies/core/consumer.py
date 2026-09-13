@@ -48,6 +48,7 @@ from strategies.utils.metrics import (
     initialize_metrics,
 )
 from strategies.utils.nats_reconnect import make_reconnect_handler
+from strategies.utils.rolling_stats import RollingStats
 
 
 # OpenTelemetry tracer - lazy-loaded to ensure it uses the current provider
@@ -99,10 +100,11 @@ class NATSConsumer:
         self.error_tracker = WindowedErrorTracker()
         self.last_message_time = None
 
-        # Performance metrics
-        self.processing_times = []
-        self.max_processing_time = 0.0
-        self.avg_processing_time = 0.0
+        # Performance metrics.
+        # Per #191 AC1/AC3: fixed-size ring buffer with O(1) running sum and
+        # a true windowed max (not a lifetime high-water mark). See
+        # `_update_processing_metrics` and `strategies/utils/rolling_stats.py`.
+        self.processing_times = RollingStats(maxlen=1000)
 
         # Initialize OpenTelemetry custom business metrics
         self.metrics = initialize_metrics()
@@ -189,6 +191,14 @@ class NATSConsumer:
 
             self.is_running = True
 
+            # Per #191 AC4: start the OrderBookTracker's periodic sweep task
+            # (if the iceberg_detector strategy is enabled) now that we have
+            # a running event loop, decoupling level eviction from the
+            # per-message hot path entirely.
+            iceberg_strategy = self.microstructure_strategies.get("iceberg_detector")
+            if iceberg_strategy is not None and hasattr(iceberg_strategy, "tracker"):
+                iceberg_strategy.tracker.start_periodic_sweep()
+
             # Return immediately after subscribing
             self.logger.info(
                 "NATS consumer started",
@@ -213,6 +223,11 @@ class NATSConsumer:
         # Signal shutdown
         self.shutdown_event.set()
         self.is_running = False
+
+        # Per #191 AC4: stop the OrderBookTracker's periodic sweep task.
+        iceberg_strategy = self.microstructure_strategies.get("iceberg_detector")
+        if iceberg_strategy is not None and hasattr(iceberg_strategy, "tracker"):
+            iceberg_strategy.tracker.stop_periodic_sweep()
 
         # Close any strategy-owned HTTP sessions (#187: cross_exchange_spread
         # now holds a shared aiohttp.ClientSession across the strategy's lifetime).
@@ -1000,21 +1015,22 @@ class NATSConsumer:
             self.logger.error("Error publishing market logic signals", error=str(e))
 
     def _update_processing_metrics(self, processing_time: float) -> None:
-        """Update processing time metrics."""
-        self.processing_times.append(processing_time)
+        """Update processing time metrics.
 
-        # Keep only last 1000 processing times
-        if len(self.processing_times) > 1000:
-            self.processing_times = self.processing_times[-1000:]
+        Per #191 AC1: O(1) amortized -- no list slice-rebuild, no `sum()`
+        over the window. See `strategies/utils/rolling_stats.py`.
+        """
+        self.processing_times.add(processing_time)
 
-        # Update max processing time
-        if processing_time > self.max_processing_time:
-            self.max_processing_time = processing_time
+    @property
+    def max_processing_time(self) -> float:
+        """Windowed max processing time (per #191 AC3 -- decays, not lifetime)."""
+        return self.processing_times.windowed_max
 
-        # Update average processing time
-        self.avg_processing_time = sum(self.processing_times) / len(
-            self.processing_times
-        )
+    @property
+    def avg_processing_time(self) -> float:
+        """Average processing time over the current window."""
+        return self.processing_times.average
 
     def get_metrics(self) -> dict[str, Any]:
         """Get consumer metrics."""
@@ -1025,7 +1041,7 @@ class NATSConsumer:
             "last_message_time": self.last_message_time,
             "max_processing_time_ms": self.max_processing_time,
             "avg_processing_time_ms": self.avg_processing_time,
-            "processing_times_count": len(self.processing_times),
+            "processing_times_count": self.processing_times.count,
         }
 
     def get_health_status(self) -> dict[str, Any]:

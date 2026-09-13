@@ -142,6 +142,15 @@ class HealthServer:
         self.is_running = False
         self.start_time = None
 
+        # Per #191 AC6: psutil.Process().memory_info()/.cpu_percent() are
+        # blocking syscalls. Sample them on a timer instead of on every
+        # /metrics and /healthz request -- handlers read these cached
+        # values (see `_sample_system_metrics`, `start`, `stop`).
+        self._cached_memory_mb: float = 0.0
+        self._cached_cpu_percent: float = 0.0
+        self._metrics_sample_interval_seconds: float = 5.0
+        self._metrics_sample_task: asyncio.Task | None = None
+
         # Health check state
         self.health_status = {
             "status": "healthy",
@@ -217,6 +226,14 @@ class HealthServer:
             # Run server in background task
             asyncio.create_task(self._run_server())
 
+            # Per #191 AC6: sample psutil once synchronously so /metrics and
+            # /healthz have a real value immediately, then keep it fresh via
+            # a background timer instead of on every request.
+            self._sample_system_metrics()
+            self._metrics_sample_task = asyncio.create_task(
+                self._system_metrics_sample_loop()
+            )
+
             self.logger.info(f"Health server started on port {self.port}")
 
         except Exception as e:
@@ -229,9 +246,29 @@ class HealthServer:
 
         self.is_running = False
 
+        if self._metrics_sample_task is not None:
+            self._metrics_sample_task.cancel()
+            self._metrics_sample_task = None
+
         if self.server:
             self.server.should_exit = True
             self.logger.info("Health server stopped")
+
+    def _sample_system_metrics(self) -> None:
+        """Refresh the cached memory/CPU values from psutil.
+
+        Per #191 AC6: this is the ONLY place that should call
+        `_get_memory_usage`/`_get_cpu_usage` in production -- request
+        handlers read `_cached_memory_mb`/`_cached_cpu_percent` instead.
+        """
+        self._cached_memory_mb = self._get_memory_usage()
+        self._cached_cpu_percent = self._get_cpu_usage()
+
+    async def _system_metrics_sample_loop(self) -> None:
+        """Background loop refreshing cached system metrics on a timer."""
+        while True:
+            await asyncio.sleep(self._metrics_sample_interval_seconds)
+            self._sample_system_metrics()
 
     async def _run_server(self) -> None:
         """Run the server in background."""
@@ -264,12 +301,16 @@ class HealthServer:
             # Basic health checks - only check essential conditions.
             # These are informational only; none of them (other than
             # server_running) affect the liveness verdict below.
+            # Per #191 AC6: read the timer-sampled cache, not a fresh
+            # psutil call, so this request-path handler never blocks the
+            # event loop on a syscall.
             health_checks = {
                 "server_running": self.is_running,
                 "uptime_seconds": uptime >= 0,  # Just check if uptime is valid
-                "memory_usage": self._get_memory_usage()
+                "memory_usage": self._cached_memory_mb
                 >= 0,  # Just check if memory is valid
-                "cpu_usage": self._get_cpu_usage() >= 0,  # Just check if CPU is valid
+                "cpu_usage": self._cached_cpu_percent
+                >= 0,  # Just check if CPU is valid
             }
 
             # Determine overall health - liveness only fails if the server
@@ -375,10 +416,12 @@ class HealthServer:
                 uptime = time.time() - self.start_time
                 SERVICE_UPTIME.set(uptime)
 
-            memory_mb = self._get_memory_usage()
+            # Per #191 AC6: cached, timer-sampled values -- not a fresh
+            # psutil call on every /metrics scrape.
+            memory_mb = self._cached_memory_mb
             MEMORY_USAGE_BYTES.set(memory_mb * 1024 * 1024)  # Convert MB to bytes
 
-            cpu = self._get_cpu_usage()
+            cpu = self._cached_cpu_percent
             CPU_USAGE_PERCENT.set(cpu)
 
             # Update enabled strategies count
@@ -411,8 +454,9 @@ class HealthServer:
                     ),
                 },
                 "system": {
-                    "memory_usage_mb": self._get_memory_usage(),
-                    "cpu_usage_percent": self._get_cpu_usage(),
+                    # Per #191 AC6: cached, timer-sampled values.
+                    "memory_usage_mb": self._cached_memory_mb,
+                    "cpu_usage_percent": self._cached_cpu_percent,
                 },
                 "health": {
                     "status": self.health_status.get("status", "unknown"),

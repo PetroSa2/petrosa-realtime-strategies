@@ -5,6 +5,7 @@ Tracks individual price levels in the order book over time to detect
 iceberg order patterns (repeated refills, consistent sizing, price anchoring).
 """
 
+import asyncio
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -136,6 +137,7 @@ class OrderBookTracker:
         consistency_threshold: float = 0.1,  # Low std dev = consistent
         min_refill_count: int = 3,
         max_levels_per_symbol: int = 1000,
+        cleanup_interval_seconds: float = 5.0,
     ):
         """
         Initialize tracker.
@@ -149,6 +151,10 @@ class OrderBookTracker:
             min_refill_count: Minimum refills to consider iceberg
             max_levels_per_symbol: Hard cap (LRU by last-seen) on distinct
                 price levels tracked per symbol, per side (per #189 AC1/AC4)
+            cleanup_interval_seconds: How often `start_periodic_sweep`'s
+                background task evicts expired levels (per #191 AC4). Not
+                consulted by `update_orderbook`, which no longer sweeps at
+                all — see `sweep_expired_levels`/`start_periodic_sweep`.
         """
         self.history_window = history_window_seconds
         self.max_symbols = max_symbols
@@ -156,6 +162,8 @@ class OrderBookTracker:
         self.consistency_threshold = consistency_threshold
         self.min_refill_count = min_refill_count
         self.max_levels_per_symbol = max_levels_per_symbol
+        self.cleanup_interval_seconds = cleanup_interval_seconds
+        self._sweep_task: asyncio.Task | None = None
 
         # Storage: {symbol: {price: LevelHistory}}
         # Per #189 AC3: plain dicts (not defaultdict) so that read paths
@@ -213,11 +221,14 @@ class OrderBookTracker:
         for price, qty in asks:
             self._update_level(symbol, price, qty, unix_ts, "ask")
 
-        # Per #189 AC4: sweep expired levels across ALL tracked symbols on
-        # every update, not just the symbol currently being updated — a
-        # symbol that stops producing ticks must still have its stale
-        # levels reclaimed by activity on other symbols.
-        self._cleanup_old_levels(unix_ts)
+        # Per #191 AC4: eviction of expired levels is intentionally NOT done
+        # here anymore. #189 AC4 originally swept every symbol on every
+        # message (an O(levels) full scan per depth tick — at a 100ms depth
+        # interval that's ~3,000 scans per 300s TTL window for one symbol
+        # alone). It is now driven off the hot path entirely by
+        # `start_periodic_sweep`'s background task (or `sweep_expired_levels`
+        # called directly, e.g. from tests). See that method's docstring for
+        # why a fixed-interval sweep is equivalent for correctness.
         self._update_gauges()
 
     def _update_level(
@@ -323,16 +334,21 @@ class OrderBookTracker:
             cv = std_dev / mean_vol  # Coefficient of variation
             history.consistent_volume = cv < self.consistency_threshold
 
-    def _cleanup_old_levels(self, current_time: float) -> None:
+    def _cleanup_old_levels(self, current_time: float) -> int:
         """
-        Remove levels outside history window.
+        Remove levels outside history window. Returns the count evicted.
 
         Per #189 AC4: sweeps ALL tracked symbols (both sides), not only
         the symbol currently being updated. Previously a symbol that
         stopped producing updates leaked its entire level map permanently
         because this only ever ran for the one symbol passed in.
+
+        Per #191 AC4: this is no longer invoked from `update_orderbook`.
+        Call `sweep_expired_levels()` (sync, e.g. from tests) or
+        `start_periodic_sweep()` (async background task) instead.
         """
         cutoff_time = current_time - self.history_window
+        removed = 0
 
         for symbol_levels in (self.bid_levels, self.ask_levels):
             for symbol in list(symbol_levels.keys()):
@@ -345,8 +361,51 @@ class OrderBookTracker:
                 for price in to_remove:
                     del levels[price]
                     self.total_levels_tracked -= 1
+                    removed += 1
                 if not levels:
                     del symbol_levels[symbol]
+
+        return removed
+
+    def sweep_expired_levels(self, current_time: float | None = None) -> int:
+        """Evict levels older than `history_window`. Returns count evicted.
+
+        Per #191 AC4: the public, on-demand entry point for the sweep that
+        used to run unconditionally inside `update_orderbook`. Safe to call
+        synchronously (e.g. from tests) without an event loop. Also used
+        internally by `start_periodic_sweep`'s background task.
+        """
+        if current_time is None:
+            current_time = time.time()
+        return self._cleanup_old_levels(current_time)
+
+    def start_periodic_sweep(self) -> None:
+        """Start a background task that periodically evicts expired levels.
+
+        Per #191 AC4: decouples eviction entirely from the per-message hot
+        path (`update_orderbook`). No-op if already started, or if there is
+        no running event loop (e.g. plain sync unit tests) — those should
+        call `sweep_expired_levels()` directly instead.
+        """
+        if self._sweep_task is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._sweep_task = loop.create_task(self._periodic_sweep_loop())
+
+    def stop_periodic_sweep(self) -> None:
+        """Cancel the background sweep task started by `start_periodic_sweep`."""
+        if self._sweep_task is not None:
+            self._sweep_task.cancel()
+            self._sweep_task = None
+
+    async def _periodic_sweep_loop(self) -> None:
+        """Background loop driving `sweep_expired_levels` on a fixed interval."""
+        while True:
+            await asyncio.sleep(self.cleanup_interval_seconds)
+            self.sweep_expired_levels()
 
     def _update_gauges(self) -> None:
         """Update Prometheus gauges reflecting current structure sizes."""
