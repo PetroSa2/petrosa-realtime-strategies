@@ -11,8 +11,6 @@ structlog>=23.0.0
 petrosa-otel[all]>=1.1.0
 # CLI and utilities
 typer>=0.9.0
-orjson>=3.9.0
-pybreaker>=1.0.0
 python-dateutil>=2.8.2
 
 # HTTP and async
@@ -28,5 +26,4 @@ psutil>=5.9.0
 # Database
 motor>=3.3.2
 pymongo>=4.6.0
-pymysql>=1.1.0
 starlette>=0.37.0

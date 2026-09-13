@@ -164,15 +164,12 @@ class Signal(BaseModel):
                 val = val.value
             data["action"] = val.lower()
 
-        # 3. Handle Confidence mapping (Priority to confidence_score for tests)
+        # 3. Handle Confidence mapping (confidence_score always takes priority;
+        # per #190, every caller passes confidence_score alongside a
+        # SignalConfidence enum, so the enum-only float-mapping fallback that
+        # used to live here was unreachable dead code).
         if "confidence_score" in data:
             data["confidence"] = data["confidence_score"]
-        elif "confidence" in data:
-            val = data["confidence"]
-            if isinstance(val, Enum):
-                # Map Enum to float
-                conf_map = {"HIGH": 0.9, "MEDIUM": 0.7, "LOW": 0.4}
-                data["confidence"] = conf_map.get(val.name, 0.5)
 
         # 4. Map strategy_name to strategy_id
         if "strategy_name" in data and "strategy_id" not in data:

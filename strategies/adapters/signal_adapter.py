@@ -106,26 +106,6 @@ def transform_signal_for_tradeengine(signal: Signal) -> dict[str, Any]:
     return transformed
 
 
-def _map_confidence_to_strength(confidence_score: float) -> str:
-    """
-    Map confidence score (0-1) to strength level.
-
-    Args:
-        confidence_score: Confidence score between 0 and 1
-
-    Returns:
-        Strength level: "weak", "medium", "strong", or "extreme"
-    """
-    if confidence_score >= 0.9:
-        return "extreme"
-    elif confidence_score >= 0.7:
-        return "strong"
-    elif confidence_score >= 0.5:
-        return "medium"
-    else:
-        return "weak"
-
-
 def _calculate_default_quantity(price: float, confidence_score: float) -> float:
     """Calculate a default quantity based on price and confidence."""
     if price <= 0:
