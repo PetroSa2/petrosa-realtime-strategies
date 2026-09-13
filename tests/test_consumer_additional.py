@@ -6,7 +6,7 @@ Covers remaining uncovered lines in consumer.py.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -79,7 +79,7 @@ async def test_consumer_process_message_success(consumer):
             "stream": "btcusdt@depth@20ms",
             "data": {
                 "e": "depthUpdate",
-                "E": int(datetime.utcnow().timestamp() * 1000),
+                "E": int(datetime.now(UTC).timestamp() * 1000),
                 "s": "BTCUSDT",
                 "U": 1,
                 "u": 1,
@@ -92,7 +92,7 @@ async def test_consumer_process_message_success(consumer):
     # Mock successful parsing
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -102,7 +102,7 @@ async def test_consumer_process_message_success(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     consumer._parse_market_data = Mock(return_value=market_data)
@@ -123,7 +123,7 @@ async def test_consumer_process_message_processing_error(consumer):
             "stream": "btcusdt@depth@20ms",
             "data": {
                 "e": "depthUpdate",
-                "E": int(datetime.utcnow().timestamp() * 1000),
+                "E": int(datetime.now(UTC).timestamp() * 1000),
                 "s": "BTCUSDT",
                 "U": 1,
                 "u": 1,
@@ -135,7 +135,7 @@ async def test_consumer_process_message_processing_error(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -145,7 +145,7 @@ async def test_consumer_process_message_processing_error(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     consumer._parse_market_data = Mock(return_value=market_data)
@@ -168,7 +168,7 @@ async def test_consumer_process_market_logic_strategies_list_signals(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -178,7 +178,7 @@ async def test_consumer_process_market_logic_strategies_list_signals(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     # Mock cross_exchange_spread to return list of signals

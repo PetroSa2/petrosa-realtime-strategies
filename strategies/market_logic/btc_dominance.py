@@ -12,7 +12,7 @@ Strategy Logic:
 """
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 import structlog
@@ -257,7 +257,7 @@ class BitcoinDominanceStrategy:
         """
         # Rate limiting (QTZD-style minimum intervals)
         if self.last_signal_time:
-            time_since_last = datetime.utcnow() - self.last_signal_time
+            time_since_last = datetime.now(UTC) - self.last_signal_time
             if time_since_last.total_seconds() < self.min_signal_interval:
                 return None
 
@@ -349,7 +349,7 @@ class BitcoinDominanceStrategy:
                 )
 
         if signal:
-            self.last_signal_time = datetime.utcnow()
+            self.last_signal_time = datetime.now(UTC)
 
         return signal
 
@@ -431,7 +431,7 @@ class BitcoinDominanceStrategy:
             metadata={
                 **metadata,
                 "reasoning": reasoning,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
 

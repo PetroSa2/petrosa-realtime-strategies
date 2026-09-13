@@ -13,7 +13,7 @@ Covers:
 """
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -54,7 +54,7 @@ def make_ticker_mdm(symbol: str, last_price: str) -> MarketDataMessage:
     return MarketDataMessage(
         stream=f"{symbol.lower()}@ticker",
         data=make_ticker(symbol, last_price),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -74,7 +74,7 @@ def make_trade_mdm(symbol: str, price: str) -> MarketDataMessage:
     return MarketDataMessage(
         stream=f"{symbol.lower()}@trade",
         data=trade,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
 

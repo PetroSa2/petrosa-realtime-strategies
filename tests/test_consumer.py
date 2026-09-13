@@ -11,7 +11,7 @@ Covers:
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -222,7 +222,7 @@ async def test_consumer_process_market_data_unknown_type(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -232,7 +232,7 @@ async def test_consumer_process_market_data_unknown_type(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@unknown",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     # Mock the properties to return False for all types using PropertyMock
@@ -254,7 +254,7 @@ async def test_consumer_process_market_data_unknown_type(consumer):
         market_data_mock = MarketDataMessage(
             stream="btcusdt@unknown",
             data=depth_data,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
         )
         await consumer._process_market_data(market_data_mock)
         # Should log warning for unknown stream type (line 584)
@@ -268,7 +268,7 @@ async def test_consumer_process_market_data_exception(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -278,7 +278,7 @@ async def test_consumer_process_market_data_exception(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     # Mock _process_depth_data to raise exception
@@ -298,7 +298,7 @@ async def test_consumer_process_depth_data_error(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -308,7 +308,7 @@ async def test_consumer_process_depth_data_error(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     # Mock depth_analyzer to raise exception
@@ -421,7 +421,7 @@ async def test_consumer_transform_depth_data_error(consumer):
     # Use data that causes exception in DepthLevel validation (invalid price/quantity)
     invalid_data = {
         "s": "BTCUSDT",
-        "E": int(datetime.utcnow().timestamp() * 1000),
+        "E": int(datetime.now(UTC).timestamp() * 1000),
         "bids": [["invalid_price", "1.0"]],  # Invalid price will fail validation
         "asks": [
             ["50001.0", "invalid_quantity"]
@@ -473,7 +473,7 @@ async def test_consumer_transform_depth_data_legacy_bids_asks_fallback(consumer)
     """
     legacy_payload = {
         "s": "ETHUSDT",
-        "E": int(datetime.utcnow().timestamp() * 1000),
+        "E": int(datetime.now(UTC).timestamp() * 1000),
         "bids": [["2000.0", "1.0"]],
         "asks": [["2001.0", "0.5"]],
     }
@@ -526,7 +526,7 @@ async def test_consumer_transform_depth_data_drops_zero_quantity_levels(consumer
     """
     payload = {
         "s": "BTCUSDT",
-        "E": int(datetime.utcnow().timestamp() * 1000),
+        "E": int(datetime.now(UTC).timestamp() * 1000),
         "b": [["50000.0", "0"], ["49999.0", "1.0"]],
         "a": [["50001.0", "0.0"], ["50002.0", "2.0"]],
     }
@@ -603,7 +603,7 @@ async def test_process_depth_data_records_malformed_depth_error_on_violation(
         asks=[DepthLevel(price="99.0", quantity="1.0")],  # crossed book
     )
     market_data = MarketDataMessage.model_construct(
-        stream="btcusdt@depth20@100ms", data=depth_update, timestamp=datetime.utcnow()
+        stream="btcusdt@depth20@100ms", data=depth_update, timestamp=datetime.now(UTC)
     )
 
     await consumer._process_depth_data(market_data)
@@ -649,15 +649,15 @@ async def test_consumer_process_trade_data(consumer):
         quantity="1.0",
         buyer_order_id=1,
         seller_order_id=2,
-        trade_time=int(datetime.utcnow().timestamp() * 1000),
+        trade_time=int(datetime.now(UTC).timestamp() * 1000),
         is_buyer_maker=False,
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
     )
 
     market_data = MarketDataMessage(
         stream="btcusdt@trade",
         data=trade_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     await consumer._process_trade_data(market_data)
@@ -671,7 +671,7 @@ async def test_consumer_process_ticker_data(consumer):
 
     ticker_data = TickerData(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         price_change="100.0",
         price_change_percent="0.2",
         weighted_avg_price="50000.0",
@@ -687,8 +687,8 @@ async def test_consumer_process_ticker_data(consumer):
         low_price="49800.0",
         volume="1000.0",
         quote_volume="50000000.0",
-        open_time=int(datetime.utcnow().timestamp() * 1000),
-        close_time=int(datetime.utcnow().timestamp() * 1000),
+        open_time=int(datetime.now(UTC).timestamp() * 1000),
+        close_time=int(datetime.now(UTC).timestamp() * 1000),
         first_id=1,
         last_id=1000,
         count=1000,
@@ -697,7 +697,7 @@ async def test_consumer_process_ticker_data(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@ticker",
         data=ticker_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     await consumer._process_ticker_data(market_data)
@@ -711,7 +711,7 @@ async def test_consumer_process_market_logic_strategies(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -721,7 +721,7 @@ async def test_consumer_process_market_logic_strategies(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     await consumer._process_market_logic_strategies(market_data)
@@ -735,7 +735,7 @@ async def test_consumer_process_market_logic_strategies_exception(consumer):
 
     depth_data = DepthUpdate(
         symbol="BTCUSDT",
-        event_time=int(datetime.utcnow().timestamp() * 1000),
+        event_time=int(datetime.now(UTC).timestamp() * 1000),
         first_update_id=1,
         final_update_id=1,
         bids=[DepthLevel(price="50000.0", quantity="1.0")],
@@ -745,7 +745,7 @@ async def test_consumer_process_market_logic_strategies_exception(consumer):
     market_data = MarketDataMessage(
         stream="btcusdt@depth@20ms",
         data=depth_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     # Mock a strategy to raise exception
@@ -766,7 +766,7 @@ async def test_publish_market_logic_signals_uses_publish_signal(
     consumer, mock_publisher
 ):
     """Verify _publish_market_logic_signals routes via publish_signal (CIO path), not publish_order."""
-    from datetime import datetime
+    from datetime import UTC, datetime
 
     from strategies.models.signals import (
         Signal,
@@ -782,7 +782,7 @@ async def test_publish_market_logic_signals_uses_publish_signal(
         confidence=SignalConfidence.HIGH,
         confidence_score=0.85,
         price=50000.0,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
         strategy_name="btc_dominance",
     )
 

@@ -13,7 +13,7 @@ Manages runtime configuration for trading strategies with:
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import constants
@@ -322,7 +322,7 @@ class StrategyConfigManager:
 
             # Create new config
             version = (existing_config.get("version", 0) + 1) if existing_config else 1
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
             new_config = StrategyConfig(
                 strategy_id=strategy_id,
@@ -561,7 +561,7 @@ class StrategyConfigManager:
                     },
                     "new_parameters": None,
                     "changed_by": changed_by,
-                    "changed_at": datetime.utcnow(),
+                    "changed_at": datetime.now(UTC),
                     "reason": reason,
                 }
                 await self.mongodb_client.create_audit_record(audit_data)

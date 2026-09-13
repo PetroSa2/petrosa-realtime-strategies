@@ -8,9 +8,21 @@ Strategy Type: Market Microstructure
 Timeframe: Real-time (tick-by-tick)
 Win Rate Target: 55-65%
 Signal Frequency: 5-10 per symbol per day
+
+Clock policy (per #193): ``SpreadLiquidityStrategy`` is **event-time**
+throughout. Wide-spread persistence (``_detect_event``) and signal
+rate-limiting (``_generate_signal``) both derive from the SAME
+message-supplied ``timestamp`` — specifically ``event.timestamp``, which
+is the ``timestamp`` argument threaded through ``analyze()`` ->
+``_detect_event`` -> ``SpreadEvent.timestamp``. This was the mixed-clock
+bug in #193: persistence used to be measured from the message timestamp
+while rate-limiting used ``time.time()`` (wall clock), so a signal could
+be rate-limited against a window it never actually observed if the two
+clocks disagreed (drift = pipeline latency). The injected ``clock`` is
+consulted only for the ``timestamp`` default when a caller does not
+supply one.
 """
 
-import time
 from collections import defaultdict, deque
 from datetime import datetime
 from typing import Optional
@@ -19,6 +31,7 @@ import structlog
 from opentelemetry import trace
 from prometheus_client import Gauge
 
+from strategies.core.clock import Clock, SystemClock
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
 from strategies.models.spread_metrics import SpreadEvent, SpreadMetrics, SpreadSnapshot
 from strategies.utils.bounded_state import SymbolActivityTracker
@@ -76,6 +89,7 @@ class SpreadLiquidityStrategy:
         # Per #189 AC1/AC5: explicit bounds on symbol-dimension growth
         max_symbols: int = 200,
         wide_spread_event_ttl_seconds: float | None = None,
+        clock: Clock | None = None,
     ):
         """
         Initialize strategy.
@@ -98,6 +112,10 @@ class SpreadLiquidityStrategy:
                 previously only removed on a successful narrowing event, so
                 a symbol that widened and never narrowed held its entry
                 forever). Defaults to 10x persistence_threshold_seconds.
+            clock: Injected clock (per #193). Defaults to ``SystemClock``.
+                Only consulted for the ``timestamp`` default in
+                ``analyze()`` — persistence and rate-limiting both derive
+                from the message timestamp itself; see module docstring.
         """
         self.spread_threshold_bps = spread_threshold_bps
         self.spread_ratio_threshold = spread_ratio_threshold
@@ -113,6 +131,7 @@ class SpreadLiquidityStrategy:
             if wide_spread_event_ttl_seconds is not None
             else persistence_threshold_seconds * 10
         )
+        self.clock: Clock = clock or SystemClock()
 
         # Per #189 AC5: tracks last-activity per symbol so the symbol
         # dimension of every companion dict below is bounded together.
@@ -172,7 +191,7 @@ class SpreadLiquidityStrategy:
             span.set_attribute("asks_count", len(asks))
 
             if timestamp is None:
-                timestamp = datetime.utcnow()
+                timestamp = self.clock.now()
 
             # Validate inputs
             if not bids or not asks:
@@ -457,8 +476,12 @@ class SpreadLiquidityStrategy:
             span.set_attribute("event_type", event.event_type)
             span.set_attribute("event_confidence", event.confidence)
 
-            # Rate limiting
-            current_time = time.time()
+            # Rate limiting. Per #193 AC3: derive from the SAME event-time
+            # source as persistence (`_detect_event`'s `event.timestamp`),
+            # not a wall-clock `time.time()` — this was the concrete
+            # mixed-clock bug (persistence checked against the message
+            # clock, rate-limit checked against the wall clock).
+            current_time = event.timestamp.timestamp()
             if event.symbol in self.last_signal_time:
                 time_since_last = current_time - self.last_signal_time[event.symbol]
                 if time_since_last < self.min_signal_interval:

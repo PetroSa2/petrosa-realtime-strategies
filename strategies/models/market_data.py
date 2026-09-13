@@ -5,7 +5,7 @@ This module contains Pydantic models for processing real-time market data
 from Binance WebSocket streams including depth updates, trades, and tickers.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Union
 
 from pydantic import BaseModel, Field, validator
@@ -270,7 +270,7 @@ class MarketDataMessage(BaseModel):
         ..., description="Market data"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Message timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Message timestamp"
     )
 
     @validator("stream")

@@ -4,7 +4,7 @@ Comprehensive tests for db/mongodb_client.py.
 Covers both direct MongoDB and Data Manager modes, CRUD operations, error handling, and health checks.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
@@ -637,7 +637,7 @@ async def test_add_audit_record_direct_mode(mock_database):
         "old_parameters": {"param1": "old"},
         "new_parameters": {"param1": "new"},
         "changed_by": "admin",
-        "changed_at": datetime.utcnow(),
+        "changed_at": datetime.now(UTC),
         "reason": "Test update",
     }
 

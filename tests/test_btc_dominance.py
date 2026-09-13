@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -40,7 +40,7 @@ def make_mdm(symbol: str) -> MarketDataMessage:
     return MarketDataMessage(
         stream=f"{symbol.lower()}@ticker",
         data=make_ticker(symbol),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -118,7 +118,7 @@ async def test_btc_dominance_momentum_signal():
 @pytest.mark.asyncio
 async def test_btc_dominance_rate_limit_blocks_signal():
     strat = BitcoinDominanceStrategy()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     strat.last_signal_time = now  # within min interval
     mdm = make_mdm("BTCUSDT")
     result = await strat._generate_dominance_signal(75.0, mdm)
@@ -188,7 +188,7 @@ async def test_btc_dominance_price_extraction_from_trade():
     mdm = MarketDataMessage(
         stream="btcusdt@trade",
         data=trade_data,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
 
     strat._update_price_history(mdm)

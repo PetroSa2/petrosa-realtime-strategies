@@ -7,7 +7,7 @@ All endpoints are LLM-compatible and include detailed documentation.
 
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -535,7 +535,7 @@ async def rollback_config(
                 source="mongodb",
                 is_override=bool(symbol),
                 created_at="",
-                updated_at=datetime.utcnow().isoformat(),
+                updated_at=datetime.now(UTC).isoformat(),
             ),
         )
     except Exception as e:

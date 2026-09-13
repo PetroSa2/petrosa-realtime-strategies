@@ -3,6 +3,19 @@ Order Book Level Tracker.
 
 Tracks individual price levels in the order book over time to detect
 iceberg order patterns (repeated refills, consistent sizing, price anchoring).
+
+Clock policy (per #193): ``OrderBookTracker`` is **event-time** throughout.
+``first_seen``/``last_seen`` are always derived from the caller-supplied
+message ``timestamp`` (never wall clock), and iceberg persistence
+(``_check_iceberg_pattern``) is computed as ``last_seen - first_seen`` —
+the same source on both sides of the subtraction. This was the specific
+mixed-clock bug in #193: persistence used to be measured as
+``time.time() - history.first_seen``, mixing wall-clock "now" with a
+message-derived "then" and shifting classification by the pipeline
+latency between the two. The injected ``clock`` is consulted only for
+the ``timestamp`` default when a caller does not supply one, and for the
+``detected_at`` audit field on ``IcebergPattern`` (not used in any
+comparison).
 """
 
 import asyncio
@@ -14,6 +27,7 @@ from typing import Optional
 
 from prometheus_client import Gauge
 
+from strategies.core.clock import Clock, SystemClock
 from strategies.utils.bounded_state import SymbolActivityTracker
 
 # Per #189 AC7: gauges exposing the size of the bounded structures below.
@@ -138,6 +152,7 @@ class OrderBookTracker:
         min_refill_count: int = 3,
         max_levels_per_symbol: int = 1000,
         cleanup_interval_seconds: float = 5.0,
+        clock: Clock | None = None,
     ):
         """
         Initialize tracker.
@@ -155,6 +170,12 @@ class OrderBookTracker:
                 background task evicts expired levels (per #191 AC4). Not
                 consulted by `update_orderbook`, which no longer sweeps at
                 all — see `sweep_expired_levels`/`start_periodic_sweep`.
+            clock: Injected clock (per #193). Defaults to ``SystemClock``.
+                Only consulted for the ``timestamp`` default in
+                ``update_orderbook`` and the ``sweep_expired_levels``
+                default — NOT for iceberg persistence, which is
+                event-time (message-derived) by design; see module
+                docstring.
         """
         self.history_window = history_window_seconds
         self.max_symbols = max_symbols
@@ -163,6 +184,7 @@ class OrderBookTracker:
         self.min_refill_count = min_refill_count
         self.max_levels_per_symbol = max_levels_per_symbol
         self.cleanup_interval_seconds = cleanup_interval_seconds
+        self.clock: Clock = clock or SystemClock()
         self._sweep_task: asyncio.Task | None = None
 
         # Storage: {symbol: {price: LevelHistory}}
@@ -198,7 +220,7 @@ class OrderBookTracker:
             timestamp: Snapshot timestamp
         """
         if timestamp is None:
-            timestamp = datetime.utcnow()
+            timestamp = self.clock.now()
 
         unix_ts = timestamp.timestamp()
 
@@ -376,7 +398,7 @@ class OrderBookTracker:
         internally by `start_periodic_sweep`'s background task.
         """
         if current_time is None:
-            current_time = time.time()
+            current_time = self.clock.time()
         return self._cleanup_old_levels(current_time)
 
     def start_periodic_sweep(self) -> None:
@@ -459,9 +481,17 @@ class OrderBookTracker:
     def _check_iceberg_pattern(
         self, symbol: str, price: float, history: LevelHistory
     ) -> IcebergPattern | None:
-        """Check if level exhibits iceberg pattern."""
-        current_time = time.time()
-        persistence = current_time - history.first_seen
+        """Check if level exhibits iceberg pattern.
+
+        Per #193 AC3: persistence is derived from ``history.last_seen``
+        (the timestamp of the most recent message-derived update to this
+        level) MINUS ``history.first_seen`` (also message-derived) — both
+        sides of the subtraction share the same event-time source. The
+        prior implementation used ``time.time()`` (wall clock) here,
+        which mixed with the message-derived ``first_seen`` and shifted
+        classification by the pipeline latency between the two clocks.
+        """
+        persistence = history.last_seen - history.first_seen
 
         # Pattern 1: Repeated Refills (strongest signal)
         if history.refill_count >= self.min_refill_count:
@@ -481,7 +511,7 @@ class OrderBookTracker:
                 persistence_seconds=persistence,
                 confidence=confidence,
                 pattern_type="refill",
-                detected_at=datetime.utcnow(),
+                detected_at=self.clock.now(),
                 level_history=history,
             )
 
@@ -506,7 +536,7 @@ class OrderBookTracker:
                 persistence_seconds=persistence,
                 confidence=confidence,
                 pattern_type="consistent_size",
-                detected_at=datetime.utcnow(),
+                detected_at=self.clock.now(),
                 level_history=history,
             )
 
@@ -531,7 +561,7 @@ class OrderBookTracker:
                 persistence_seconds=persistence,
                 confidence=confidence,
                 pattern_type="anchor",
-                detected_at=datetime.utcnow(),
+                detected_at=self.clock.now(),
                 level_history=history,
             )
 

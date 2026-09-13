@@ -5,7 +5,7 @@ Tests spread widening/narrowing detection and signal generation.
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -117,7 +117,7 @@ class TestSpreadLiquidityStrategy:
                 symbol="BTCUSDT",
                 bids=normal_orderbook["bids"],
                 asks=normal_orderbook["asks"],
-                timestamp=datetime.utcnow() - timedelta(seconds=20 - i),
+                timestamp=datetime.now(UTC) - timedelta(seconds=20 - i),
             )
 
         # Sudden wide spread (liquidity withdrawal)
@@ -138,7 +138,7 @@ class TestSpreadLiquidityStrategy:
                 symbol="BTCUSDT",
                 bids=wide_orderbook["bids"],
                 asks=wide_orderbook["asks"],
-                timestamp=datetime.utcnow() - timedelta(seconds=25 - i),
+                timestamp=datetime.now(UTC) - timedelta(seconds=25 - i),
             )
 
         # Wide spread event may or may not be tracked depending on thresholds
@@ -174,14 +174,14 @@ class TestSpreadLiquidityStrategy:
                 symbol="BTCUSDT",
                 bids=wide_orderbook["bids"],
                 asks=wide_orderbook["asks"],
-                timestamp=datetime.utcnow() - timedelta(seconds=100 - i),
+                timestamp=datetime.now(UTC) - timedelta(seconds=100 - i),
             )
 
         first_signal = strategy.analyze(
             symbol="BTCUSDT",
             bids=normal_orderbook["bids"],
             asks=normal_orderbook["asks"],
-            timestamp=datetime.utcnow() - timedelta(seconds=70),
+            timestamp=datetime.now(UTC) - timedelta(seconds=70),
         )
 
         # Try to generate another signal immediately (within min_interval)
@@ -190,14 +190,14 @@ class TestSpreadLiquidityStrategy:
                 symbol="BTCUSDT",
                 bids=wide_orderbook["bids"],
                 asks=wide_orderbook["asks"],
-                timestamp=datetime.utcnow() - timedelta(seconds=60 - i),
+                timestamp=datetime.now(UTC) - timedelta(seconds=60 - i),
             )
 
         second_signal = strategy.analyze(
             symbol="BTCUSDT",
             bids=normal_orderbook["bids"],
             asks=normal_orderbook["asks"],
-            timestamp=datetime.utcnow() - timedelta(seconds=50),
+            timestamp=datetime.now(UTC) - timedelta(seconds=50),
         )
 
         # Second signal should be rate limited
@@ -295,7 +295,7 @@ class TestSpreadLiquidityStrategy:
                 symbol="BTCUSDT",
                 bids=wide_bids,
                 asks=wide_asks,
-                timestamp=datetime.utcnow() + timedelta(seconds=i * 10),
+                timestamp=datetime.now(UTC) + timedelta(seconds=i * 10),
             )
 
         # Now send normal spread (narrowing event)
@@ -306,7 +306,7 @@ class TestSpreadLiquidityStrategy:
             symbol="BTCUSDT",
             bids=normal_bids,
             asks=normal_asks,
-            timestamp=datetime.utcnow() + timedelta(seconds=260),
+            timestamp=datetime.now(UTC) + timedelta(seconds=260),
         )
 
         # Code path for narrowing event logic is exercised
@@ -322,7 +322,7 @@ class TestSpreadLiquidityStrategy:
             symbol="BTCUSDT",
             bids=invalid_bids,
             asks=invalid_asks,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
         )
 
         # Should handle gracefully (return None)
@@ -335,7 +335,7 @@ class TestSpreadLiquidityStrategy:
         wide_asks = [(52000.00, 0.5)]  # Very wide spread
 
         # Analyze multiple times to establish persistent wide spread
-        base_time = datetime.utcnow()
+        base_time = datetime.now(UTC)
         for i in range(25):
             strategy.analyze(
                 symbol="TESTUSDT",
@@ -369,7 +369,7 @@ class TestSpreadLiquidityStrategy:
             symbol="WIDESPREAD",
             bids=wide_bids,
             asks=wide_asks,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
         )
 
         # Event should be tracked
@@ -391,7 +391,7 @@ class TestSpreadLiquidityStrategy:
         # Test through analyze method with empty orderbook
         # This will trigger exception handling in _calculate_metrics
         result = strategy.analyze(
-            "BTCUSDT", bids=[], asks=[], timestamp=datetime.utcnow()
+            "BTCUSDT", bids=[], asks=[], timestamp=datetime.now(UTC)
         )
         # Should handle gracefully (return None on exception, line 206)
         assert result is None
@@ -400,7 +400,7 @@ class TestSpreadLiquidityStrategy:
         self, strategy, normal_orderbook, wide_orderbook
     ):
         """Test spread narrowing event detection - covers lines 279-301."""
-        base_time = datetime.utcnow()
+        base_time = datetime.now(UTC)
 
         # First create a wide spread event
         for i in range(10):
@@ -445,7 +445,7 @@ class TestSpreadLiquidityStrategy:
         # Create event with low confidence (< 0.6)
         metrics = SpreadMetrics(
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             best_bid=50000.0,
             best_ask=50001.0,
             mid_price=50000.5,
@@ -469,7 +469,7 @@ class TestSpreadLiquidityStrategy:
         event = SpreadEvent(
             event_type="widening",
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             spread_before_bps=5.0,
             spread_current_bps=15.0,
             spread_ratio=3.0,
@@ -491,7 +491,7 @@ class TestSpreadLiquidityStrategy:
     ):
         """Test signal generation for widening event - covers lines 379-380, 400-401."""
         # Build history with normal spreads
-        base_time = datetime.utcnow()
+        base_time = datetime.now(UTC)
         for i in range(25):
             strategy.analyze(
                 symbol="BTCUSDT",
@@ -528,7 +528,7 @@ class TestSpreadLiquidityStrategy:
         # Create event with unknown type
         metrics = SpreadMetrics(
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             best_bid=50000.0,
             best_ask=50001.0,
             mid_price=50000.5,
@@ -553,7 +553,7 @@ class TestSpreadLiquidityStrategy:
         event = SpreadEvent(
             event_type="unknown",
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             spread_before_bps=1.0,
             spread_current_bps=2.0,
             spread_ratio=2.0,
@@ -572,7 +572,7 @@ class TestSpreadLiquidityStrategy:
         self, strategy, normal_orderbook, wide_orderbook
     ):
         """Test signal rate limiting edge cases - covers lines 366-373."""
-        base_time = datetime.utcnow()
+        base_time = datetime.now(UTC)
 
         # Build history
         for i in range(25):
@@ -615,7 +615,7 @@ class TestSpreadLiquidityStrategy:
         # Test HIGH confidence (>= 0.8)
         metrics_high = SpreadMetrics(
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             best_bid=50000.0,
             best_ask=50001.0,
             mid_price=50000.5,
@@ -639,7 +639,7 @@ class TestSpreadLiquidityStrategy:
         event_high = SpreadEvent(
             event_type="narrowing",
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             spread_before_bps=1.0,
             spread_current_bps=2.0,
             spread_ratio=2.0,
@@ -655,7 +655,7 @@ class TestSpreadLiquidityStrategy:
         event_medium = SpreadEvent(
             event_type="narrowing",
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             spread_before_bps=1.0,
             spread_current_bps=2.0,
             spread_ratio=2.0,
@@ -671,7 +671,7 @@ class TestSpreadLiquidityStrategy:
         event_low = SpreadEvent(
             event_type="narrowing",
             symbol="BTCUSDT",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             spread_before_bps=1.0,
             spread_current_bps=2.0,
             spread_ratio=2.0,
@@ -712,7 +712,7 @@ class TestSpreadLiquidityBoundedState:
             persistence_threshold_seconds=30.0,
             wide_spread_event_ttl_seconds=60.0,
         )
-        base_time = datetime.utcnow()
+        base_time = datetime.now(UTC)
 
         # Manually seed an unresolved wide-spread event (never narrows).
         strategy.wide_spread_events["BTCUSDT"] = {
@@ -756,7 +756,7 @@ class TestSpreadLiquidityBoundedState:
         """AC5: symbol dimension across companion dicts is bounded."""
         max_symbols = 5
         strategy = SpreadLiquidityStrategy(max_symbols=max_symbols)
-        base_time = datetime.utcnow()
+        base_time = datetime.now(UTC)
 
         bids = [(50000.0, 1.0), (49999.0, 1.0)]
         asks = [(50001.0, 1.0), (50002.0, 1.0)]

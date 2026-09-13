@@ -12,7 +12,7 @@ Strategy Logic:
 """
 
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 import structlog
@@ -272,7 +272,7 @@ class OnChainMetricsStrategy:
             )
 
             if signal:
-                self.last_signal_times[signal_key] = datetime.utcnow()
+                self.last_signal_times[signal_key] = datetime.now(UTC)
                 span.set_attribute("result", "signal_generated")
                 span.set_attribute("signal_type", signal.signal_type.value)
                 span.set_attribute("confidence_score", signal.confidence_score)
@@ -459,7 +459,7 @@ class OnChainMetricsStrategy:
         if signal_key not in self.last_signal_times:
             return True
 
-        time_since_last = datetime.utcnow() - self.last_signal_times[signal_key]
+        time_since_last = datetime.now(UTC) - self.last_signal_times[signal_key]
         return time_since_last.total_seconds() >= self.min_signal_interval
 
     def _create_onchain_signal(
@@ -500,7 +500,7 @@ class OnChainMetricsStrategy:
             metadata={
                 **metadata,
                 "reasoning": reasoning,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
 

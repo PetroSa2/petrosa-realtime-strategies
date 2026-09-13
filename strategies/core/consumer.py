@@ -8,7 +8,7 @@ to the appropriate strategy processors.
 import asyncio
 import json
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional, Union
 
 import nats
@@ -544,7 +544,7 @@ class NATSConsumer:
             # Create market data message using model_construct to bypass Union validation
             # since we've already validated the specific type in the transformation
             market_data = MarketDataMessage.model_construct(
-                stream=stream, data=transformed_data, timestamp=datetime.utcnow()
+                stream=stream, data=transformed_data, timestamp=datetime.now(UTC)
             )
 
             return market_data

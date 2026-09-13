@@ -1,6 +1,6 @@
 """Comprehensive strategy tests with realistic fixtures."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -25,7 +25,7 @@ class TestSpreadLiquidityWithFixtures:
         bids_tuples = [(float(p), float(q)) for p, q in BTCUSDT_DEPTH_SNAPSHOT["bids"]]
         asks_tuples = [(float(p), float(q)) for p, q in BTCUSDT_DEPTH_SNAPSHOT["asks"]]
         signal = strategy.analyze(
-            "BTCUSDT", bids=bids_tuples, asks=asks_tuples, timestamp=datetime.utcnow()
+            "BTCUSDT", bids=bids_tuples, asks=asks_tuples, timestamp=datetime.now(UTC)
         )
 
         # Normal spread shouldn't trigger
@@ -44,7 +44,7 @@ class TestSpreadLiquidityWithFixtures:
                 "BTCUSDT",
                 bids=bids_tuples,
                 asks=asks_tuples,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
             )
 
         # Should detect widening
@@ -89,7 +89,7 @@ class TestIcebergDetectorWithFixtures:
             bids = [(price - 0.5, 1.0)]
             asks = [(price + 0.5, 1.0)]
             strategy.analyze(
-                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.now(UTC)
             )
 
         # Should detect iceberg pattern
@@ -110,7 +110,7 @@ class TestIcebergDetectorWithFixtures:
             bids = [(price - 0.5, random.uniform(0.01, 1.0))]
             asks = [(price + 0.5, random.uniform(0.01, 1.0))]
             strategy.analyze(
-                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.now(UTC)
             )
 
         stats = strategy.get_statistics()
@@ -153,7 +153,7 @@ class TestStrategyStateMaintenance:
             bids = [(price - 0.5, random.uniform(0.01, 0.5))]
             asks = [(price + 0.5, random.uniform(0.01, 0.5))]
             strategy.analyze(
-                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.now(UTC)
             )
 
         stats = strategy.get_statistics()
@@ -195,7 +195,7 @@ class TestStrategyPerformance:
             bids = [(price - 0.5, random.uniform(0.01, 2.0))]
             asks = [(price + 0.5, random.uniform(0.01, 2.0))]
             strategy.analyze(
-                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.utcnow()
+                "BTCUSDT", bids=bids, asks=asks, timestamp=datetime.now(UTC)
             )
 
         stats = strategy.get_statistics()

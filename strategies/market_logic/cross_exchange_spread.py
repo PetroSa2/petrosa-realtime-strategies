@@ -12,7 +12,7 @@ Strategy Logic:
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 import aiohttp
@@ -350,7 +350,7 @@ class CrossExchangeSpreadStrategy:
                     )
 
                     signals.extend([buy_signal, sell_signal])
-                    self.last_signal_times[signal_key] = datetime.utcnow()
+                    self.last_signal_times[signal_key] = datetime.now(UTC)
                     span.set_attribute("result", "signals_generated")
                     span.set_attribute("signal_count", len(signals))
                 else:
@@ -414,7 +414,7 @@ class CrossExchangeSpreadStrategy:
         if signal_key not in self.last_signal_times:
             return True
 
-        time_since_last = datetime.utcnow() - self.last_signal_times[signal_key]
+        time_since_last = datetime.now(UTC) - self.last_signal_times[signal_key]
         return time_since_last.total_seconds() >= self.min_signal_interval
 
     def _create_arbitrage_signal(
@@ -451,7 +451,7 @@ class CrossExchangeSpreadStrategy:
                 **metadata,
                 "reasoning": reasoning,
                 "target_exchange": exchange,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
 
