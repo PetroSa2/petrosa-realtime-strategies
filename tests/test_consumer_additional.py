@@ -52,6 +52,46 @@ async def test_consumer_start_success(consumer):
 
 
 @pytest.mark.asyncio
+async def test_consumer_process_message_debug_log_guarded_when_disabled(consumer):
+    """Per #221: the per-message debug log at consumer.py:397 must be
+    guarded by is_enabled_for(DEBUG) so it never builds/emits the log when
+    DEBUG is disabled — this was the prime suspect for the 420K debug-log
+    spike shipped to Grafana Loki."""
+    mock_msg = Mock()
+    mock_msg.data = json.dumps({"stream": "btcusdt@depth@20ms", "data": {}}).encode()
+
+    consumer.logger = Mock()
+    consumer.logger.is_enabled_for = Mock(return_value=False)
+    consumer._parse_market_data = Mock(return_value=None)
+
+    await consumer._process_message(mock_msg)
+
+    consumer.logger.is_enabled_for.assert_called()
+    for call in consumer.logger.debug.call_args_list:
+        assert call.args[0] != "Received message"
+
+
+@pytest.mark.asyncio
+async def test_consumer_process_message_debug_log_emitted_when_enabled(consumer):
+    """When DEBUG is enabled, the guard must still let the log through."""
+    mock_msg = Mock()
+    mock_msg.data = json.dumps({"stream": "btcusdt@depth@20ms", "data": {}}).encode()
+
+    consumer.logger = Mock()
+    consumer.logger.is_enabled_for = Mock(return_value=True)
+    consumer._parse_market_data = Mock(return_value=None)
+
+    await consumer._process_message(mock_msg)
+
+    received_calls = [
+        c
+        for c in consumer.logger.debug.call_args_list
+        if c.args[0] == "Received message"
+    ]
+    assert len(received_calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_consumer_process_message_invalid_market_data(consumer):
     """Test _process_message with invalid market data - covers lines 358-368."""
     mock_msg = Mock()

@@ -2,7 +2,96 @@
 Tests for strategies/utils/logger.py.
 """
 
-from strategies.utils.logger import get_logger, setup_logging
+import logging
+
+import pytest
+
+import constants
+from strategies.utils.logger import (
+    _resolve_safe_log_level,
+    get_logger,
+    setup_logging,
+)
+
+
+class TestLogLevelProductionGuard:
+    """Per #221: DEBUG in production + OTel log export must be guarded.
+
+    ~420K debug-level logs shipped to Grafana Cloud Loki because nothing
+    prevented LOG_LEVEL=DEBUG from reaching a production environment wired
+    to export logs. These tests cover AC3(a)-(d).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_env(self, monkeypatch):
+        monkeypatch.delenv("ALLOW_DEBUG_IN_PROD", raising=False)
+        monkeypatch.setattr(constants, "ENVIRONMENT", "production")
+        monkeypatch.setattr(constants, "ENABLE_OTEL", True)
+        monkeypatch.setattr(constants, "OTEL_LOGS_EXPORTER", "otlp")
+        yield
+
+    def test_ac3a_production_debug_no_escape_hatch_is_guarded(self):
+        """production + DEBUG + no escape hatch -> downgraded to WARNING."""
+        effective, was_overridden = _resolve_safe_log_level("DEBUG")
+
+        assert effective == "WARNING"
+        assert was_overridden is True
+
+    def test_ac3b_production_debug_with_escape_hatch_starts_at_debug(self, monkeypatch):
+        """production + DEBUG + ALLOW_DEBUG_IN_PROD=1 -> runs at DEBUG."""
+        monkeypatch.setenv("ALLOW_DEBUG_IN_PROD", "1")
+
+        effective, was_overridden = _resolve_safe_log_level("DEBUG")
+
+        assert effective == "DEBUG"
+        assert was_overridden is False
+
+    def test_ac3c_dev_tier_debug_starts_normally(self, monkeypatch):
+        """dev/test tier + DEBUG -> DEBUG allowed, guard does not engage."""
+        monkeypatch.setattr(constants, "ENVIRONMENT", "development")
+
+        effective, was_overridden = _resolve_safe_log_level("DEBUG")
+
+        assert effective == "DEBUG"
+        assert was_overridden is False
+
+    def test_ac3d_production_info_and_warning_start_normally(self):
+        """INFO/WARNING in production -> unaffected by the guard."""
+        for level in ("INFO", "WARNING"):
+            effective, was_overridden = _resolve_safe_log_level(level)
+            assert effective == level
+            assert was_overridden is False
+
+    def test_no_otel_log_export_debug_starts_normally(self, monkeypatch):
+        """production + DEBUG but OTel log export disabled -> DEBUG allowed."""
+        monkeypatch.setattr(constants, "OTEL_LOGS_EXPORTER", "none")
+
+        effective, was_overridden = _resolve_safe_log_level("DEBUG")
+
+        assert effective == "DEBUG"
+        assert was_overridden is False
+
+    def test_setup_logging_downgrades_and_logs_critical(self, mocker):
+        """setup_logging() must apply the guard end-to-end and log loudly."""
+        critical_spy = mocker.patch.object(logging.Logger, "critical")
+
+        logger = setup_logging(level="DEBUG")
+
+        assert logger is not None
+        assert logging.getLogger().level == logging.WARNING
+        assert critical_spy.call_count == 1
+        assert "LOG_LEVEL safety guard" in critical_spy.call_args.args[0]
+
+    def test_setup_logging_escape_hatch_keeps_debug(self, monkeypatch, mocker):
+        """setup_logging() honors ALLOW_DEBUG_IN_PROD=1 without complaint."""
+        monkeypatch.setenv("ALLOW_DEBUG_IN_PROD", "1")
+        critical_spy = mocker.patch.object(logging.Logger, "critical")
+
+        logger = setup_logging(level="DEBUG")
+
+        assert logger is not None
+        assert logging.getLogger().level == logging.DEBUG
+        critical_spy.assert_not_called()
 
 
 class TestLogger:

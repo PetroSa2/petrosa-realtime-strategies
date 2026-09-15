@@ -7,6 +7,7 @@ to the appropriate strategy processors.
 
 import asyncio
 import json
+import logging
 import time
 from datetime import UTC, datetime
 from typing import Any, Optional, Union
@@ -394,7 +395,15 @@ class NATSConsumer:
         try:
             # Parse message data
             message_data = json.loads(msg.data.decode())
-            self.logger.debug("Received message", data=message_data)
+            # Guard the per-message debug log with is_enabled_for(): avoids
+            # the per-call structlog event-dict/kwarg overhead on the hot
+            # path when DEBUG is disabled (see #221 — this call site was a
+            # prime suspect for the 420K debug-log spike shipped to Grafana
+            # Loki, and #191/#206 flagged it as a cheap perf win on the
+            # consumer event loop). structlog's BoundLogger exposes
+            # `is_enabled_for` (snake_case), not stdlib's `isEnabledFor`.
+            if self.logger.is_enabled_for(logging.DEBUG):
+                self.logger.debug("Received message", data=message_data)
 
             # Extract trace context from message (with error handling)
             try:

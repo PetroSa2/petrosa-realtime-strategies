@@ -1043,6 +1043,43 @@ See [BUSINESS_METRICS.md](docs/BUSINESS_METRICS.md#troubleshooting) for complete
 
 ---
 
+### Logging & the LOG_LEVEL Production Safety Guard
+
+`LOG_LEVEL` (default `INFO`) controls the effective logging verbosity, set once at
+startup via `setup_logging()` (`strategies/utils/logger.py`).
+
+**Production safety guard (per [#221](https://github.com/PetroSa2/petrosa-realtime-strategies/issues/221)):**
+on 2026-09-15, a transient `LOG_LEVEL=DEBUG` misconfiguration shipped ~420K
+debug-level log lines to Grafana Cloud Loki in a single window. `setup_logging()`
+now refuses to silently run at `DEBUG` when **all** of the following are true:
+
+- the requested level is `DEBUG`
+- `ENVIRONMENT=production` (the default)
+- OTel log export is enabled (`ENABLE_OTEL=true` and `OTEL_LOGS_EXPORTER != none`,
+  both defaults)
+
+When triggered, the effective level is downgraded to `WARNING` (so
+`WARNING`/`ERROR`/`CRITICAL` logs are never suppressed) and a `CRITICAL` log line
+is emitted so the override is loud and visible in Grafana. Non-production tiers
+(`ENVIRONMENT=development`/`staging`/`test`) and setups without OTel log export
+are never affected — `DEBUG` behaves exactly as requested there.
+
+**Escape hatch:** set `ALLOW_DEBUG_IN_PROD=1` to explicitly opt out of the guard
+and run at `DEBUG` in production. This is intentionally not a manifest default —
+it must be set deliberately per debugging session.
+
+This is a **code-level backstop**; the config-plane / manifest-level prevention
+of `LOG_LEVEL=DEBUG` in `petrosa_k8s` is tracked separately (see
+[petrosa_k8s#388](https://github.com/PetroSa2/petrosa_k8s/issues/388) and
+[petrosa_k8s#389](https://github.com/PetroSa2/petrosa_k8s/issues/389)).
+
+The per-message `logger.debug("Received message", ...)` call in the NATS
+consumer hot path (`strategies/core/consumer.py`) is guarded with
+`logger.isEnabledFor(logging.DEBUG)` to avoid unnecessary per-message overhead
+when DEBUG is disabled.
+
+---
+
 ### Monitoring
 
 **Heartbeat Logs (Every 60s):**
