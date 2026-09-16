@@ -13,7 +13,27 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 import pytest
 from typer.testing import CliRunner
 
-from strategies.main import StrategiesService, app, signal_handler
+from strategies.main import (
+    StrategiesService,
+    _arm_shutdown_watchdog,
+    _cancel_shutdown_watchdog,
+    app,
+    signal_handler,
+)
+
+
+@pytest.fixture(autouse=True)
+def _disarm_shutdown_watchdog_fixture():
+    """Per #223: `signal_handler` now arms a background `threading.Timer`
+    watchdog that force-exits the process (`os._exit(1)`) if graceful
+    shutdown doesn't complete within `SHUTDOWN_WATCHDOG_SECONDS`. Any test
+    that calls `signal_handler` (directly or indirectly) would otherwise
+    leave that timer armed for the rest of the test session, risking an
+    abrupt `os._exit` mid-suite. Always disarm it after each test in this
+    module, regardless of outcome.
+    """
+    yield
+    _cancel_shutdown_watchdog()
 
 
 @pytest.fixture
@@ -238,6 +258,84 @@ def test_signal_handler_no_service():
     # Should not raise error
     signal_handler(signal.SIGTERM, None)
     assert True  # Test passes if no exception was raised
+
+
+def test_signal_handler_does_not_block_on_telemetry():
+    """Per #223: signal_handler must NOT call flush_telemetry/shutdown_telemetry
+    synchronously anymore -- that combination could block the OS signal
+    handler itself (and therefore the whole process/event loop) for as long
+    as a slow or unreachable OTLP collector took to respond, reliably
+    exceeding terminationGracePeriodSeconds and causing a SIGKILL (exit 137,
+    reason=Error -- easily misread as OOMKilled). The bounded flush/shutdown
+    now happens exactly once, from StrategiesService.stop().
+    """
+    mock_service = MagicMock()
+    mock_service.shutdown_event = asyncio.Event()
+    signal_handler.service = mock_service
+
+    with (
+        patch("strategies.main.flush_telemetry") as mock_flush,
+        patch("strategies.main.shutdown_telemetry") as mock_shutdown,
+    ):
+        signal_handler(signal.SIGTERM, None)
+
+    mock_flush.assert_not_called()
+    mock_shutdown.assert_not_called()
+    assert mock_service.shutdown_event.is_set()
+
+
+def test_signal_handler_arms_shutdown_watchdog():
+    """Per #223: signal_handler arms the forced-exit watchdog as a safety
+    net in case the async stop() sequence never completes."""
+    import strategies.main as main_module
+
+    assert main_module._shutdown_watchdog_timer is None
+
+    signal_handler.service = MagicMock(shutdown_event=asyncio.Event())
+    signal_handler(signal.SIGTERM, None)
+
+    assert main_module._shutdown_watchdog_timer is not None
+    assert main_module._shutdown_watchdog_timer.is_alive()
+
+
+def test_shutdown_watchdog_arm_is_idempotent():
+    """Calling _arm_shutdown_watchdog twice must not create a second timer
+    (that would leak a thread and make cancellation ambiguous)."""
+    import strategies.main as main_module
+
+    _arm_shutdown_watchdog()
+    first_timer = main_module._shutdown_watchdog_timer
+    _arm_shutdown_watchdog()
+    assert main_module._shutdown_watchdog_timer is first_timer
+
+
+def test_shutdown_watchdog_cancel_disarms_it():
+    """_cancel_shutdown_watchdog must fully disarm the timer (module-level
+    reference cleared, timer no longer alive)."""
+    import strategies.main as main_module
+
+    _arm_shutdown_watchdog()
+    assert main_module._shutdown_watchdog_timer is not None
+
+    _cancel_shutdown_watchdog()
+    assert main_module._shutdown_watchdog_timer is None
+
+
+@pytest.mark.asyncio
+async def test_stop_cancels_shutdown_watchdog(service):
+    """Per #223: a normal StrategiesService.stop() completion must disarm
+    the watchdog so it never fires after a clean shutdown."""
+    _arm_shutdown_watchdog()
+
+    with (
+        patch("strategies.main.flush_telemetry"),
+        patch("strategies.main.shutdown_telemetry"),
+    ):
+        await service.stop()
+
+    import strategies.main as main_module
+
+    assert main_module._shutdown_watchdog_timer is None
 
 
 def test_cli_run_command():

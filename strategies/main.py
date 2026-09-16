@@ -10,6 +10,7 @@ import asyncio
 import os
 import signal
 import sys
+import threading
 from typing import Optional
 
 # Note: OpenTelemetry is initialized inside the run() function to ensure
@@ -309,21 +310,82 @@ class StrategiesService:
                 "Configuration manager stopped", event_type="config_manager_stopped"
             )
 
-        # Flush telemetry data before shutdown to prevent data loss
+        # Flush and shut down telemetry providers. Per #223, both calls are
+        # individually bounded (TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS, default
+        # 3s each) so a slow/unreachable OTLP collector cannot consume the
+        # rest of terminationGracePeriodSeconds and cause a forced SIGKILL.
         self.logger.info("Flushing telemetry data...", event_type="telemetry_flush")
-        flush_telemetry(timeout_seconds=5.0)
+        flush_telemetry(timeout_seconds=constants.TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS)
 
-        # Shutdown telemetry providers
         self.logger.info(
             "Shutting down telemetry providers...", event_type="telemetry_shutdown"
         )
-        shutdown_telemetry()
+        shutdown_telemetry(timeout_seconds=constants.TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS)
 
         self.logger.info("Service stopped gracefully", event_type="service_stopped")
 
+        # Shutdown completed on its own -- disarm the forced-exit watchdog
+        # (per #223) so it doesn't fire after we've already exited cleanly.
+        _cancel_shutdown_watchdog()
+
+
+# Per #223: if the graceful shutdown sequence (telemetry flush/shutdown +
+# consumer/publisher/health-server/config-manager stop, triggered by
+# `signal_handler` below) hasn't finished this many seconds after SIGTERM,
+# force-exit rather than let kubelet SIGKILL the process once
+# `terminationGracePeriodSeconds` (30s in the deployment manifest) elapses.
+# A self-initiated, bounded exit is always preferable to an external forced
+# kill: it's faster, deterministic, and never gets misread as OOMKilled.
+_shutdown_watchdog_timer: threading.Timer | None = None
+
+
+def _force_exit_after_grace_period() -> None:
+    """Watchdog callback: shutdown did not complete in time, exit now."""
+    print(
+        "⚠️  Graceful shutdown exceeded "
+        f"{constants.SHUTDOWN_WATCHDOG_SECONDS}s watchdog -- forcing exit "
+        "rather than waiting for kubelet to SIGKILL.",
+        flush=True,
+    )
+    os._exit(1)
+
+
+def _arm_shutdown_watchdog() -> None:
+    """Start the forced-exit watchdog timer (idempotent)."""
+    global _shutdown_watchdog_timer
+    if _shutdown_watchdog_timer is not None:
+        return
+    _shutdown_watchdog_timer = threading.Timer(
+        constants.SHUTDOWN_WATCHDOG_SECONDS, _force_exit_after_grace_period
+    )
+    _shutdown_watchdog_timer.daemon = True
+    _shutdown_watchdog_timer.start()
+
+
+def _cancel_shutdown_watchdog() -> None:
+    """Cancel the forced-exit watchdog timer if armed."""
+    global _shutdown_watchdog_timer
+    if _shutdown_watchdog_timer is not None:
+        _shutdown_watchdog_timer.cancel()
+        _shutdown_watchdog_timer = None
+
 
 def signal_handler(signum, frame):
-    """Handle shutdown signals."""
+    """Handle shutdown signals.
+
+    Per #223: this handler is intentionally minimal and non-blocking. It
+    used to call `flush_telemetry`/`shutdown_telemetry` synchronously here
+    (in addition to the same calls already made from `StrategiesService.stop()`),
+    which meant slow/unreachable OTLP collector calls could block the OS
+    signal handler itself -- freezing the whole process, including the
+    /healthz and /ready endpoints, for up to the SDK's internal defaults
+    (30s+) and starving the event loop long before the real, bounded
+    telemetry shutdown in `stop()` ever ran. That combination reliably
+    exceeded `terminationGracePeriodSeconds`, producing exit 137/reason=Error
+    (misread as OOMKilled). The handler now only logs, arms the forced-exit
+    watchdog as a safety net, and hands off to the async `stop()` sequence
+    (which owns the single, bounded telemetry flush/shutdown call).
+    """
     import signal as signal_module
 
     # Get signal name safely
@@ -334,18 +396,7 @@ def signal_handler(signum, frame):
 
     print(f"\nReceived {signal_name}, shutting down gracefully...")
 
-    # Flush telemetry data immediately on signal to prevent data loss
-    # This ensures telemetry is flushed even if the async shutdown doesn't complete
-    # Note: Blocking I/O here is acceptable because:
-    # 1. We're shutting down - no new requests will be processed
-    # 2. Kubernetes terminationGracePeriodSeconds (typically 30s) allows time for flush
-    # 3. The timeout (5s) is well within typical grace periods
-    # 4. This is a critical operation to prevent data loss
-    try:
-        flush_telemetry(timeout_seconds=5.0)
-        shutdown_telemetry()
-    except Exception as e:
-        print(f"⚠️  Error flushing telemetry during signal handler: {e}")
+    _arm_shutdown_watchdog()
 
     if hasattr(signal_handler, "service"):
         signal_handler.service.shutdown_event.set()
