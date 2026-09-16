@@ -5,9 +5,14 @@ Tests flush_telemetry() and shutdown_telemetry() to ensure telemetry data
 is properly flushed and providers are shut down during graceful shutdown scenarios.
 """
 
+import time
 from unittest.mock import MagicMock, patch
 
-from strategies.utils.telemetry import flush_telemetry, shutdown_telemetry
+from strategies.utils.telemetry import (
+    _run_with_timeout,
+    flush_telemetry,
+    shutdown_telemetry,
+)
 
 
 class TestFlushTelemetry:
@@ -203,3 +208,93 @@ class TestShutdownTelemetry:
 
         # Verify the function completed without errors
         assert True  # Test passes if no exception was raised
+
+    def test_shutdown_telemetry_bounds_a_hanging_tracer_provider(self):
+        """Per #223: `TracerProvider.shutdown()` has no timeout parameter at
+        all and can block indefinitely on a slow/unreachable OTLP collector.
+        shutdown_telemetry() must return promptly (bounded by
+        `timeout_seconds`) even if the provider's own `.shutdown()` call
+        never returns -- this is the exact condition that was consuming the
+        pod's terminationGracePeriodSeconds and causing a forced SIGKILL
+        (exit 137, reason=Error) instead of a clean exit.
+        """
+
+        def hang_forever():
+            time.sleep(30)
+
+        mock_tracer_provider = MagicMock()
+        mock_tracer_provider.shutdown = MagicMock(side_effect=hang_forever)
+
+        mock_meter_provider = MagicMock()
+        mock_meter_provider.shutdown = MagicMock()
+
+        with patch(
+            "strategies.utils.telemetry.trace.get_tracer_provider",
+            return_value=mock_tracer_provider,
+        ):
+            with patch(
+                "strategies.utils.telemetry.metrics.get_meter_provider",
+                return_value=mock_meter_provider,
+            ):
+                with patch("strategies.utils.telemetry._global_logger_provider", None):
+                    start = time.monotonic()
+                    shutdown_telemetry(timeout_seconds=0.2)
+                    elapsed = time.monotonic() - start
+
+        # Must return quickly -- bounded by timeout_seconds, not by the
+        # provider's own (here, 30s) hang.
+        assert elapsed < 5.0
+
+    def test_shutdown_telemetry_passes_bounded_timeout_millis_to_meter_provider(self):
+        """MeterProvider.shutdown() defaults to a 30s internal timeout;
+        shutdown_telemetry() must override it with its own, much smaller,
+        configured timeout_seconds."""
+        mock_meter_provider = MagicMock()
+
+        with patch(
+            "strategies.utils.telemetry.trace.get_tracer_provider",
+            return_value=MagicMock(spec=[]),
+        ):
+            with patch(
+                "strategies.utils.telemetry.metrics.get_meter_provider",
+                return_value=mock_meter_provider,
+            ):
+                with patch("strategies.utils.telemetry._global_logger_provider", None):
+                    shutdown_telemetry(timeout_seconds=1.5)
+
+        mock_meter_provider.shutdown.assert_called_once_with(timeout_millis=1500)
+
+
+class TestRunWithTimeout:
+    """Test suite for the _run_with_timeout bounding helper."""
+
+    def test_returns_promptly_when_function_hangs(self):
+        """The caller must never wait longer than timeout_seconds, even if
+        the wrapped callable never returns."""
+
+        def hang_forever():
+            time.sleep(30)
+
+        start = time.monotonic()
+        _run_with_timeout(hang_forever, timeout_seconds=0.2, description="test hang")
+        elapsed = time.monotonic() - start
+
+        assert elapsed < 5.0
+
+    def test_propagates_no_exception_when_function_raises(self):
+        """Exceptions raised by the wrapped callable must be caught and
+        logged, never propagated to the caller (matches the previous
+        try/except-per-provider behavior in flush_telemetry/shutdown_telemetry)."""
+
+        def boom():
+            raise RuntimeError("provider exploded")
+
+        # Should not raise -- if it did, this test would error out here
+        # before ever reaching the assertion below.
+        _run_with_timeout(boom, timeout_seconds=1.0, description="test boom")
+        assert True
+
+    def test_calls_function_exactly_once_on_success(self):
+        mock_func = MagicMock()
+        _run_with_timeout(mock_func, timeout_seconds=1.0, description="test ok")
+        mock_func.assert_called_once()

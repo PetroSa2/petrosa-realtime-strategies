@@ -134,6 +134,23 @@ OTEL_METRICS_EXPORTER = os.getenv("OTEL_METRICS_EXPORTER", "otlp")
 OTEL_TRACES_EXPORTER = os.getenv("OTEL_TRACES_EXPORTER", "otlp")
 OTEL_LOGS_EXPORTER = os.getenv("OTEL_LOGS_EXPORTER", "otlp")
 
+# Per #223: bound telemetry-provider shutdown so a slow/unreachable OTLP
+# collector can never consume the whole pod terminationGracePeriodSeconds.
+# `MeterProvider.shutdown()`'s own SDK default is 30_000ms and
+# `TracerProvider.shutdown()` has NO timeout at all -- both are called from
+# the SIGTERM path, so an unbounded/slow collector call was turning a normal
+# liveness-probe restart into a forced SIGKILL (exit 137, reason=Error,
+# misread as OOMKilled -- see #223).
+TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS = float(
+    os.getenv("TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS", "3.0")
+)
+# Hard safety net: if the full async shutdown sequence (telemetry flush +
+# shutdown + consumer/publisher/health-server/config-manager stop) hasn't
+# finished this many seconds after SIGTERM, force-exit rather than let
+# kubelet SIGKILL us once terminationGracePeriodSeconds (30s) elapses.
+# Must stay comfortably below that grace period.
+SHUTDOWN_WATCHDOG_SECONDS = float(os.getenv("SHUTDOWN_WATCHDOG_SECONDS", "20.0"))
+
 # Prometheus Metrics Configuration
 PROMETHEUS_ENABLED = os.getenv("PROMETHEUS_ENABLED", "true").lower() == "true"
 
