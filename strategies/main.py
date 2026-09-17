@@ -261,6 +261,35 @@ class StrategiesService:
         finally:
             await self.stop()
 
+    async def _bounded_component_stop(self, name: str, coro) -> None:
+        """Await a single component's `stop()`, bounded by
+        `COMPONENT_STOP_TIMEOUT_SECONDS` (per #225).
+
+        Never propagates: a hung or failing component must not prevent the
+        other components (run concurrently by the caller) or the subsequent
+        bounded telemetry flush/shutdown from completing. Timeouts and
+        exceptions are logged as warnings, not errors -- shutdown proceeds
+        regardless.
+        """
+        try:
+            await asyncio.wait_for(
+                coro, timeout=constants.COMPONENT_STOP_TIMEOUT_SECONDS
+            )
+            self.logger.info(f"{name} stopped", event_type=f"{name}_stopped")
+        except TimeoutError:
+            self.logger.warning(
+                f"{name}.stop() exceeded "
+                f"{constants.COMPONENT_STOP_TIMEOUT_SECONDS}s timeout -- "
+                "proceeding with shutdown anyway",
+                event_type=f"{name}_stop_timeout",
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"{name}.stop() raised an error -- proceeding with shutdown anyway",
+                event_type=f"{name}_stop_error",
+                error=str(e),
+            )
+
     async def stop(self):
         """Stop the service gracefully."""
         self.logger.info(
@@ -268,47 +297,50 @@ class StrategiesService:
             event_type="service_stopping",
         )
 
-        # Stop health evaluator first
+        # Per #225: stop every component CONCURRENTLY, each individually
+        # bounded by COMPONENT_STOP_TIMEOUT_SECONDS. Previously these ran
+        # sequentially with no per-component timeout at all, so a single
+        # hung dependency (e.g. NATSConsumer.stop()'s subscription.drain()/
+        # nats_client.close() blocking on an unreachable broker) could
+        # silently consume the entire SHUTDOWN_WATCHDOG_SECONDS budget and
+        # turn a clean SIGTERM into a forced `os._exit(1)`. Running them
+        # concurrently and bounding each one means the whole stage now
+        # completes in at most COMPONENT_STOP_TIMEOUT_SECONDS regardless of
+        # how many components misbehave.
+        component_stops = []
         if self.health_evaluator:
-            await self.health_evaluator.stop()
-            self.logger.info(
-                "Health evaluator stopped", event_type="health_evaluator_stopped"
+            component_stops.append(
+                self._bounded_component_stop(
+                    "health_evaluator", self.health_evaluator.stop()
+                )
             )
-
-        # Stop heartbeat manager first
         if self.heartbeat_manager:
-            await self.heartbeat_manager.stop()
-            self.logger.info(
-                "Heartbeat manager stopped", event_type="heartbeat_manager_stopped"
+            component_stops.append(
+                self._bounded_component_stop(
+                    "heartbeat_manager", self.heartbeat_manager.stop()
+                )
             )
-
-        # Stop NATS consumer
         if self.consumer:
-            await self.consumer.stop()
-            self.logger.info(
-                "NATS consumer stopped", event_type="nats_consumer_stopped"
+            component_stops.append(
+                self._bounded_component_stop("nats_consumer", self.consumer.stop())
             )
-
-        # Stop trade order publisher
         if self.publisher:
-            await self.publisher.stop()
-            self.logger.info(
-                "Trade order publisher stopped", event_type="publisher_stopped"
+            component_stops.append(
+                self._bounded_component_stop("publisher", self.publisher.stop())
             )
-
-        # Stop health server
         if self.health_server:
-            await self.health_server.stop()
-            self.logger.info(
-                "Health server stopped", event_type="health_server_stopped"
+            component_stops.append(
+                self._bounded_component_stop("health_server", self.health_server.stop())
+            )
+        if self.config_manager:
+            component_stops.append(
+                self._bounded_component_stop(
+                    "config_manager", self.config_manager.stop()
+                )
             )
 
-        # Stop configuration manager
-        if self.config_manager:
-            await self.config_manager.stop()
-            self.logger.info(
-                "Configuration manager stopped", event_type="config_manager_stopped"
-            )
+        if component_stops:
+            await asyncio.gather(*component_stops)
 
         # Flush and shut down telemetry providers. Per #223, both calls are
         # individually bounded (TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS, default

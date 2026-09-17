@@ -71,6 +71,11 @@ def mock_constants():
         mock_const.get_strategy_config.return_value = {"strategy1": {"param": "value"}}
         mock_const.get_trading_config.return_value = {"leverage": 1.0}
         mock_const.get_risk_config.return_value = {"max_position": 1000}
+        # Per #225: real floats required -- these feed asyncio.wait_for(timeout=...)
+        # in _get_health_status/_get_readiness_status, which raises TypeError on
+        # comparison against an unconfigured MagicMock attribute.
+        mock_const.HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS = 2.0
+        mock_const.READINESS_PROBE_INTERNAL_DEADLINE_SECONDS = 2.0
         yield mock_const
 
 
@@ -207,6 +212,72 @@ def test_ready_endpoint_consumer_nats_disconnected(client):
     assert response.status_code == 503
     data = response.json()
     assert data["detail"] == "Service not ready"
+
+
+def test_healthz_endpoint_records_latency_histogram(client, health_server):
+    """Per #225: /healthz latency must be observed into the new Prometheus
+    histogram so a regression is visible before restarts start."""
+    from strategies.health.server import HEALTHZ_PROBE_DURATION_SECONDS
+
+    health_server.is_running = True
+    health_server.start_time = time.time() - 10
+
+    with patch.object(HEALTHZ_PROBE_DURATION_SECONDS, "observe") as mock_observe:
+        response = client.get("/healthz")
+
+    assert response.status_code == 200
+    mock_observe.assert_called_once()
+    (observed_seconds,) = mock_observe.call_args.args
+    assert observed_seconds >= 0
+
+
+def test_ready_endpoint_records_latency_histogram(client, health_server):
+    """Per #225: /ready latency must be observed into the new Prometheus
+    histogram, including on the failure (503) path -- a slow *failing*
+    probe is exactly the case operators need visibility into."""
+    from strategies.health.server import READINESS_PROBE_DURATION_SECONDS
+
+    health_server.is_running = False  # forces the 503 path
+
+    with patch.object(READINESS_PROBE_DURATION_SECONDS, "observe") as mock_observe:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    mock_observe.assert_called_once()
+
+
+def test_healthz_endpoint_exceeds_internal_deadline_returns_503(
+    client, health_server, mock_constants
+):
+    """Per #225: /healthz must fail fast (503) rather than hang past its
+    hard internal deadline, even if the check computation itself stalls."""
+    mock_constants.HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS = 0.05
+
+    async def _hang(*_args, **_kwargs):
+        await asyncio.sleep(10)
+
+    with patch.object(health_server, "_compute_health_status", _hang):
+        response = client.get("/healthz")
+
+    assert response.status_code == 503
+    assert "internal deadline" in response.json()["detail"]
+
+
+def test_ready_endpoint_exceeds_internal_deadline_returns_503(
+    client, health_server, mock_constants
+):
+    """Per #225: /ready must fail fast (503) rather than hang past its
+    hard internal deadline, even if the check computation itself stalls."""
+    mock_constants.READINESS_PROBE_INTERNAL_DEADLINE_SECONDS = 0.05
+
+    async def _hang(*_args, **_kwargs):
+        await asyncio.sleep(10)
+
+    with patch.object(health_server, "_compute_readiness_status", _hang):
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert "internal deadline" in response.json()["detail"]
 
 
 def test_ready_endpoint_consumer_subscription_missing(client):

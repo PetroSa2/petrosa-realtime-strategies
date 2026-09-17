@@ -230,6 +230,100 @@ async def test_stop_with_none_components(service):
 
 
 @pytest.mark.asyncio
+async def test_stop_bounds_hung_component_and_completes(service, mock_components):
+    """Per #225: a single hung component.stop() must not block the rest of
+    shutdown (or exceed SHUTDOWN_WATCHDOG_SECONDS). Components now stop
+    concurrently, each individually bounded by COMPONENT_STOP_TIMEOUT_SECONDS
+    (real value ~5s here since the fixture's constants patch does not
+    outlive fixture setup -- see `service` fixture). A component whose
+    stop() never resolves must time out rather than hang the whole test.
+    """
+    hung_forever = asyncio.Event()  # never set -> awaiting it never returns
+
+    async def _hang(*_args, **_kwargs):
+        await hung_forever.wait()
+
+    mock_components["consumer"].stop = _hang
+    service.consumer = mock_components["consumer"]
+    service.publisher = mock_components["publisher"]
+    service.heartbeat_manager = mock_components["heartbeat_manager"]
+    service.health_server = mock_components["health_server"]
+    service.config_manager = mock_components["config_manager"]
+
+    with (
+        patch("strategies.main.constants.COMPONENT_STOP_TIMEOUT_SECONDS", 0.05),
+        patch("strategies.main.flush_telemetry"),
+        patch("strategies.main.shutdown_telemetry"),
+    ):
+        # Must complete promptly despite the hung consumer -- if the bound
+        # were not applied this would hang indefinitely and the test would
+        # time out instead of passing.
+        await asyncio.wait_for(service.stop(), timeout=2.0)
+
+    # The other components still got stopped even though consumer hung.
+    mock_components["publisher"].stop.assert_called_once()
+    mock_components["heartbeat_manager"].stop.assert_called_once()
+    mock_components["health_server"].stop.assert_called_once()
+    mock_components["config_manager"].stop.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_continues_after_component_raises(service, mock_components):
+    """Per #225: if one component's stop() raises, the others (and the
+    bounded telemetry flush/shutdown) must still run -- a single failure
+    must not cascade into a forced-exit watchdog trip."""
+    mock_components["consumer"].stop = AsyncMock(side_effect=RuntimeError("boom"))
+    service.consumer = mock_components["consumer"]
+    service.publisher = mock_components["publisher"]
+    service.heartbeat_manager = mock_components["heartbeat_manager"]
+    service.health_server = mock_components["health_server"]
+    service.config_manager = mock_components["config_manager"]
+
+    with (
+        patch("strategies.main.flush_telemetry") as mock_flush,
+        patch("strategies.main.shutdown_telemetry") as mock_shutdown,
+    ):
+        await service.stop()
+
+    mock_components["publisher"].stop.assert_called_once()
+    mock_components["heartbeat_manager"].stop.assert_called_once()
+    mock_components["health_server"].stop.assert_called_once()
+    mock_components["config_manager"].stop.assert_called_once()
+    mock_flush.assert_called_once()
+    mock_shutdown.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_components_run_concurrently(service, mock_components):
+    """Per #225: components must be stopped concurrently, not sequentially
+    -- otherwise N slow components each consuming most of their individual
+    budget could still sum past the watchdog. Two components that each take
+    ~0.2s must together take ~0.2s (concurrent), not ~0.4s (sequential)."""
+    delay = 0.2
+
+    async def _slow_stop(*_args, **_kwargs):
+        await asyncio.sleep(delay)
+
+    mock_components["consumer"].stop = _slow_stop
+    mock_components["publisher"].stop = _slow_stop
+    service.consumer = mock_components["consumer"]
+    service.publisher = mock_components["publisher"]
+
+    with (
+        patch("strategies.main.flush_telemetry"),
+        patch("strategies.main.shutdown_telemetry"),
+    ):
+        start = asyncio.get_event_loop().time()
+        await service.stop()
+        elapsed = asyncio.get_event_loop().time() - start
+
+    assert elapsed < delay * 1.8, (
+        f"stop() took {elapsed:.3f}s -- components appear to be stopped "
+        "sequentially instead of concurrently"
+    )
+
+
+@pytest.mark.asyncio
 async def test_signal_handler():
     """Test signal handler function."""
     # Create a mock service
