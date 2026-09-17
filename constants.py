@@ -151,6 +151,35 @@ TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS = float(
 # Must stay comfortably below that grace period.
 SHUTDOWN_WATCHDOG_SECONDS = float(os.getenv("SHUTDOWN_WATCHDOG_SECONDS", "20.0"))
 
+# Per #225: #223's bounded telemetry shutdown was not enough on its own --
+# `StrategiesService.stop()` still awaited each component's `stop()`
+# (health_evaluator, heartbeat_manager, consumer, publisher, health_server,
+# config_manager) SEQUENTIALLY with NO per-component timeout. A single slow
+# or hung call inside that chain (e.g. `NATSConsumer.stop()`'s
+# `subscription.drain()` / `nats_client.close()` blocking on an unreachable
+# broker) silently consumed the entire SHUTDOWN_WATCHDOG_SECONDS budget,
+# turning every such SIGTERM into a forced `os._exit(1)` (observed live:
+# "Graceful shutdown exceeded 20.0s watchdog -- forcing exit", exit 1, no
+# traceback). Components are now stopped CONCURRENTLY, each individually
+# bounded by this timeout, so one hung dependency can no longer block the
+# others or exhaust the watchdog. Must stay well below SHUTDOWN_WATCHDOG_SECONDS
+# even when combined with TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS (run after).
+COMPONENT_STOP_TIMEOUT_SECONDS = float(
+    os.getenv("COMPONENT_STOP_TIMEOUT_SECONDS", "5.0")
+)
+
+# Per #225: /ready and /healthz must be cheap and bounded -- no probe request
+# should ever be able to hang past this internal deadline (well under the
+# k8s probe's own timeoutSeconds), even if a future change accidentally adds
+# a slow call to the check path. On timeout the handler returns 503 fast
+# instead of tying up the request past the probe budget.
+READINESS_PROBE_INTERNAL_DEADLINE_SECONDS = float(
+    os.getenv("READINESS_PROBE_INTERNAL_DEADLINE_SECONDS", "2.0")
+)
+HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS = float(
+    os.getenv("HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS", "2.0")
+)
+
 # Prometheus Metrics Configuration
 PROMETHEUS_ENABLED = os.getenv("PROMETHEUS_ENABLED", "true").lower() == "true"
 

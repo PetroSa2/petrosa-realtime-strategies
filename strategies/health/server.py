@@ -47,6 +47,21 @@ ENABLED_STRATEGIES_COUNT = Gauge(
     "enabled_strategies_count", "Number of enabled strategies"
 )
 
+# Per #225: instrument probe latency so a regression (probe budget too tight
+# for the workload) is visible via Grafana/alerting BEFORE it causes
+# restarts, instead of only being discoverable after the fact from
+# `Readiness probe failed` k8s events.
+READINESS_PROBE_DURATION_SECONDS = Histogram(
+    "readiness_probe_duration_seconds",
+    "Time spent computing the /ready readiness check",
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+)
+HEALTHZ_PROBE_DURATION_SECONDS = Histogram(
+    "healthz_probe_duration_seconds",
+    "Time spent computing the /healthz liveness check",
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+)
+
 
 class HealthServer:
     """Health check server for monitoring service health."""
@@ -169,12 +184,20 @@ class HealthServer:
         @self.app.get("/healthz")
         async def health_check():
             """Liveness probe endpoint."""
-            return await self._get_health_status()
+            start = time.monotonic()
+            try:
+                return await self._get_health_status()
+            finally:
+                HEALTHZ_PROBE_DURATION_SECONDS.observe(time.monotonic() - start)
 
         @self.app.get("/ready")
         async def readiness_check():
             """Readiness probe endpoint."""
-            return await self._get_readiness_status()
+            start = time.monotonic()
+            try:
+                return await self._get_readiness_status()
+            finally:
+                READINESS_PROBE_DURATION_SECONDS.observe(time.monotonic() - start)
 
         @self.app.get("/metrics")
         async def metrics():
@@ -290,54 +313,77 @@ class HealthServer:
         an otherwise-healthy pod in a crash loop while it is waiting to
         reconnect (see #185's reconnect-with-backoff logic), rather than
         simply routing traffic away from it via readiness.
+
+        Per #225: the whole computation is wrapped in a hard internal
+        deadline (`HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS`, well under the
+        k8s liveness probe's own `timeoutSeconds`) so this handler can never
+        itself become the reason a probe times out, even if a future change
+        accidentally adds a slow call to the check path.
         """
         try:
-            # Update uptime
-            if self.start_time:
-                uptime = time.time() - self.start_time
-            else:
-                uptime = 0
-
-            # Basic health checks - only check essential conditions.
-            # These are informational only; none of them (other than
-            # server_running) affect the liveness verdict below.
-            # Per #191 AC6: read the timer-sampled cache, not a fresh
-            # psutil call, so this request-path handler never blocks the
-            # event loop on a syscall.
-            health_checks = {
-                "server_running": self.is_running,
-                "uptime_seconds": uptime >= 0,  # Just check if uptime is valid
-                "memory_usage": self._cached_memory_mb
-                >= 0,  # Just check if memory is valid
-                "cpu_usage": self._cached_cpu_percent
-                >= 0,  # Just check if CPU is valid
-            }
-
-            # Determine overall health - liveness only fails if the server
-            # process itself is not running. Dependency outages (NATS down,
-            # subscription lost, etc.) must NOT fail liveness - see /ready.
-            is_healthy = self.is_running
-
-            status = {
-                "status": "healthy" if is_healthy else "unhealthy",
-                "timestamp": time.time(),
-                "uptime_seconds": uptime,
-                "checks": health_checks,
-                "version": constants.SERVICE_VERSION,
-                "environment": constants.ENVIRONMENT,
-            }
-
-            # Update health status
-            self.health_status.update(status)
-
-            if not is_healthy:
-                raise HTTPException(status_code=503, detail="Service unhealthy")
-
-            return status
-
+            return await asyncio.wait_for(
+                self._compute_health_status(),
+                timeout=constants.HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS,
+            )
+        except TimeoutError:
+            self.logger.error(
+                "Liveness check exceeded internal deadline",
+                event_type="healthz_internal_deadline_exceeded",
+                deadline_seconds=constants.HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS,
+            )
+            raise HTTPException(
+                status_code=503, detail="Health check exceeded internal deadline"
+            ) from None
+        except HTTPException:
+            raise
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")
             raise HTTPException(status_code=503, detail=f"Health check failed: {e}")
+
+    async def _compute_health_status(self) -> dict[str, Any]:
+        """Compute the liveness payload (see `_get_health_status` for the
+        deadline/error-handling wrapper around this)."""
+        # Update uptime
+        if self.start_time:
+            uptime = time.time() - self.start_time
+        else:
+            uptime = 0
+
+        # Basic health checks - only check essential conditions.
+        # These are informational only; none of them (other than
+        # server_running) affect the liveness verdict below.
+        # Per #191 AC6: read the timer-sampled cache, not a fresh
+        # psutil call, so this request-path handler never blocks the
+        # event loop on a syscall.
+        health_checks = {
+            "server_running": self.is_running,
+            "uptime_seconds": uptime >= 0,  # Just check if uptime is valid
+            "memory_usage": self._cached_memory_mb
+            >= 0,  # Just check if memory is valid
+            "cpu_usage": self._cached_cpu_percent >= 0,  # Just check if CPU is valid
+        }
+
+        # Determine overall health - liveness only fails if the server
+        # process itself is not running. Dependency outages (NATS down,
+        # subscription lost, etc.) must NOT fail liveness - see /ready.
+        is_healthy = self.is_running
+
+        status = {
+            "status": "healthy" if is_healthy else "unhealthy",
+            "timestamp": time.time(),
+            "uptime_seconds": uptime,
+            "checks": health_checks,
+            "version": constants.SERVICE_VERSION,
+            "environment": constants.ENVIRONMENT,
+        }
+
+        # Update health status
+        self.health_status.update(status)
+
+        if not is_healthy:
+            raise HTTPException(status_code=503, detail="Service unhealthy")
+
+        return status
 
     async def _get_readiness_status(self) -> dict[str, Any]:
         """Get readiness status for the readiness probe (/ready).
@@ -362,51 +408,73 @@ class HealthServer:
         onto this health server only after they connect to NATS, so a
         `None` consumer/publisher here correctly means "not ready yet"
         rather than raising an error.
+
+        Per #225: the whole computation is wrapped in a hard internal
+        deadline (`READINESS_PROBE_INTERNAL_DEADLINE_SECONDS`, well under
+        the k8s readiness probe's own `timeoutSeconds`) so this handler can
+        never itself become the reason a probe times out, even if a future
+        change accidentally adds a slow call to the check path.
         """
         try:
-            readiness_checks: dict[str, bool] = {
-                "server_running": self.is_running,
-            }
-
-            if self.consumer is not None:
-                consumer_health = self.consumer.get_health_status()
-                readiness_checks["consumer_nats_connected"] = bool(
-                    consumer_health.get("nats_connected", False)
-                )
-                readiness_checks["consumer_subscribed"] = bool(
-                    consumer_health.get("subscription_active", False)
-                )
-            else:
-                readiness_checks["consumer_nats_connected"] = False
-                readiness_checks["consumer_subscribed"] = False
-
-            if self.publisher is not None:
-                publisher_health = self.publisher.get_health_status()
-                readiness_checks["publisher_nats_connected"] = bool(
-                    publisher_health.get("nats_connected", False)
-                )
-            else:
-                readiness_checks["publisher_nats_connected"] = False
-
-            # Determine readiness - every check above must pass.
-            is_ready = all(readiness_checks.values())
-
-            status = {
-                "ready": is_ready,
-                "timestamp": time.time(),
-                "checks": readiness_checks,
-            }
-
-            if not is_ready:
-                raise HTTPException(status_code=503, detail="Service not ready")
-
-            return status
-
+            return await asyncio.wait_for(
+                self._compute_readiness_status(),
+                timeout=constants.READINESS_PROBE_INTERNAL_DEADLINE_SECONDS,
+            )
+        except TimeoutError:
+            self.logger.error(
+                "Readiness check exceeded internal deadline",
+                event_type="readiness_internal_deadline_exceeded",
+                deadline_seconds=constants.READINESS_PROBE_INTERNAL_DEADLINE_SECONDS,
+            )
+            raise HTTPException(
+                status_code=503, detail="Readiness check exceeded internal deadline"
+            ) from None
         except HTTPException:
             raise
         except Exception as e:
             self.logger.error(f"Readiness check failed: {e}")
             raise HTTPException(status_code=503, detail=f"Readiness check failed: {e}")
+
+    async def _compute_readiness_status(self) -> dict[str, Any]:
+        """Compute the readiness payload (see `_get_readiness_status` for
+        the deadline/error-handling wrapper around this)."""
+        readiness_checks: dict[str, bool] = {
+            "server_running": self.is_running,
+        }
+
+        if self.consumer is not None:
+            consumer_health = self.consumer.get_health_status()
+            readiness_checks["consumer_nats_connected"] = bool(
+                consumer_health.get("nats_connected", False)
+            )
+            readiness_checks["consumer_subscribed"] = bool(
+                consumer_health.get("subscription_active", False)
+            )
+        else:
+            readiness_checks["consumer_nats_connected"] = False
+            readiness_checks["consumer_subscribed"] = False
+
+        if self.publisher is not None:
+            publisher_health = self.publisher.get_health_status()
+            readiness_checks["publisher_nats_connected"] = bool(
+                publisher_health.get("nats_connected", False)
+            )
+        else:
+            readiness_checks["publisher_nats_connected"] = False
+
+        # Determine readiness - every check above must pass.
+        is_ready = all(readiness_checks.values())
+
+        status = {
+            "ready": is_ready,
+            "timestamp": time.time(),
+            "checks": readiness_checks,
+        }
+
+        if not is_ready:
+            raise HTTPException(status_code=503, detail="Service not ready")
+
+        return status
 
     async def _get_prometheus_metrics(self) -> Response:
         """Get Prometheus-format metrics."""

@@ -32,6 +32,9 @@ def _setup_mock_constants(mock_const) -> None:
     mock_const.get_trading_config.return_value = {}
     mock_const.get_risk_config.return_value = {}
     mock_const.TRADING_LEVERAGE = 1.0
+    # Per #225: real floats required -- feed asyncio.wait_for(timeout=...).
+    mock_const.HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS = 2.0
+    mock_const.READINESS_PROBE_INTERNAL_DEADLINE_SECONDS = 2.0
 
 
 class TestAutoInstrumentationGuard:
