@@ -98,6 +98,18 @@ HEARTBEAT_INCLUDE_DETAILED_STATS: "true"
 }
 ```
 
+### Production idle diagnostics
+
+Normal heartbeat records remain at `INFO`, but the service also emits a warning-level
+`realtime_strategies_idle_heartbeat` record so the production `LOG_LEVEL=WARNING` setting cannot hide a silent
+consumer. The `idle_reason` values distinguish `nats_subscription_not_ready`,
+`no_messages_received_since_startup`, `no_messages_received_in_interval`, and
+`no_signals_published_in_interval`; the record includes NATS connection and subscription state.
+
+Startup emits a warning-level `nats_subscription_active` record with the subscribed subject and queue group.
+Together, these records distinguish an active subscription with no upstream traffic from a disconnected or
+stalled consumer without relying on an INFO-level log tail.
+
 ## Usage
 
 ### Service Integration
@@ -200,6 +212,12 @@ The heartbeat system is designed to be lightweight:
    ```bash
    python -m strategies.main health
    ```
+
+When `LOG_LEVEL=WARNING`, search for `nats_subscription_active` and
+`realtime_strategies_idle_heartbeat` rather than the normal INFO heartbeat. A connected subscription with
+`no_messages_received_since_startup` points to upstream NATS traffic or subject configuration; a
+`nats_subscription_not_ready` reason points to the consumer connection/subscription itself. A message-producing
+consumer with `no_signals_published_in_interval` is active but strategy output is currently empty.
 
 ### High Error Rates in Heartbeat
 

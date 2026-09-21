@@ -185,9 +185,14 @@ async def test_consumer_subscribe_to_topic(consumer):
     """Test _subscribe_to_topic method."""
     consumer.nats_client = AsyncMock()
     consumer.nats_client.subscribe = AsyncMock(return_value=AsyncMock())
+    consumer.logger = Mock()
 
     await consumer._subscribe_to_topic()
     assert consumer.subscription is not None
+    consumer.logger.warning.assert_called_once()
+    warning_kwargs = consumer.logger.warning.call_args.kwargs
+    assert warning_kwargs["event_type"] == "nats_subscription_active"
+    assert warning_kwargs["topic"] == "test.topic"
 
 
 @pytest.mark.asyncio
@@ -199,6 +204,21 @@ async def test_consumer_message_handler_error(consumer):
     # Should handle errors gracefully
     await consumer._message_handler(mock_msg)
     assert consumer.error_count > 0
+
+
+@pytest.mark.asyncio
+async def test_consumer_message_handler_yields_to_event_loop(consumer):
+    """A callback yield prevents CPU-bound message work from starving probes."""
+    consumer._process_message = AsyncMock()
+    resumed = asyncio.Event()
+
+    async def mark_resumed():
+        resumed.set()
+
+    asyncio.create_task(mark_resumed())
+    await consumer._message_handler(Mock())
+
+    assert resumed.is_set()
 
 
 @pytest.mark.asyncio
