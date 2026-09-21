@@ -372,6 +372,14 @@ class NATSConsumer:
                 consumer_name=self.consumer_name,
                 consumer_group=self.consumer_group,
             )
+            self.logger.warning(
+                "NATS subscription active",
+                event_type="nats_subscription_active",
+                topic=self.topic,
+                consumer_name=self.consumer_name,
+                consumer_group=self.consumer_group,
+                nats_connected=self.nats_connected,
+            )
 
         except Exception as e:
             self.logger.error("Failed to subscribe to topic", error=str(e))
@@ -385,6 +393,8 @@ class NATSConsumer:
             self.logger.error("Error in message handler", error=str(e))
             self.error_count += 1
             self.error_tracker.record_error()
+        finally:
+            await asyncio.sleep(0)
 
     async def _process_message(self, msg) -> None:
         """Process a single NATS message with trace context extraction."""

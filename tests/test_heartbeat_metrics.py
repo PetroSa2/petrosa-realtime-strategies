@@ -98,3 +98,60 @@ async def test_log_heartbeat_nonzero_signals_per_second_on_real_activity(
 
     _, kwargs = manager.logger.info.call_args
     assert kwargs["signals_per_second"] > 0.0
+
+
+@pytest.mark.asyncio
+async def test_idle_heartbeat_is_warning_level_and_explains_no_messages():
+    """Production WARNING logging must still expose a connected idle consumer."""
+    consumer = MagicMock()
+    consumer.get_metrics.return_value = {"message_count": 0, "error_count": 0}
+    consumer.get_health_status.return_value = {
+        "nats_connected": True,
+        "subscription_active": True,
+    }
+    publisher = MagicMock()
+    publisher.get_metrics.return_value = {"signal_count": 0, "error_count": 0}
+    publisher.get_health_status.return_value = {"nats_connected": True}
+    manager = HeartbeatManager(
+        consumer=consumer,
+        publisher=publisher,
+        enabled=True,
+        interval_seconds=60,
+        include_detailed_stats=True,
+    )
+    manager.logger = MagicMock()
+
+    await manager._log_heartbeat()
+
+    _, kwargs = manager.logger.warning.call_args
+    assert kwargs["event_type"] == "realtime_strategies_idle_heartbeat"
+    assert kwargs["idle_reason"] == "no_messages_received_since_startup"
+    assert kwargs["consumer_nats_connected"] is True
+    assert kwargs["consumer_subscription_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_idle_heartbeat_distinguishes_signal_silence_from_message_silence():
+    consumer = MagicMock()
+    consumer.get_metrics.return_value = {"message_count": 10, "error_count": 0}
+    consumer.get_health_status.return_value = {
+        "nats_connected": True,
+        "subscription_active": True,
+    }
+    publisher = MagicMock()
+    publisher.get_metrics.return_value = {"signal_count": 0, "error_count": 0}
+    publisher.get_health_status.return_value = {"nats_connected": True}
+    manager = HeartbeatManager(
+        consumer=consumer,
+        publisher=publisher,
+        enabled=True,
+        interval_seconds=60,
+        include_detailed_stats=True,
+    )
+    manager.logger = MagicMock()
+
+    await manager._log_heartbeat()
+
+    _, kwargs = manager.logger.warning.call_args
+    assert kwargs["idle_reason"] == "no_signals_published_in_interval"
+    assert kwargs["messages_processed_delta"] == 10

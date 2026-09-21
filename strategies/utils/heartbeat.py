@@ -164,12 +164,48 @@ class HeartbeatManager:
 
             # Log the heartbeat
             self.logger.info("💓 HEARTBEAT - System Statistics", **heartbeat_data)
+            self._log_idle_diagnostic(heartbeat_data)
 
             # Update previous stats for next delta calculation
             self.previous_stats = current_stats.copy()
 
         except Exception as e:
             self.logger.error("Error logging heartbeat", error=str(e))
+
+    def _log_idle_diagnostic(self, heartbeat_data: dict[str, Any]) -> None:
+        """Emit a warning when production logs would otherwise hide inactivity."""
+        nats_connected = heartbeat_data.get("consumer_nats_connected")
+        subscription_active = heartbeat_data.get("consumer_subscription_active")
+        total_messages = heartbeat_data["total_messages_processed"]
+        messages_delta = heartbeat_data["messages_processed_delta"]
+        signals_delta = heartbeat_data["signals_published_delta"]
+
+        if nats_connected is False or subscription_active is False:
+            idle_reason = "nats_subscription_not_ready"
+        elif total_messages == 0:
+            idle_reason = "no_messages_received_since_startup"
+        elif messages_delta == 0:
+            idle_reason = "no_messages_received_in_interval"
+        elif signals_delta == 0:
+            idle_reason = "no_signals_published_in_interval"
+        else:
+            return
+
+        self.logger.warning(
+            "Realtime strategies idle heartbeat",
+            event_type="realtime_strategies_idle_heartbeat",
+            idle_reason=idle_reason,
+            heartbeat_count=heartbeat_data["heartbeat_count"],
+            uptime_seconds=heartbeat_data["uptime_seconds"],
+            messages_processed_delta=messages_delta,
+            total_messages_processed=total_messages,
+            signals_published_delta=signals_delta,
+            total_signals_published=heartbeat_data["total_signals_published"],
+            consumer_nats_connected=nats_connected,
+            consumer_subscription_active=subscription_active,
+            consumer_errors_delta=heartbeat_data["consumer_errors_delta"],
+            total_consumer_errors=heartbeat_data["total_consumer_errors"],
+        )
 
     def _collect_current_stats(self) -> dict[str, Any]:
         """Collect current statistics from consumer and publisher."""
