@@ -120,6 +120,83 @@ class TestSignal:
         assert signal.metadata == metadata
         assert signal.metadata["spread_ratio"] == 2.5
 
+    def test_strategy_id_prefers_canonical_metadata_over_display_name(self):
+        """Regression test for #227.
+
+        Producer constructors (iceberg_detector, spread_liquidity) pass a
+        human display name via strategy_name plus the canonical snake_case
+        id in metadata["strategy_id"], but no top-level strategy_id. The
+        validator must not clobber the canonical id with the display name.
+        """
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_name="Iceberg Order Detector",
+            metadata={"strategy_id": "iceberg_detector"},
+        )
+
+        assert signal.strategy_id == "iceberg_detector"
+        # Display name must survive — via the underlying `strategy` field
+        # and the `strategy_name` property.
+        assert signal.strategy == "Iceberg Order Detector"
+        assert signal.strategy_name == "Iceberg Order Detector"
+
+    def test_strategy_id_prefers_canonical_metadata_spread_liquidity(self):
+        """Same regression, second producer named in ticket #227."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.SELL,
+            signal_action=SignalAction.OPEN_SHORT,
+            confidence=SignalConfidence.MEDIUM,
+            confidence_score=0.65,
+            price=3000.0,
+            strategy_name="Spread Liquidity Monitor",
+            metadata={"strategy_id": "spread_liquidity"},
+        )
+
+        assert signal.strategy_id == "spread_liquidity"
+        assert signal.strategy == "Spread Liquidity Monitor"
+        assert signal.strategy_name == "Spread Liquidity Monitor"
+
+    def test_strategy_id_falls_back_to_strategy_name_without_metadata(self):
+        """Strategies with no metadata["strategy_id"] keep the pre-#227
+        behavior: strategy_name (already snake_case for these producers)
+        becomes strategy_id directly."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.HOLD,
+            signal_action=SignalAction.HOLD,
+            confidence=SignalConfidence.LOW,
+            confidence_score=0.45,
+            price=50000.0,
+            strategy_name="onchain_metrics",
+        )
+
+        assert signal.strategy_id == "onchain_metrics"
+        assert signal.strategy == "onchain_metrics"
+        assert signal.strategy_name == "onchain_metrics"
+
+    def test_strategy_id_explicit_value_is_not_overridden(self):
+        """An explicitly-passed strategy_id (direction 2, alternative fix)
+        must win over both strategy_name and metadata["strategy_id"]."""
+        signal = Signal(
+            symbol="BTCUSDT",
+            signal_type=SignalType.BUY,
+            signal_action=SignalAction.OPEN_LONG,
+            confidence=SignalConfidence.HIGH,
+            confidence_score=0.85,
+            price=50000.0,
+            strategy_id="explicit_id",
+            strategy_name="Some Display Name",
+            metadata={"strategy_id": "other_canonical_id"},
+        )
+
+        assert signal.strategy_id == "explicit_id"
+
     def test_symbol_validation(self):
         """Test symbol validation."""
         with pytest.raises(ValidationError) as exc_info:

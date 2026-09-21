@@ -170,6 +170,39 @@ async def test_publish_signal_success(publisher, mock_nats_client):
 
 
 @pytest.mark.asyncio
+async def test_publish_signal_subject_uses_canonical_strategy_id(
+    publisher, mock_nats_client
+):
+    """Regression test for #227.
+
+    A signal built with a human display name (strategy_name) plus a
+    canonical snake_case id in metadata must publish to the canonical NATS
+    subject — not a space-to-underscore mangled version of the display
+    name.
+    """
+    signal = Signal(
+        symbol="BTCUSDT",
+        signal_type=SignalType.BUY,
+        signal_action=SignalAction.OPEN_LONG,
+        confidence=SignalConfidence.HIGH,
+        confidence_score=0.85,
+        price=50000.0,
+        strategy_name="Iceberg Order Detector",
+        metadata={"strategy_id": "iceberg_detector"},
+    )
+
+    await publisher.publish_signal(signal)
+
+    assert mock_nats_client.publish.called
+    subject = mock_nats_client.publish.call_args.kwargs["subject"]
+
+    assert subject == "cio.intent.trading.iceberg_detector"
+    assert subject == subject.lower()
+    assert "Iceberg_Order_Detector" not in subject
+    assert "_Order_" not in subject
+
+
+@pytest.mark.asyncio
 async def test_publish_signal_with_dict_method(publisher, mock_nats_client):
     """Test signal publishing with Pydantic v1 dict() method."""
     # Create a signal that uses dict() method
