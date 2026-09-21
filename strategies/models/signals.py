@@ -171,9 +171,24 @@ class Signal(BaseModel):
         if "confidence_score" in data:
             data["confidence"] = data["confidence_score"]
 
-        # 4. Map strategy_name to strategy_id
-        if "strategy_name" in data and "strategy_id" not in data:
-            data["strategy_id"] = data["strategy_name"]
+        # 4. Map strategy_name to strategy_id (#227).
+        # Prefer the canonical snake_case id already carried in
+        # metadata["strategy_id"] over the human display name in
+        # strategy_name — constructors that supply both (e.g.
+        # iceberg_detector, spread_liquidity) must not have their canonical
+        # id clobbered by the display name. Also preserve the display name
+        # in the `strategy` field so the `strategy_name` property (which
+        # falls back to strategy_id when `strategy` is unset) keeps
+        # returning the display name instead of the now-canonical id.
+        if "strategy_name" in data:
+            if "strategy" not in data:
+                data["strategy"] = data["strategy_name"]
+            if "strategy_id" not in data:
+                metadata = data.get("metadata")
+                canonical_id = (
+                    metadata.get("strategy_id") if isinstance(metadata, dict) else None
+                )
+                data["strategy_id"] = canonical_id or data["strategy_name"]
 
         # 5. Map price to current_price if missing
         if "price" in data and "current_price" not in data:
