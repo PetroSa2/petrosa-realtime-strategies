@@ -26,7 +26,11 @@ import constants
 from strategies.adapters.signal_adapter import transform_signal_for_tradeengine
 from strategies.utils.error_window import WindowedErrorTracker
 from strategies.utils.metrics import initialize_metrics
-from strategies.utils.nats_reconnect import make_reconnect_handler
+from strategies.utils.nats_reconnect import (
+    DEFAULT_MAX_RECONNECT_WAIT,
+    jittered_reconnect_delay,
+    make_reconnect_handler,
+)
 from strategies.utils.rolling_stats import RollingStats
 
 
@@ -47,6 +51,7 @@ class TradeOrderPublisher:
 
         # NATS client
         self.nats_client: NATSClient | None = None
+        self._nats_recovery_task: asyncio.Task | None = None
 
         # Publishing state
         self.is_running = False
@@ -99,6 +104,11 @@ class TradeOrderPublisher:
         # Signal shutdown
         self.shutdown_event.set()
         self.is_running = False
+
+        if self._nats_recovery_task is not None:
+            self._nats_recovery_task.cancel()
+            await asyncio.gather(self._nats_recovery_task, return_exceptions=True)
+            self._nats_recovery_task = None
 
         # Close NATS connection
         if self.nats_client:
@@ -189,6 +199,46 @@ class TradeOrderPublisher:
             client_name="trade-order-publisher",
         )
         self.metrics.record_error("nats_closed")
+        if self.is_running and not self.shutdown_event.is_set():
+            self._schedule_nats_recovery()
+
+    def _schedule_nats_recovery(self) -> None:
+        """Schedule recovery after nats-py reaches its terminal closed state."""
+        if self._nats_recovery_task is None or self._nats_recovery_task.done():
+            self._nats_recovery_task = asyncio.create_task(
+                self._recover_nats_connection()
+            )
+
+    async def _recover_nats_connection(self) -> None:
+        """Replace a terminal NATS client and restore publishing."""
+        delay = 2.0
+        while self.is_running and not self.shutdown_event.is_set():
+            await asyncio.sleep(
+                jittered_reconnect_delay(
+                    base_seconds=delay,
+                    max_seconds=DEFAULT_MAX_RECONNECT_WAIT,
+                )
+            )
+            try:
+                await self._connect_to_nats()
+                self.logger.info(
+                    "Recovered NATS publisher after terminal close",
+                    event_type="nats_recovery_succeeded",
+                    nats_url=self.nats_url,
+                )
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                self.metrics.record_error("nats_recovery_error")
+                self.logger.warning(
+                    "NATS publisher recovery attempt failed",
+                    event_type="nats_recovery_failed",
+                    error=str(e),
+                    retry_delay_seconds=delay,
+                    nats_url=self.nats_url,
+                )
+                delay = min(delay * 2, DEFAULT_MAX_RECONNECT_WAIT)
 
     @property
     def nats_connected(self) -> bool:

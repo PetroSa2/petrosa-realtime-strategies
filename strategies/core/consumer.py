@@ -48,7 +48,11 @@ from strategies.utils.metrics import (
     RealtimeStrategyMetrics,
     initialize_metrics,
 )
-from strategies.utils.nats_reconnect import make_reconnect_handler
+from strategies.utils.nats_reconnect import (
+    DEFAULT_MAX_RECONNECT_WAIT,
+    jittered_reconnect_delay,
+    make_reconnect_handler,
+)
 from strategies.utils.rolling_stats import RollingStats
 
 
@@ -92,6 +96,7 @@ class NATSConsumer:
         # NATS client and subscription
         self.nats_client: NATSClient | None = None
         self.subscription: Subscription | None = None
+        self._nats_recovery_task: asyncio.Task | None = None
 
         # Processing state
         self.is_running = False
@@ -225,6 +230,11 @@ class NATSConsumer:
         self.shutdown_event.set()
         self.is_running = False
 
+        if self._nats_recovery_task is not None:
+            self._nats_recovery_task.cancel()
+            await asyncio.gather(self._nats_recovery_task, return_exceptions=True)
+            self._nats_recovery_task = None
+
         # Per #191 AC4: stop the OrderBookTracker's periodic sweep task.
         iceberg_strategy = self.microstructure_strategies.get("iceberg_detector")
         if iceberg_strategy is not None and hasattr(iceberg_strategy, "tracker"):
@@ -345,6 +355,49 @@ class NATSConsumer:
             consumer_name=self.consumer_name,
         )
         self.metrics.record_error("nats_closed")
+        if self.is_running and not self.shutdown_event.is_set():
+            self._schedule_nats_recovery()
+
+    def _schedule_nats_recovery(self) -> None:
+        """Schedule recovery after nats-py reaches its terminal closed state."""
+        if self._nats_recovery_task is None or self._nats_recovery_task.done():
+            self._nats_recovery_task = asyncio.create_task(
+                self._recover_nats_connection()
+            )
+
+    async def _recover_nats_connection(self) -> None:
+        """Replace a terminal NATS client and restore its subscription."""
+        delay = 2.0
+        while self.is_running and not self.shutdown_event.is_set():
+            await asyncio.sleep(
+                jittered_reconnect_delay(
+                    base_seconds=delay,
+                    max_seconds=DEFAULT_MAX_RECONNECT_WAIT,
+                )
+            )
+            try:
+                self.subscription = None
+                await self._connect_to_nats()
+                await self._subscribe_to_topic()
+                self.logger.info(
+                    "Recovered NATS consumer after terminal close",
+                    event_type="nats_recovery_succeeded",
+                    nats_url=self.nats_url,
+                    consumer_name=self.consumer_name,
+                )
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                self.metrics.record_error("nats_recovery_error")
+                self.logger.warning(
+                    "NATS consumer recovery attempt failed",
+                    event_type="nats_recovery_failed",
+                    error=str(e),
+                    retry_delay_seconds=delay,
+                    nats_url=self.nats_url,
+                )
+                delay = min(delay * 2, DEFAULT_MAX_RECONNECT_WAIT)
 
     @property
     def nats_connected(self) -> bool:

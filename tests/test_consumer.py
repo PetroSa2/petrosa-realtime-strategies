@@ -166,6 +166,21 @@ async def test_consumer_on_nats_closed_records_error(consumer):
     mock_record_error.assert_called_once_with("nats_closed")
 
 
+@pytest.mark.asyncio
+async def test_consumer_recovers_after_terminal_nats_close(consumer):
+    """A terminal client close restores the connection and subscription."""
+    consumer.is_running = True
+    consumer._connect_to_nats = AsyncMock()
+    consumer._subscribe_to_topic = AsyncMock()
+
+    with patch("strategies.core.consumer.jittered_reconnect_delay", return_value=0):
+        await consumer._on_nats_closed()
+        await asyncio.wait_for(consumer._nats_recovery_task, timeout=1)
+
+    consumer._connect_to_nats.assert_awaited_once()
+    consumer._subscribe_to_topic.assert_awaited_once()
+
+
 def test_consumer_nats_connected_property_reflects_client_state(consumer):
     """AC4/AC5: nats_connected is synchronously readable and flips with the
     underlying client's is_connected state -- no client, then connected, then
