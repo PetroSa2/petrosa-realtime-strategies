@@ -8,6 +8,8 @@ import asyncio
 import os
 import signal
 import sys
+import threading
+import time
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
@@ -321,6 +323,87 @@ async def test_stop_components_run_concurrently(service, mock_components):
         f"stop() took {elapsed:.3f}s -- components appear to be stopped "
         "sequentially instead of concurrently"
     )
+
+
+@pytest.mark.asyncio
+async def test_stop_telemetry_flush_does_not_block_event_loop(service, mock_components):
+    """Per #236: flush_telemetry()/shutdown_telemetry() must run off the
+    event loop thread so a slow call cannot freeze the health server's
+    `/ready`/`/healthz` handlers -- the exact mechanism behind the reported
+    "context deadline exceeded" readiness-probe timeouts during SIGTERM
+    shutdown. Simulates a slow (but not hung) OTel SDK call and asserts a
+    concurrently-scheduled coroutine (standing in for a probe handler)
+    still runs promptly instead of being starved until the blocking call
+    returns.
+    """
+    service.heartbeat_manager = mock_components["heartbeat_manager"]
+    service.consumer = mock_components["consumer"]
+    service.publisher = mock_components["publisher"]
+    service.health_server = mock_components["health_server"]
+    service.config_manager = mock_components["config_manager"]
+
+    blocking_seconds = 0.3
+
+    def _blocking_flush(*_args, **_kwargs):
+        time.sleep(blocking_seconds)
+
+    probe_ran_at = None
+
+    async def _simulated_probe_handler():
+        nonlocal probe_ran_at
+        # Yield once so this task is scheduled after stop() starts, then
+        # record when the event loop actually resumes it.
+        await asyncio.sleep(0)
+        probe_ran_at = asyncio.get_event_loop().time()
+
+    with (
+        patch("strategies.main.flush_telemetry", side_effect=_blocking_flush),
+        patch("strategies.main.shutdown_telemetry"),
+    ):
+        probe_task = asyncio.ensure_future(_simulated_probe_handler())
+        start = asyncio.get_event_loop().time()
+        await service.stop()
+        await probe_task
+
+    assert probe_ran_at is not None
+    # The simulated probe handler must resume well before the blocking
+    # flush call (0.3s) finishes -- proving the event loop was never
+    # starved by it. A generous margin avoids flakiness while still
+    # failing hard if the call regresses to running inline.
+    assert probe_ran_at - start < blocking_seconds / 2, (
+        f"simulated probe handler was starved for "
+        f"{probe_ran_at - start:.3f}s -- flush_telemetry appears to be "
+        "blocking the event loop again"
+    )
+
+
+@pytest.mark.asyncio
+async def test_stop_bounds_hung_telemetry_call_and_completes(service, mock_components):
+    """Per #236: a telemetry call that never returns must not hang shutdown
+    past `constants.TELEMETRY_CALL_TIMEOUT_SECONDS`, mirroring #225's
+    per-component bound."""
+    service.heartbeat_manager = mock_components["heartbeat_manager"]
+    service.consumer = mock_components["consumer"]
+    service.publisher = mock_components["publisher"]
+    service.health_server = mock_components["health_server"]
+    service.config_manager = mock_components["config_manager"]
+
+    hung_forever = threading.Event()  # never set -> the worker thread blocks
+
+    def _hang(*_args, **_kwargs):
+        hung_forever.wait()
+
+    with (
+        patch("strategies.main.constants.TELEMETRY_CALL_TIMEOUT_SECONDS", 0.05),
+        patch("strategies.main.flush_telemetry", side_effect=_hang),
+        patch("strategies.main.shutdown_telemetry"),
+    ):
+        # Must complete promptly despite the hung flush call -- if the bound
+        # were not applied this would hang indefinitely and the test would
+        # time out instead of passing.
+        await asyncio.wait_for(service.stop(), timeout=2.0)
+
+    hung_forever.set()  # release the leaked worker thread
 
 
 @pytest.mark.asyncio

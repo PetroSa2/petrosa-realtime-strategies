@@ -7,6 +7,7 @@ of the trading signal service.
 """
 
 import asyncio
+import functools
 import os
 import signal
 import sys
@@ -290,6 +291,48 @@ class StrategiesService:
                 error=str(e),
             )
 
+    async def _bounded_telemetry_call(self, func, name: str) -> None:
+        """Run a blocking telemetry call off the event loop, bounded by
+        `constants.TELEMETRY_CALL_TIMEOUT_SECONDS` (per #236).
+
+        `flush_telemetry`/`shutdown_telemetry` are synchronous, blocking
+        calls (OTel SDK `force_flush()`/`shutdown()`, plus a `time.sleep`)
+        that used to run directly on this coroutine -- i.e. on the asyncio
+        event loop thread. Because they contain no `await` points, calling
+        them inline froze the ENTIRE event loop for their duration,
+        including the health server's `/ready` and `/healthz` handlers
+        (#225's internal probe deadline only protects a handler if the loop
+        is free to run its timeout callback -- it cannot pre-empt a
+        synchronous call already executing). That is the actual mechanism
+        behind #236's exact symptom: `/ready` timing out with "context
+        deadline exceeded" (the probe client never got a response at all)
+        during the SIGTERM shutdown window. Running the call on a worker
+        thread via `run_in_executor` keeps the event loop free to serve
+        probes while the OTel SDK call runs concurrently in the background.
+
+        Never propagates, matching `_bounded_component_stop`'s philosophy: a
+        hung or failing telemetry call must not prevent the rest of shutdown
+        (or the forced-exit watchdog's budget) from completing.
+        """
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(None, func),
+                timeout=constants.TELEMETRY_CALL_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            self.logger.warning(
+                f"{name} exceeded {constants.TELEMETRY_CALL_TIMEOUT_SECONDS}s "
+                "bounded wait -- proceeding with shutdown anyway",
+                event_type=f"{name}_timeout",
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"{name} raised an error -- proceeding with shutdown anyway",
+                event_type=f"{name}_error",
+                error=str(e),
+            )
+
     async def stop(self):
         """Stop the service gracefully."""
         self.logger.info(
@@ -346,13 +389,28 @@ class StrategiesService:
         # individually bounded (TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS, default
         # 3s each) so a slow/unreachable OTLP collector cannot consume the
         # rest of terminationGracePeriodSeconds and cause a forced SIGKILL.
+        # Per #236: both are also now run off the event loop thread (see
+        # `_bounded_telemetry_call`) so they cannot freeze the health
+        # server's `/ready`/`/healthz` handlers while they run.
         self.logger.info("Flushing telemetry data...", event_type="telemetry_flush")
-        flush_telemetry(timeout_seconds=constants.TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS)
+        await self._bounded_telemetry_call(
+            functools.partial(
+                flush_telemetry,
+                timeout_seconds=constants.TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS,
+            ),
+            "telemetry_flush",
+        )
 
         self.logger.info(
             "Shutting down telemetry providers...", event_type="telemetry_shutdown"
         )
-        shutdown_telemetry(timeout_seconds=constants.TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS)
+        await self._bounded_telemetry_call(
+            functools.partial(
+                shutdown_telemetry,
+                timeout_seconds=constants.TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS,
+            ),
+            "telemetry_shutdown",
+        )
 
         self.logger.info("Service stopped gracefully", event_type="service_stopped")
 

@@ -180,6 +180,27 @@ HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS = float(
     os.getenv("HEALTHZ_PROBE_INTERNAL_DEADLINE_SECONDS", "2.0")
 )
 
+# Per #236: flush_telemetry()/shutdown_telemetry() are synchronous, BLOCKING
+# calls (OTel SDK force_flush()/shutdown(), plus a `time.sleep`) that used to
+# be invoked directly on `StrategiesService.stop()`'s coroutine -- i.e. on
+# the single asyncio event loop thread. #225's READINESS_PROBE_INTERNAL_
+# DEADLINE_SECONDS only protects the /ready handler if the event loop is
+# free to run its timeout callback; a synchronous call already executing on
+# that same thread starves the loop entirely, so uvicorn cannot even accept
+# or serve the readiness/liveness HTTP requests during that window. That is
+# the actual mechanism behind #236's exact symptom: `/ready` timing out with
+# "context deadline exceeded" (the probe client never got a response at
+# all -- not even a fast 503) during the SIGTERM shutdown sequence, and the
+# same synchronous blocking (up to ~3x TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS
+# per call, twice) consuming enough of SHUTDOWN_WATCHDOG_SECONDS to trip it.
+# `StrategiesService.stop()` now runs each call via `run_in_executor` (a
+# real worker thread), bounded by this OUTER wall-clock timeout so the event
+# loop -- and therefore the health server -- stays responsive throughout,
+# and a hung worker thread can never block shutdown past this budget.
+TELEMETRY_CALL_TIMEOUT_SECONDS = float(
+    os.getenv("TELEMETRY_CALL_TIMEOUT_SECONDS", "7.0")
+)
+
 # Prometheus Metrics Configuration
 PROMETHEUS_ENABLED = os.getenv("PROMETHEUS_ENABLED", "true").lower() == "true"
 
