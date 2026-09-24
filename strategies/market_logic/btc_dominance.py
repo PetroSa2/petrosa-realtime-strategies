@@ -11,8 +11,10 @@ Strategy Logic:
 - Falling dominance = Alt season beginning (rotate to alts)
 """
 
+import bisect
 import time
 from datetime import UTC, datetime
+from operator import itemgetter
 from typing import Any, Optional
 
 import structlog
@@ -21,6 +23,33 @@ from opentelemetry import trace
 import constants
 from strategies.models.market_data import MarketDataMessage
 from strategies.models.signals import Signal, SignalAction, SignalConfidence, SignalType
+
+# Histories are kept sorted by "timestamp" so pruning and window lookups are
+# O(log n) bisects instead of full-list rebuilds on every message. Before this,
+# every message rebuilt price_history[symbol] and the 48h dominance_history
+# (~10^5 dicts) and sorted three 24h price windows; with ~12 msg/s inbound the
+# strategy saturated a CPU core (~0.95 cores, ~670 ms/msg) and the consumer
+# fell >30 h behind real time.
+_TS = itemgetter("timestamp")
+
+
+def _append_sorted(history: list[dict[str, Any]], entry: dict[str, Any]) -> None:
+    """Append ``entry`` keeping ``history`` sorted by timestamp.
+
+    Entries normally arrive in time order (O(1) append). An out-of-order
+    timestamp (e.g. a wall-clock step) is inserted after any equal timestamps,
+    which preserves the stable-sort order the previous implementation relied on.
+    """
+    if history and history[-1]["timestamp"] > entry["timestamp"]:
+        bisect.insort_right(history, entry, key=_TS)
+    else:
+        history.append(entry)
+
+
+def _prune_before_or_at(history: list[dict[str, Any]], cutoff: float) -> None:
+    """Drop entries with timestamp <= cutoff from a timestamp-sorted list."""
+    if history and history[0]["timestamp"] <= cutoff:
+        del history[: bisect.bisect_right(history, cutoff, key=_TS)]
 
 
 # Get tracer for this module
@@ -144,15 +173,12 @@ class BitcoinDominanceStrategy:
         if price:
             price_entry = {"timestamp": current_time, "price": price, "symbol": symbol}
 
-            self.price_history[symbol].append(price_entry)
+            history = self.price_history[symbol]
+            _append_sorted(history, price_entry)
 
             # Keep only recent history (24 hours + buffer)
             cutoff_time = current_time - (self.window_hours * 3600 + 3600)
-            self.price_history[symbol] = [
-                entry
-                for entry in self.price_history[symbol]
-                if entry["timestamp"] > cutoff_time
-            ]
+            _prune_before_or_at(history, cutoff_time)
 
     async def _calculate_btc_dominance(self) -> float | None:
         """
@@ -180,13 +206,14 @@ class BitcoinDominanceStrategy:
                 current_time = time.time()
                 window_start = current_time - (self.window_hours * 3600)
 
-                # Calculate price momentum for each asset
-                btc_momentum = self._calculate_momentum(btc_data, window_start)
+                # Calculate price momentum for each asset. The histories are
+                # maintained timestamp-sorted, so use the O(log n) window lookup.
+                btc_momentum = self._momentum_sorted(btc_data, window_start)
                 eth_momentum = (
-                    self._calculate_momentum(eth_data, window_start) if eth_data else 0
+                    self._momentum_sorted(eth_data, window_start) if eth_data else 0
                 )
                 bnb_momentum = (
-                    self._calculate_momentum(bnb_data, window_start) if bnb_data else 0
+                    self._momentum_sorted(bnb_data, window_start) if bnb_data else 0
                 )
 
                 # Simplified dominance calculation
@@ -208,28 +235,47 @@ class BitcoinDominanceStrategy:
                 span.set_status(trace.Status(trace.StatusCode.ERROR))
                 return None
 
+    @staticmethod
+    def _momentum_score(start_price: float, end_price: float) -> float:
+        # Calculate momentum (percentage change)
+        momentum = ((end_price - start_price) / start_price) * 100
+        # Convert to positive momentum score (higher = stronger performance)
+        return max(0, momentum + 10)  # Add base to avoid negative values
+
+    def _momentum_sorted(
+        self, price_data: list[dict[str, Any]], window_start: float
+    ) -> float:
+        """Momentum over the window for a timestamp-sorted list, in O(log n)."""
+        start = bisect.bisect_left(price_data, window_start, key=_TS)
+        if len(price_data) - start < 2:
+            return 0
+        return self._momentum_score(price_data[start]["price"], price_data[-1]["price"])
+
     def _calculate_momentum(
         self, price_data: list[dict[str, Any]], window_start: float
     ) -> float:
-        """Calculate price momentum over the specified window."""
-        recent_data = [
-            entry for entry in price_data if entry["timestamp"] >= window_start
-        ]
+        """Calculate price momentum over the specified window.
 
-        if len(recent_data) < 2:
+        Accepts any ordering. One pass, no copy and no sort: the earliest and
+        latest in-window entries are the same ones the previous filter +
+        stable-sort picked (first of equal-earliest, last of equal-latest).
+        """
+        first = last = None
+        count = 0
+        for entry in price_data:
+            ts = entry["timestamp"]
+            if ts < window_start:
+                continue
+            count += 1
+            if first is None or ts < first["timestamp"]:
+                first = entry
+            if last is None or ts >= last["timestamp"]:
+                last = entry
+
+        if count < 2:
             return 0
 
-        # Sort by timestamp
-        recent_data.sort(key=lambda x: x["timestamp"])
-
-        start_price = recent_data[0]["price"]
-        end_price = recent_data[-1]["price"]
-
-        # Calculate momentum (percentage change)
-        momentum = ((end_price - start_price) / start_price) * 100
-
-        # Convert to positive momentum score (higher = stronger performance)
-        return max(0, momentum + 10)  # Add base to avoid negative values
+        return self._momentum_score(first["price"], last["price"])
 
     def _update_dominance_history(self, dominance: float) -> None:
         """Update dominance history for trend analysis."""
@@ -237,15 +283,11 @@ class BitcoinDominanceStrategy:
 
         dominance_entry = {"timestamp": current_time, "dominance": dominance}
 
-        self.dominance_history.append(dominance_entry)
+        _append_sorted(self.dominance_history, dominance_entry)
 
         # Keep only recent history (48 hours for trend analysis)
         cutoff_time = current_time - (48 * 3600)
-        self.dominance_history = [
-            entry
-            for entry in self.dominance_history
-            if entry["timestamp"] > cutoff_time
-        ]
+        _prune_before_or_at(self.dominance_history, cutoff_time)
 
     async def _generate_dominance_signal(
         self, current_dominance: float, market_data: MarketDataMessage
@@ -378,15 +420,12 @@ class BitcoinDominanceStrategy:
         current_time = time.time()
         day_ago = current_time - (24 * 3600)
 
-        # Find closest entry to 24 hours ago
-        past_entries = [
-            entry for entry in self.dominance_history if entry["timestamp"] <= day_ago
-        ]
-
-        if not past_entries:
+        # Most recent entry at or before 24 hours ago (history is timestamp-sorted)
+        idx = bisect.bisect_right(self.dominance_history, day_ago, key=_TS)
+        if idx == 0:
             return 0
 
-        past_dominance = past_entries[-1]["dominance"]  # Most recent past entry
+        past_dominance = self.dominance_history[idx - 1]["dominance"]
         current_dominance = self.dominance_history[-1]["dominance"]
 
         return current_dominance - past_dominance
