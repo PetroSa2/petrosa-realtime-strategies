@@ -148,8 +148,11 @@ jobs:
           # Anchored to start of line to prevent over-matching apiVersion
           find petrosa_k8s/k8s/realtime-strategies -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | xargs -0 -r sed -E -i "s/^([[:space:]]*(version|app\.kubernetes\.io\/version)):.*/\1: $VERSION/g"
 
-          # Also handle any lingering placeholders for backward compatibility
-          find petrosa_k8s/k8s/realtime-strategies -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | xargs -0 -r sed -i "s/VERSION_PLACEHOLDER/$VERSION/g"
+           # Also handle any lingering placeholders for backward compatibility
+           find petrosa_k8s/k8s/realtime-strategies -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | xargs -0 -r sed -i "s/VERSION_PLACEHOLDER/$VERSION/g"
+
+           # Keep the production limit above the observed 512Mi OOM ceiling.
+           find petrosa_k8s/k8s/realtime-strategies -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | xargs -0 -r sed -E -i '/^[[:space:]]+limits:/,/^[[:space:]]+cpu:/ s/(memory:[[:space:]]*)"?[0-9]+Mi"?/\12Gi/'
 
           # Update OTEL service.version substring inside OTEL_RESOURCE_ATTRIBUTES env values
           # Bounded by [^,"[:space:]]+ so it stops at the next attribute, closing quote, or whitespace
