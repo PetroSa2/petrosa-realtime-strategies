@@ -13,6 +13,7 @@ Strategy Logic:
 
 import bisect
 import time
+from array import array
 from datetime import UTC, datetime
 from operator import itemgetter
 from typing import Any, Optional
@@ -31,6 +32,67 @@ from strategies.models.signals import Signal, SignalAction, SignalConfidence, Si
 # strategy saturated a CPU core (~0.95 cores, ~670 ms/msg) and the consumer
 # fell >30 h behind real time.
 _TS = itemgetter("timestamp")
+
+
+class _TimeSeries:
+    """Compact timestamp/value series with dict-shaped compatibility views."""
+
+    def __init__(
+        self, entries: list[dict[str, Any]] | None = None, value_key: str = "price"
+    ):
+        self.ts = array("d")
+        self.val = array("d")
+        self.value_key = value_key
+        if entries:
+            for entry in entries:
+                self.insert(float(entry["timestamp"]), float(entry[value_key]))
+
+    def insert(self, timestamp: float, value: float) -> None:
+        index = bisect.bisect_right(self.ts, timestamp)
+        self.ts.insert(index, timestamp)
+        self.val.insert(index, value)
+
+    def __len__(self) -> int:
+        return len(self.ts)
+
+    def __iter__(self):
+        for timestamp, value in zip(self.ts, self.val, strict=True):
+            yield {"timestamp": timestamp, self.value_key: value}
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(len(self)))]
+        return {"timestamp": self.ts[index], self.value_key: self.val[index]}
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, _TimeSeries):
+            return self.value_key == other.value_key and list(self) == list(other)
+        if isinstance(other, list):
+            return list(self) == other
+        return NotImplemented
+
+    def last(self) -> dict[str, float]:
+        return self[-1]
+
+    def first_at_or_after(self, timestamp: float) -> int:
+        return bisect.bisect_left(self.ts, timestamp)
+
+    def last_at_or_before(self, timestamp: float) -> int:
+        return bisect.bisect_right(self.ts, timestamp) - 1
+
+    def prune_before_or_at(self, cutoff: float) -> None:
+        index = bisect.bisect_right(self.ts, cutoff)
+        if index:
+            del self.ts[:index]
+            del self.val[:index]
+
+
+class _PriceHistory(dict[str, _TimeSeries]):
+    def __setitem__(self, symbol: str, history) -> None:
+        if isinstance(history, _TimeSeries):
+            super().__setitem__(symbol, history)
+        else:
+            super().__setitem__(symbol, _TimeSeries(history, "price"))
 
 
 def _append_sorted(history: list[dict[str, Any]], entry: dict[str, Any]) -> None:
@@ -80,8 +142,8 @@ class BitcoinDominanceStrategy:
         )  # 4 hours
 
         # State tracking (QTZD-style data accumulation)
-        self.price_history: dict[str, list[dict[str, Any]]] = {}
-        self.dominance_history: list[dict[str, Any]] = []
+        self.price_history: _PriceHistory = _PriceHistory()
+        self.dominance_history = _TimeSeries(value_key="dominance")
         self.last_signal_time: datetime | None = None
         self.last_dominance_calculation: float | None = None
 
@@ -94,6 +156,17 @@ class BitcoinDominanceStrategy:
             high_threshold=self.high_threshold,
             low_threshold=self.low_threshold,
         )
+
+    @property
+    def dominance_history(self) -> _TimeSeries:
+        return self._dominance_history
+
+    @dominance_history.setter
+    def dominance_history(self, history) -> None:
+        if isinstance(history, _TimeSeries):
+            self._dominance_history = history
+        else:
+            self._dominance_history = _TimeSeries(history, "dominance")
 
     async def process_market_data(
         self, market_data: MarketDataMessage
@@ -158,7 +231,7 @@ class BitcoinDominanceStrategy:
         current_time = time.time()
 
         if symbol not in self.price_history:
-            self.price_history[symbol] = []
+            self.price_history[symbol] = _TimeSeries(value_key="price")
 
         # Extract price from market data.
         # NOTE (#197): TickerData/TradeData (strategies/models/market_data.py) expose
@@ -171,14 +244,12 @@ class BitcoinDominanceStrategy:
             price = float(market_data.data.price)  # Trade price
 
         if price:
-            price_entry = {"timestamp": current_time, "price": price, "symbol": symbol}
-
             history = self.price_history[symbol]
-            _append_sorted(history, price_entry)
+            history.insert(current_time, price)
 
             # Keep only recent history (24 hours + buffer)
             cutoff_time = current_time - (self.window_hours * 3600 + 3600)
-            _prune_before_or_at(history, cutoff_time)
+            history.prune_before_or_at(cutoff_time)
 
     async def _calculate_btc_dominance(self) -> float | None:
         """
@@ -243,9 +314,14 @@ class BitcoinDominanceStrategy:
         return max(0, momentum + 10)  # Add base to avoid negative values
 
     def _momentum_sorted(
-        self, price_data: list[dict[str, Any]], window_start: float
+        self, price_data: _TimeSeries | list[dict[str, Any]], window_start: float
     ) -> float:
         """Momentum over the window for a timestamp-sorted list, in O(log n)."""
+        if isinstance(price_data, _TimeSeries):
+            start = price_data.first_at_or_after(window_start)
+            if len(price_data) - start < 2:
+                return 0
+            return self._momentum_score(price_data.val[start], price_data.val[-1])
         start = bisect.bisect_left(price_data, window_start, key=_TS)
         if len(price_data) - start < 2:
             return 0
@@ -281,13 +357,11 @@ class BitcoinDominanceStrategy:
         """Update dominance history for trend analysis."""
         current_time = time.time()
 
-        dominance_entry = {"timestamp": current_time, "dominance": dominance}
-
-        _append_sorted(self.dominance_history, dominance_entry)
+        self.dominance_history.insert(current_time, dominance)
 
         # Keep only recent history (48 hours for trend analysis)
         cutoff_time = current_time - (48 * 3600)
-        _prune_before_or_at(self.dominance_history, cutoff_time)
+        self.dominance_history.prune_before_or_at(cutoff_time)
 
     async def _generate_dominance_signal(
         self, current_dominance: float, market_data: MarketDataMessage
@@ -421,7 +495,7 @@ class BitcoinDominanceStrategy:
         day_ago = current_time - (24 * 3600)
 
         # Most recent entry at or before 24 hours ago (history is timestamp-sorted)
-        idx = bisect.bisect_right(self.dominance_history, day_ago, key=_TS)
+        idx = self.dominance_history.last_at_or_before(day_ago) + 1
         if idx == 0:
             return 0
 
@@ -457,7 +531,7 @@ class BitcoinDominanceStrategy:
         elif market_data.is_trade and hasattr(market_data.data, "p"):
             current_price = float(market_data.data.p)
         elif symbol in self.price_history and self.price_history[symbol]:
-            current_price = self.price_history[symbol][-1]["price"]
+            current_price = self.price_history[symbol].last()["price"]
 
         return Signal(
             symbol=symbol,
