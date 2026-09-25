@@ -947,7 +947,7 @@ spec:
             memory: "256Mi"
             cpu: "200m"
           limits:
-            memory: "512Mi"
+             memory: "2Gi"
             cpu: "1000m"
 ---
 apiVersion: autoscaling/v2
