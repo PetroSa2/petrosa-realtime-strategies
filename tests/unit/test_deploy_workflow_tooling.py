@@ -48,4 +48,7 @@ def test_gitops_workflows_link_umbrella_scripts_before_rebase():
 def test_gitops_workflow_raises_realtime_strategies_memory_limit():
     workflow = WORKFLOW_FILES[0].read_text()
 
-    assert 'limits:/,/^[[:space:]]+cpu:/ s/(memory:[[:space:]]*)"?[0-9]+Mi"?/\\12Gi/' in workflow
+    assert (
+        'limits:/,/^[[:space:]]+cpu:/ s/(memory:[[:space:]]*)"?[0-9]+Mi"?/\\12Gi/'
+        in workflow
+    )
