@@ -64,6 +64,13 @@ class _TimeSeries:
             return [self[i] for i in range(*index.indices(len(self)))]
         return {"timestamp": self.ts[index], self.value_key: self.val[index]}
 
+    def __eq__(self, other) -> bool:
+        if isinstance(other, _TimeSeries):
+            return self.value_key == other.value_key and list(self) == list(other)
+        if isinstance(other, list):
+            return list(self) == other
+        return NotImplemented
+
     def last(self) -> dict[str, float]:
         return self[-1]
 
