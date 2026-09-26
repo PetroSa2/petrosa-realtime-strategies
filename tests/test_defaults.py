@@ -2,7 +2,14 @@
 Tests for strategies/market_logic/defaults.py.
 """
 
-from strategies.market_logic.defaults import get_parameter_schema, validate_parameters
+import pytest
+
+from strategies.market_logic.defaults import (
+    PARAMETER_SCHEMAS,
+    get_parameter_schema,
+    get_strategy_defaults,
+    validate_parameters,
+)
 
 
 class TestParameterValidation:
@@ -51,3 +58,14 @@ class TestParameterValidation:
 
         # Should return None or empty dict
         assert schema is None or schema == {}
+
+    @pytest.mark.parametrize("strategy_id", PARAMETER_SCHEMAS)
+    def test_every_strategy_has_enabled_default_and_schema(self, strategy_id):
+        assert get_strategy_defaults(strategy_id)["enabled"] is True
+        assert PARAMETER_SCHEMAS[strategy_id]["enabled"]["type"] == "bool"
+
+    @pytest.mark.parametrize("value", ["no", 1])
+    def test_enabled_rejects_non_boolean_values(self, value):
+        is_valid, errors = validate_parameters("iceberg_detector", {"enabled": value})
+        assert is_valid is False
+        assert any("enabled" in error for error in errors)
