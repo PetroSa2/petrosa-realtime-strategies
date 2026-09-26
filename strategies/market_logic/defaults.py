@@ -17,6 +17,7 @@ STRATEGY_DEFAULTS: dict[str, dict[str, Any]] = {
     # Market Logic Strategies (Analysis-based)
     # ==========================================================================
     "btc_dominance": {
+        "enabled": True,
         "high_threshold": 70.0,
         "low_threshold": 40.0,
         "change_threshold": 5.0,
@@ -27,6 +28,7 @@ STRATEGY_DEFAULTS: dict[str, dict[str, Any]] = {
         "momentum_confidence": 0.70,
     },
     "cross_exchange_spread": {
+        "enabled": True,
         "spread_threshold_percent": 0.5,
         "min_signal_interval": 300,  # 5 minutes in seconds
         "max_position_size": 500,
@@ -37,6 +39,7 @@ STRATEGY_DEFAULTS: dict[str, dict[str, Any]] = {
         "high_spread_confidence": 0.85,
     },
     "onchain_metrics": {
+        "enabled": True,
         "whale_threshold_btc": 100,
         "whale_threshold_eth": 1000,
         "exchange_flow_threshold_percent": 10.0,
@@ -50,6 +53,7 @@ STRATEGY_DEFAULTS: dict[str, dict[str, Any]] = {
     # Microstructure Strategies (Order Book Analysis)
     # ==========================================================================
     "spread_liquidity": {
+        "enabled": True,
         "spread_threshold_bps": 10.0,
         "spread_ratio_threshold": 2.5,
         "velocity_threshold": 0.5,
@@ -60,6 +64,7 @@ STRATEGY_DEFAULTS: dict[str, dict[str, Any]] = {
         "min_signal_interval_seconds": 60.0,
     },
     "iceberg_detector": {
+        "enabled": True,
         "min_refill_count": 3,
         "refill_speed_threshold_seconds": 5.0,
         "consistency_threshold": 0.1,
@@ -82,6 +87,11 @@ PARAMETER_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
     # BTC Dominance Strategy
     # ==========================================================================
     "btc_dominance": {
+        "enabled": {
+            "type": "bool",
+            "description": "Whether the strategy is enabled for signal generation",
+            "example": True,
+        },
         "high_threshold": {
             "type": "float",
             "min": 60.0,
@@ -122,6 +132,11 @@ PARAMETER_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
     # Cross-Exchange Spread Strategy
     # ==========================================================================
     "cross_exchange_spread": {
+        "enabled": {
+            "type": "bool",
+            "description": "Whether the strategy is enabled for signal generation",
+            "example": True,
+        },
         "spread_threshold_percent": {
             "type": "float",
             "min": 0.1,
@@ -148,6 +163,11 @@ PARAMETER_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
     # On-Chain Metrics Strategy
     # ==========================================================================
     "onchain_metrics": {
+        "enabled": {
+            "type": "bool",
+            "description": "Whether the strategy is enabled for signal generation",
+            "example": True,
+        },
         "whale_threshold_btc": {
             "type": "float",
             "min": 10,
@@ -181,6 +201,11 @@ PARAMETER_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
     # Spread Liquidity Strategy
     # ==========================================================================
     "spread_liquidity": {
+        "enabled": {
+            "type": "bool",
+            "description": "Whether the strategy is enabled for signal generation",
+            "example": True,
+        },
         "spread_threshold_bps": {
             "type": "float",
             "min": 1.0,
@@ -242,6 +267,11 @@ PARAMETER_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
     # Iceberg Detector Strategy
     # ==========================================================================
     "iceberg_detector": {
+        "enabled": {
+            "type": "bool",
+            "description": "Whether the strategy is enabled for signal generation",
+            "example": True,
+        },
         "min_refill_count": {
             "type": "int",
             "min": 2,

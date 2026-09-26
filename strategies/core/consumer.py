@@ -968,6 +968,8 @@ class NATSConsumer:
         """Process microstructure strategies (spread liquidity, iceberg detector)."""
         try:
             for strategy_name, strategy in self.microstructure_strategies.items():
+                if not await self._apply_dynamic_config(strategy_name, strategy):
+                    continue
                 # Use metrics context for timing and signal recording
                 with MetricsContext(
                     strategy=strategy_name, symbol=symbol, metrics=self.metrics
@@ -978,7 +980,6 @@ class NATSConsumer:
                         # were wired in #197). Apply the same pattern here so
                         # /api/v1/strategies/** writes reach spread_liquidity and
                         # iceberg_detector too.
-                        await self._apply_dynamic_config(strategy_name, strategy)
                         # Analyze order book
                         signal = strategy.analyze(symbol=symbol, bids=bids, asks=asks)
 
@@ -1032,7 +1033,7 @@ class NATSConsumer:
         "cross_exchange_spread": {"spread_threshold_percent": "spread_threshold"},
     }
 
-    async def _apply_dynamic_config(self, strategy_name: str, strategy: Any) -> None:
+    async def _apply_dynamic_config(self, strategy_name: str, strategy: Any) -> bool:
         """
         Apply the live StrategyConfigManager config onto a strategy instance.
 
@@ -1044,7 +1045,7 @@ class NATSConsumer:
         ever narrows to parameters the strategy already declares via `constants.py`.
         """
         if self.config_manager is None:
-            return
+            return True
         try:
             config = await self.config_manager.get_config(strategy_name)
         except Exception as e:
@@ -1053,12 +1054,15 @@ class NATSConsumer:
                 strategy=strategy_name,
                 error=str(e),
             )
-            return
+            return True
         remap = self._CONFIG_ATTR_REMAP.get(strategy_name, {})
-        for key, value in (config.get("parameters") or {}).items():
+        parameters = config.get("parameters") or {}
+        enabled = parameters.get("enabled", True)
+        for key, value in parameters.items():
             attr: str = remap.get(key) or key
             if hasattr(strategy, attr):
                 setattr(strategy, attr, value)
+        return enabled is not False
 
     async def _process_market_logic_strategies(
         self, market_data: MarketDataMessage
@@ -1074,12 +1078,13 @@ class NATSConsumer:
 
             # Process through each enabled market logic strategy
             for strategy_name, strategy in self.market_logic_strategies.items():
+                if not await self._apply_dynamic_config(strategy_name, strategy):
+                    continue
                 # Use metrics context for timing and signal recording
                 with MetricsContext(
                     strategy=strategy_name, symbol=symbol, metrics=self.metrics
                 ) as ctx:
                     try:
-                        await self._apply_dynamic_config(strategy_name, strategy)
                         if strategy_name == "btc_dominance":
                             # Bitcoin Dominance Strategy
                             signal = await strategy.process_market_data(market_data)

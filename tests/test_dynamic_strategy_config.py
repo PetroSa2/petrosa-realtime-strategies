@@ -159,3 +159,47 @@ class TestDynamicConfigWiring:
 
         await consumer._apply_dynamic_config("btc_dominance", strat)
         assert strat.high_threshold == original
+
+    @pytest.mark.asyncio
+    async def test_disabled_market_strategy_is_not_called(self, consumer):
+        disabled = Mock()
+        disabled.process_market_data = AsyncMock()
+        enabled = Mock()
+        enabled.process_market_data = AsyncMock(return_value=None)
+        consumer.market_logic_strategies = {
+            "btc_dominance": disabled,
+            "cross_exchange_spread": enabled,
+        }
+        consumer.config_manager = Mock()
+        consumer.config_manager.get_config = AsyncMock(
+            side_effect=lambda strategy_id: {
+                "parameters": {"enabled": strategy_id != "btc_dominance"}
+            }
+        )
+
+        await consumer._process_market_logic_strategies(make_mdm("BTCUSDT", "50000"))
+
+        disabled.process_market_data.assert_not_awaited()
+        enabled.process_market_data.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_disabled_microstructure_strategy_is_not_called(self, consumer):
+        disabled = Mock()
+        disabled.analyze = Mock()
+        enabled = Mock()
+        enabled.analyze = Mock(return_value=None)
+        consumer.microstructure_strategies = {
+            "iceberg_detector": disabled,
+            "spread_liquidity": enabled,
+        }
+        consumer.config_manager = Mock()
+        consumer.config_manager.get_config = AsyncMock(
+            side_effect=lambda strategy_id: {
+                "parameters": {"enabled": strategy_id != "iceberg_detector"}
+            }
+        )
+
+        await consumer._process_microstructure_strategies("BTCUSDT", [], [])
+
+        disabled.analyze.assert_not_called()
+        enabled.analyze.assert_called_once()
