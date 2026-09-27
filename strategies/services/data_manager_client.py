@@ -87,6 +87,45 @@ class DataManagerClient:
 
     # Configuration Management Methods
 
+    async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
+        """Read a strategy lifecycle document from the dedicated collection."""
+        try:
+            result = await self._client.query(
+                database="mongodb",
+                collection="strategy_lifecycle_states",
+                filter={"strategy_id": strategy_id},
+                limit=1,
+            )
+            return result["data"][0] if result.get("data") else None
+        except Exception as e:
+            self._logger.error(
+                "Error fetching lifecycle state for %s: %s", strategy_id, e
+            )
+            return None
+
+    async def upsert_lifecycle_state(
+        self, strategy_id: str, state: dict[str, Any]
+    ) -> str | None:
+        """Persist a strategy lifecycle document in the dedicated collection."""
+        try:
+            result = await self._client.update(
+                database="mongodb",
+                collection="strategy_lifecycle_states",
+                filter={"strategy_id": strategy_id},
+                data={"strategy_id": strategy_id, **state},
+                upsert=True,
+            )
+            return (
+                strategy_id
+                if result.get("modified_count", 0) or result.get("upserted_count", 0)
+                else None
+            )
+        except Exception as e:
+            self._logger.error(
+                "Error saving lifecycle state for %s: %s", strategy_id, e
+            )
+            return None
+
     async def get_global_config(self, strategy_id: str) -> dict[str, Any | None]:
         """
         Get global configuration for a strategy.

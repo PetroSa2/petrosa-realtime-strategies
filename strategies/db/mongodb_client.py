@@ -168,10 +168,49 @@ class MongoDBClient:
                 [("changed_at", -1)]  # Descending for recent-first queries
             )
 
+            await self.database.strategy_lifecycle_states.create_index(
+                "strategy_id", unique=True
+            )
+
             logger.info("MongoDB indexes created successfully")
 
         except Exception as e:
             logger.warning(f"Failed to create MongoDB indexes: {e}")
+
+    async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
+        """Read the durable lifecycle state for a strategy."""
+        if self.use_data_manager:
+            return await self.data_manager_client.get_lifecycle_state(strategy_id)
+        if not self._connected:
+            return None
+        try:
+            return await self.database.strategy_lifecycle_states.find_one(
+                {"strategy_id": strategy_id}
+            )
+        except Exception as e:
+            logger.error("Error fetching lifecycle state for %s: %s", strategy_id, e)
+            return None
+
+    async def upsert_lifecycle_state(
+        self, strategy_id: str, state: dict[str, Any]
+    ) -> str | None:
+        """Persist a lifecycle state in its dedicated collection."""
+        if self.use_data_manager:
+            return await self.data_manager_client.upsert_lifecycle_state(
+                strategy_id, state
+            )
+        if not self._connected:
+            return None
+        try:
+            result = await self.database.strategy_lifecycle_states.update_one(
+                {"strategy_id": strategy_id},
+                {"$set": {"strategy_id": strategy_id, **state}},
+                upsert=True,
+            )
+            return str(result.upserted_id or strategy_id)
+        except Exception as e:
+            logger.error("Error saving lifecycle state for %s: %s", strategy_id, e)
+            return None
 
     @property
     def is_connected(self) -> bool:
