@@ -50,6 +50,14 @@ class ConfigUpdateRequest(BaseModel):
     )
 
 
+class LifecycleStateRequest(BaseModel):
+    """Request to change a strategy lifecycle state."""
+
+    state: str | None = Field(None, description="running or paused")
+    reason: str | None = Field(None, description="Why the state changed")
+    changed_by: str = Field(..., description="Who requested the state change")
+
+
 class ParameterSchemaItem(BaseModel):
     """Parameter schema definition."""
 
