@@ -11,7 +11,7 @@ When working on this service, read the master cursorrules first to understand th
 
 ### Service Context
 
-The **Petrosa Realtime Strategies** service is a horizontally scalable, stateless signal generation engine that processes real-time market data from NATS and generates trading signals using multiple strategies. Unlike the TA Bot which analyzes historical data from MySQL, this service operates on **streaming data** with **zero state** between messages, enabling linear scalability through NATS consumer groups.
+The **Petrosa Realtime Strategies** service is a horizontally scalable, stateless signal generation engine that processes real-time market data from NATS and generates trading signals using multiple strategies. Unlike the TA Bot which analyzes historical market data, this service operates on **streaming data** with **zero state** between messages, enabling linear scalability through NATS consumer groups.
 
 This service implements **3 core stateless strategies**: Order Book Skew, Trade Momentum, and Ticker Velocity. Each message is processed independently, and **3-10 replicas** can run concurrently via HPA (Horizontal Pod Autoscaler), with NATS automatically load-balancing messages across instances.
 
@@ -60,8 +60,8 @@ petrosa-realtime-strategies/
 │   ├── models/                # Data models
 │   │   ├── signal.py
 │   │   └── market_data.py
-│   └── db/                    # MongoDB for config persistence
-│       └── config_store.py
+│   └── db/                    # data-manager facade for config persistence
+│       └── mongodb_client.py
 └── k8s/
     ├── deployment.yaml        # 3 replicas
     ├── hpa.yaml               # Auto-scaling config
@@ -513,10 +513,7 @@ NATS_CONSUMER_GROUP="realtime-strategies-group"  # CRITICAL for load balancing
 # Trading symbols
 TRADING_SYMBOLS="BTCUSDT,ETHUSDT,BNBUSDT"
 
-# Database (for configuration persistence)
-MONGODB_URI="mongodb://mongodb:27017"
-MONGODB_DATABASE="petrosa"
-MYSQL_URI="mysql+pymysql://user:pass@host:3306/db"  # Fallback
+# Configuration persistence is served by data-manager (MongoDB); no MySQL fallback.
 
 # Strategy toggles
 STRATEGY_ENABLED_ORDERBOOK_SKEW=true

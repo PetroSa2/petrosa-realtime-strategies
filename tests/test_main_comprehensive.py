@@ -92,9 +92,6 @@ def service(mock_components):
         mock_constants.NATS_CONSUMER_NAME = "test_consumer"
         mock_constants.NATS_CONSUMER_GROUP = "test_group"
         mock_constants.HEARTBEAT_INTERVAL_SECONDS = 30
-        mock_constants.MONGODB_URI = "mongodb://localhost:27017"
-        mock_constants.MONGODB_DATABASE = "test_db"
-        mock_constants.MONGODB_TIMEOUT_MS = 5000
 
         service = StrategiesService()
         return service
@@ -176,10 +173,11 @@ async def test_start_survives_mongodb_down(service, mock_components):
         patch("strategies.main.TradeOrderPublisher") as mock_publisher,
         patch("strategies.main.NATSConsumer") as mock_consumer,
         patch("strategies.main.HeartbeatManager") as mock_heartbeat,
-        patch("strategies.main.ConfigRateLimiter") as mock_rate_limiter_cls,
+        patch(
+            "strategies.main.DataManagerConfigRateLimiter"
+        ) as mock_rate_limiter_cls,
     ):
-        # Both the config-manager's general Mongo client and the rate limiter's
-        # dedicated direct client fail to connect (Mongo entirely down).
+        # The data-manager health check fails, but startup remains fail-open.
         mock_mongo_instance = MagicMock()
         mock_mongo_instance.connect = AsyncMock(return_value=False)
         mock_mongo.return_value = mock_mongo_instance
@@ -198,9 +196,11 @@ async def test_start_survives_mongodb_down(service, mock_components):
         mock_components["config_manager"].start.assert_called_once()
         mock_components["consumer"].start.assert_called_once()
         mock_components["heartbeat_manager"].start.assert_called_once()
-        # Rate limiter must be disabled, not constructed, when its Mongo client
-        # failed to connect.
-        mock_rate_limiter_cls.assert_not_called()
+        mock_rate_limiter_cls.assert_called_once()
+        assert (
+            mock_rate_limiter_cls.call_args.kwargs["service_name"]
+            == "realtime-strategies"
+        )
 
 
 @pytest.mark.asyncio
@@ -826,21 +826,6 @@ async def test_service_startup_sequence(service, mock_components):
         mock_components["publisher"].start.assert_called_once()
         mock_components["consumer"].start.assert_called_once()
         mock_components["heartbeat_manager"].start.assert_called_once()
-
-        # Verify dual MongoDB clients
-        assert mock_mongo.call_count == 2
-        assert mock_mongo_instance.connect.call_count == 2
-
-        # Verify rate limiter client was called with use_data_manager=False
-        rate_limit_call = next(
-            (
-                c
-                for c in mock_mongo.call_args_list
-                if c.kwargs.get("use_data_manager") is False
-            ),
-            None,
-        )
-        assert rate_limit_call is not None
 
         # Verify component references are set
         assert service.config_manager == mock_components["config_manager"]

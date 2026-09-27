@@ -1,348 +1,70 @@
-"""
-MongoDB client for strategy configuration management.
-
-This client now supports both direct MongoDB connections and Data Manager API
-for configuration management. Data Manager is the recommended approach for new deployments.
-
-Provides async MongoDB operations using Motor driver for:
-- Strategy configuration storage (global and per-symbol)
-- Configuration audit trail
-- High availability with connection pooling
-"""
+"""Data-manager facade retained for the strategy configuration API."""
 
 import logging
-import os
-from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any
 
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from pymongo.errors import ConnectionFailure
-
-# Import Data Manager client
-try:
-    from ..services.data_manager_client import DataManagerClient
-
-    DATA_MANAGER_AVAILABLE = True
-except ImportError:
-    DATA_MANAGER_AVAILABLE = False
-    DataManagerClient = None
+from ..services.data_manager_client import DataManagerClient
 
 logger = logging.getLogger(__name__)
 
 
 class MongoDBClient:
-    """
-    Async MongoDB client for strategy configuration persistence.
+    """Compatibility facade backed exclusively by the data-manager service.
 
-    Supports both direct MongoDB connections and Data Manager API.
-    Data Manager is the recommended approach for new deployments.
-
-    Features:
-    - Connection pooling with configurable limits
-    - Automatic retry with exponential backoff
-    - Health check support
-    - Graceful degradation on connection failure
+    The class name remains part of the configuration manager interface, but this
+    service no longer owns MongoDB connections or a direct-storage fallback.
     """
 
-    def __init__(
-        self,
-        uri: str | None = None,
-        database: str | None = None,
-        max_pool_size: int = 10,
-        min_pool_size: int = 1,
-        timeout_ms: int = 5000,
-        use_data_manager: bool = True,
-    ):
-        """
-        Initialize MongoDB client.
-
-        Args:
-            uri: MongoDB connection URI (from env MONGODB_URI if not provided)
-            database: Database name (from env MONGODB_DATABASE if not provided)
-            max_pool_size: Maximum connection pool size
-            min_pool_size: Minimum connection pool size
-            timeout_ms: Connection and operation timeout in milliseconds
-            use_data_manager: If True, use Data Manager API instead of direct MongoDB
-        """
-        self.use_data_manager = use_data_manager and DATA_MANAGER_AVAILABLE
-
-        if self.use_data_manager:
-            # Initialize Data Manager client
-            self.data_manager_client = DataManagerClient()
-            self.client = None  # No direct MongoDB connection needed
-            self.database = None
-            self._connected = False
-            logger.info("Using Data Manager for configuration management")
-            return
-
-        # Fallback to direct MongoDB connection
-        logger.info("Using direct MongoDB connection")
-        self.uri = uri or os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-        self.database_name = database or os.getenv("MONGODB_DATABASE", "petrosa")
-        self.max_pool_size = max_pool_size
-        self.min_pool_size = min_pool_size
-        self.timeout_ms = timeout_ms
-
-        self.client: AsyncIOMotorClient | None = None
-        self.database: AsyncIOMotorDatabase | None = None
+    def __init__(self) -> None:
+        self.data_manager_client = DataManagerClient()
         self._connected = False
 
     async def connect(self) -> bool:
-        """
-        Establish connection to MongoDB or Data Manager.
-
-        Returns:
-            True if connected successfully, False otherwise
-        """
-        if self.use_data_manager:
-            await self.data_manager_client.connect()
-            self._connected = True
-            return True
-
         try:
-            self.client = AsyncIOMotorClient(
-                self.uri,
-                maxPoolSize=self.max_pool_size,
-                minPoolSize=self.min_pool_size,
-                serverSelectionTimeoutMS=self.timeout_ms,
-                connectTimeoutMS=self.timeout_ms,
-                socketTimeoutMS=self.timeout_ms,
-                retryWrites=True,
-                retryReads=True,
-            )
-
-            # Test connection
-            await self.client.admin.command("ping")
-
-            self.database = self.client[self.database_name]
-            self._connected = True
-
-            logger.info(
-                f"Connected to MongoDB: {self.database_name}",
-                extra={"database": self.database_name},
-            )
-
-            # Create indexes for performance
-            await self._create_indexes()
-
-            return True
-
-        except ConnectionFailure as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
+            await self.data_manager_client.connect()
+        except Exception as exc:
+            logger.error("Failed to connect to Data Manager: %s", exc)
             self._connected = False
             return False
-        except Exception as e:
-            logger.error(f"Unexpected error connecting to MongoDB: {e}")
-            self._connected = False
-            return False
+        self._connected = True
+        return True
 
     async def disconnect(self) -> None:
-        """Close MongoDB or Data Manager connection gracefully."""
-        if self.use_data_manager:
-            await self.data_manager_client.disconnect()
-            self._connected = False
-        else:
-            if self.client:
-                self.client.close()
-                self._connected = False
-                logger.info("Disconnected from MongoDB")
+        await self.data_manager_client.disconnect()
+        self._connected = False
 
-    async def _create_indexes(self) -> None:
-        """Create indexes for configuration collections."""
-        try:
-            # Global configs: index on strategy_id
-            await self.database.strategy_configs_global.create_index(
-                "strategy_id", unique=True
-            )
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
 
-            # Symbol configs: compound index on strategy_id + symbol
-            await self.database.strategy_configs_symbol.create_index(
-                [("strategy_id", 1), ("symbol", 1)], unique=True
-            )
-
-            # Audit trail: indexes for querying
-            await self.database.strategy_config_audit.create_index(
-                [("strategy_id", 1), ("symbol", 1)]
-            )
-            await self.database.strategy_config_audit.create_index(
-                [("changed_at", -1)]  # Descending for recent-first queries
-            )
-
-            await self.database.strategy_lifecycle_states.create_index(
-                "strategy_id", unique=True
-            )
-
-            logger.info("MongoDB indexes created successfully")
-
-        except Exception as e:
-            logger.warning(f"Failed to create MongoDB indexes: {e}")
+    async def health_check(self) -> bool:
+        if not self._connected:
+            return False
+        health = await self.data_manager_client.health_check()
+        return health.get("status") == "healthy"
 
     async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
-        """Read the durable lifecycle state for a strategy."""
-        if self.use_data_manager:
-            return await self.data_manager_client.get_lifecycle_state(strategy_id)
-        if not self._connected:
-            return None
-        try:
-            return await self.database.strategy_lifecycle_states.find_one(
-                {"strategy_id": strategy_id}
-            )
-        except Exception as e:
-            logger.error("Error fetching lifecycle state for %s: %s", strategy_id, e)
-            return None
+        return await self.data_manager_client.get_lifecycle_state(strategy_id)
 
     async def upsert_lifecycle_state(
         self, strategy_id: str, state: dict[str, Any]
     ) -> str | None:
-        """Persist a lifecycle state in its dedicated collection."""
-        if self.use_data_manager:
-            return await self.data_manager_client.upsert_lifecycle_state(
-                strategy_id, state
-            )
-        if not self._connected:
-            return None
-        try:
-            result = await self.database.strategy_lifecycle_states.update_one(
-                {"strategy_id": strategy_id},
-                {"$set": {"strategy_id": strategy_id, **state}},
-                upsert=True,
-            )
-            return str(result.upserted_id or strategy_id)
-        except Exception as e:
-            logger.error("Error saving lifecycle state for %s: %s", strategy_id, e)
-            return None
-
-    @property
-    def is_connected(self) -> bool:
-        """Check if client is connected."""
-        return self._connected
-
-    async def health_check(self) -> bool:
-        """
-        Perform health check.
-
-        Returns:
-            True if MongoDB is healthy, False otherwise
-        """
-        if not self._connected or not self.client:
-            return False
-
-        try:
-            await self.client.admin.command("ping")
-            return True
-        except Exception as e:
-            logger.error(f"MongoDB health check failed: {e}")
-            return False
+        return await self.data_manager_client.upsert_lifecycle_state(strategy_id, state)
 
     async def get_global_config(self, strategy_id: str) -> dict[str, Any] | None:
-        """
-        Get global configuration for a strategy.
-
-        Args:
-            strategy_id: Strategy identifier
-
-        Returns:
-            Configuration document or None if not found
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.get_global_config(strategy_id)
-
-        if not self._connected:
-            return None
-
-        try:
-            config = await self.database.strategy_configs_global.find_one(
-                {"strategy_id": strategy_id}
-            )
-            return config
-        except Exception as e:
-            logger.error(f"Error fetching global config for {strategy_id}: {e}")
-            return None
+        return await self.data_manager_client.get_global_config(strategy_id)
 
     async def get_symbol_config(
         self, strategy_id: str, symbol: str
     ) -> dict[str, Any] | None:
-        """
-        Get symbol-specific configuration for a strategy.
-
-        Args:
-            strategy_id: Strategy identifier
-            symbol: Trading symbol (e.g., 'BTCUSDT')
-
-        Returns:
-            Configuration document or None if not found
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.get_symbol_config(strategy_id, symbol)
-
-        if not self._connected:
-            return None
-
-        try:
-            config = await self.database.strategy_configs_symbol.find_one(
-                {"strategy_id": strategy_id, "symbol": symbol}
-            )
-            return config
-        except Exception as e:
-            logger.error(
-                f"Error fetching symbol config for {strategy_id}/{symbol}: {e}"
-            )
-            return None
+        return await self.data_manager_client.get_symbol_config(strategy_id, symbol)
 
     async def upsert_global_config(
         self, strategy_id: str, parameters: dict[str, Any], metadata: dict[str, Any]
     ) -> str | None:
-        """
-        Create or update global configuration.
-
-        Args:
-            strategy_id: Strategy identifier
-            parameters: Parameter key-value pairs
-            metadata: Additional metadata (created_by, reason, etc.)
-
-        Returns:
-            Configuration ID or None on failure
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.upsert_global_config(
-                strategy_id, parameters, metadata
-            )
-
-        if not self._connected:
-            return None
-
-        try:
-            now = datetime.now(UTC)
-            doc = {
-                "strategy_id": strategy_id,
-                "parameters": parameters,
-                "updated_at": now,
-                "metadata": metadata,
-            }
-
-            # Get existing to check version
-            existing = await self.get_global_config(strategy_id)
-            if existing:
-                doc["version"] = existing.get("version", 1) + 1
-                doc["created_at"] = existing.get("created_at", now)
-            else:
-                doc["version"] = 1
-                doc["created_at"] = now
-
-            result = await self.database.strategy_configs_global.update_one(
-                {"strategy_id": strategy_id}, {"$set": doc}, upsert=True
-            )
-
-            if result.upserted_id:
-                logger.info(f"Created global config for {strategy_id}")
-                return str(result.upserted_id)
-            else:
-                logger.info(f"Updated global config for {strategy_id}")
-                return strategy_id
-
-        except Exception as e:
-            logger.error(f"Error upserting global config for {strategy_id}: {e}")
-            return None
+        return await self.data_manager_client.upsert_global_config(
+            strategy_id, parameters, metadata
+        )
 
     async def upsert_symbol_config(
         self,
@@ -351,310 +73,48 @@ class MongoDBClient:
         parameters: dict[str, Any],
         metadata: dict[str, Any],
     ) -> str | None:
-        """
-        Create or update symbol-specific configuration.
-
-        Args:
-            strategy_id: Strategy identifier
-            symbol: Trading symbol
-            parameters: Parameter key-value pairs
-            metadata: Additional metadata
-
-        Returns:
-            Configuration ID or None on failure
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.upsert_symbol_config(
-                strategy_id, symbol, parameters, metadata
-            )
-
-        if not self._connected:
-            return None
-
-        try:
-            now = datetime.now(UTC)
-            doc = {
-                "strategy_id": strategy_id,
-                "symbol": symbol,
-                "parameters": parameters,
-                "updated_at": now,
-                "metadata": metadata,
-            }
-
-            # Get existing to check version
-            existing = await self.get_symbol_config(strategy_id, symbol)
-            if existing:
-                doc["version"] = existing.get("version", 1) + 1
-                doc["created_at"] = existing.get("created_at", now)
-            else:
-                doc["version"] = 1
-                doc["created_at"] = now
-
-            result = await self.database.strategy_configs_symbol.update_one(
-                {"strategy_id": strategy_id, "symbol": symbol},
-                {"$set": doc},
-                upsert=True,
-            )
-
-            if result.upserted_id:
-                logger.info(f"Created symbol config for {strategy_id}/{symbol}")
-                return str(result.upserted_id)
-            else:
-                logger.info(f"Updated symbol config for {strategy_id}/{symbol}")
-                return f"{strategy_id}:{symbol}"
-
-        except Exception as e:
-            logger.error(
-                f"Error upserting symbol config for {strategy_id}/{symbol}: {e}"
-            )
-            return None
+        return await self.data_manager_client.upsert_symbol_config(
+            strategy_id, symbol, parameters, metadata
+        )
 
     async def delete_global_config(self, strategy_id: str) -> bool:
-        """
-        Delete global configuration.
-
-        Args:
-            strategy_id: Strategy identifier
-
-        Returns:
-            True if deleted, False otherwise
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.delete_global_config(strategy_id)
-
-        if not self._connected:
-            return False
-
-        try:
-            result = await self.database.strategy_configs_global.delete_one(
-                {"strategy_id": strategy_id}
-            )
-            if result.deleted_count > 0:
-                logger.info(f"Deleted global config for {strategy_id}")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Error deleting global config for {strategy_id}: {e}")
-            return False
+        return await self.data_manager_client.delete_global_config(strategy_id)
 
     async def delete_symbol_config(self, strategy_id: str, symbol: str) -> bool:
-        """
-        Delete symbol-specific configuration.
-
-        Args:
-            strategy_id: Strategy identifier
-            symbol: Trading symbol
-
-        Returns:
-            True if deleted, False otherwise
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.delete_symbol_config(
-                strategy_id, symbol
-            )
-
-        if not self._connected:
-            return False
-
-        try:
-            result = await self.database.strategy_configs_symbol.delete_one(
-                {"strategy_id": strategy_id, "symbol": symbol}
-            )
-            if result.deleted_count > 0:
-                logger.info(f"Deleted symbol config for {strategy_id}/{symbol}")
-                return True
-            return False
-        except Exception as e:
-            logger.error(
-                f"Error deleting symbol config for {strategy_id}/{symbol}: {e}"
-            )
-            return False
+        return await self.data_manager_client.delete_symbol_config(strategy_id, symbol)
 
     async def create_audit_record(self, audit_data: dict[str, Any]) -> str | None:
-        """
-        Create audit trail record for configuration change.
-
-        Args:
-            audit_data: Audit information (action, old/new values, changed_by, etc.)
-
-        Returns:
-            Audit record ID or None on failure
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.create_audit_record(audit_data)
-
-        if not self._connected:
-            return None
-
-        try:
-            audit_data["changed_at"] = datetime.now(UTC)
-            result = await self.database.strategy_config_audit.insert_one(audit_data)
-            logger.info(
-                f"Created audit record for {audit_data.get('strategy_id')}",
-                extra={"action": audit_data.get("action")},
-            )
-            return str(result.inserted_id)
-        except Exception as e:
-            logger.error(f"Error creating audit record: {e}")
-            return None
+        return await self.data_manager_client.create_audit_record(audit_data)
 
     async def get_audit_trail(
         self, strategy_id: str, symbol: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
-        """
-        Get configuration change history.
-
-        Args:
-            strategy_id: Strategy identifier
-            symbol: Optional symbol filter
-            limit: Maximum number of records to return
-
-        Returns:
-            List of audit records (most recent first)
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.get_audit_trail(
-                strategy_id, symbol, limit
-            )
-
-        if not self._connected:
-            return []
-
-        try:
-            query = {"strategy_id": strategy_id}
-            if symbol:
-                query["symbol"] = symbol
-
-            cursor = (
-                self.database.strategy_config_audit.find(query)
-                .sort("changed_at", -1)
-                .limit(limit)
-            )
-
-            records = await cursor.to_list(length=limit)
-            return records
-
-        except Exception as e:
-            logger.error(f"Error fetching audit trail for {strategy_id}: {e}")
-            return []
+        return await self.data_manager_client.get_audit_trail(strategy_id, symbol, limit)
 
     async def get_audit_record_by_id(self, audit_id: str) -> dict[str, Any] | None:
-        """
-        Get a specific audit record by its ID.
-
-        Args:
-            audit_id: Audit record unique identifier
-
-        Returns:
-            Audit record or None if not found
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.get_audit_record_by_id(audit_id)
-
-        if not self._connected:
-            return None
-
-        try:
-            from bson import ObjectId
-
-            # Handle both string IDs and ObjectId if passed
-            query_id = ObjectId(audit_id) if isinstance(audit_id, str) else audit_id
-            record = await self.database.strategy_config_audit.find_one(
-                {"_id": query_id}
-            )
-            return record
-        except Exception as e:
-            logger.debug(f"Error fetching audit record {audit_id}: {e}")
-            return None
+        return await self.data_manager_client.get_audit_record_by_id(audit_id)
 
     async def get_audit_record_by_version(
         self, strategy_id: str, version: int, symbol: str | None = None
     ) -> dict[str, Any] | None:
-        """
-        Get a specific audit record by its version.
-
-        Args:
-            strategy_id: Strategy identifier
-            version: Version number
-            symbol: Optional symbol filter
-
-        Returns:
-            Audit record or None if not found
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.get_audit_record_by_version(
-                strategy_id, version, symbol
-            )
-
-        if not self._connected:
-            return None
-
-        try:
-            query = {
-                "strategy_id": strategy_id,
-                "new_parameters.version": version,
-            }
-            if symbol:
-                query["symbol"] = symbol
-
-            record = await self.database.strategy_config_audit.find_one(query)
-            return record
-        except Exception as e:
-            logger.debug(
-                f"Error fetching audit record for {strategy_id} v{version}: {e}"
-            )
-            return None
+        return await self.data_manager_client.get_audit_record_by_version(
+            strategy_id, version, symbol
+        )
 
     async def list_all_strategy_ids(self) -> list[str]:
-        """
-        Get list of all strategy IDs with configurations.
-
-        Returns:
-            List of unique strategy IDs
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.list_all_strategy_ids()
-
-        if not self._connected:
-            return []
-
-        try:
-            global_ids = await self.database.strategy_configs_global.distinct(
-                "strategy_id"
-            )
-            symbol_ids = await self.database.strategy_configs_symbol.distinct(
-                "strategy_id"
-            )
-
-            # Combine and deduplicate
-            all_ids = list(set(global_ids + symbol_ids))
-            return sorted(all_ids)
-
-        except Exception as e:
-            logger.error(f"Error listing strategy IDs: {e}")
-            return []
+        return await self.data_manager_client.list_all_strategy_ids()
 
     async def list_symbol_overrides(self, strategy_id: str) -> list[str]:
-        """
-        Get list of symbols with configuration overrides for a strategy.
+        return await self.data_manager_client.list_symbol_overrides(strategy_id)
 
-        Args:
-            strategy_id: Strategy identifier
-
-        Returns:
-            List of symbols with overrides
-        """
-        if self.use_data_manager:
-            return await self.data_manager_client.list_symbol_overrides(strategy_id)
-
-        if not self._connected:
-            return []
-
-        try:
-            symbols = await self.database.strategy_configs_symbol.distinct(
-                "symbol", {"strategy_id": strategy_id}
-            )
-            return sorted(symbols)
-        except Exception as e:
-            logger.error(f"Error listing symbol overrides for {strategy_id}: {e}")
-            return []
+    async def rollback_strategy_config(
+        self,
+        strategy_id: str,
+        changed_by: str,
+        symbol: str | None = None,
+        target_version: int | None = None,
+        reason: str | None = None,
+    ) -> bool:
+        return await self.data_manager_client.rollback_strategy_config(
+            strategy_id, changed_by, symbol, target_version, reason
+        )

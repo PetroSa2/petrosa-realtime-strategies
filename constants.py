@@ -29,9 +29,6 @@ NATS_CONSUMER_NAME = os.getenv("NATS_CONSUMER_NAME", "realtime-strategies-consum
 NATS_CONSUMER_GROUP = os.getenv("NATS_CONSUMER_GROUP", "realtime-strategies-group")
 
 # MongoDB Configuration
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "petrosa")
-MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 
 # Market Logic Strategies (from QTZD adaptation)
 STRATEGY_ENABLED_BTC_DOMINANCE = (

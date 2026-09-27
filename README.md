@@ -15,8 +15,8 @@ A high-performance, horizontally scalable trading signal service that processes 
 | Service | Purpose | Input | Output | Status |
 |---------|---------|-------|--------|--------|
 | **petrosa-socket-client** | Real-time WebSocket data ingestion | Binance WebSocket API | NATS: `binance.futures.websocket.data` | Real-time Processing |
-| **petrosa-binance-data-extractor** | Historical data extraction & gap filling | Binance REST API | MySQL (klines, funding rates, trades) | Batch Processing |
-| **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | MySQL klines data | NATS: `intent.trading.*` | Signal Generation |
+| **petrosa-binance-data-extractor** | Historical data extraction & gap filling | Binance REST API | Historical market data | Batch Processing |
+| **petrosa-bot-ta-analysis** | Technical analysis (28 strategies) | Historical market data | NATS: `intent.trading.*` | Signal Generation |
 | **petrosa-cio** | Centralized orchestrator & gatekeeper | NATS: `intent.>` | NATS: `signals.trading` | Interception Layer |
 | **petrosa-realtime-strategies** | Real-time signal generation | NATS: `binance.futures.websocket.data` | NATS: `intent.trading.*` | **YOU ARE HERE** |
 | **petrosa-tradeengine** | Order execution & trade management | NATS: `signals.trading` | Binance Orders API, MongoDB audit | Order Execution |
@@ -753,7 +753,7 @@ curl http://realtime-strategies:8080/api/v1/metrics/summary | jq '.market_sentim
 
 ### Configuration Architecture
 
-- **MongoDB Persistence**: Primary storage for configurations
+- **Config persistence is served by data-manager (MongoDB); no MySQL fallback.**
 - **60-Second Caching**: Fast performance, automatic refresh
 - **Environment Fallback**: Backward compatible with ConfigMap
 - **Audit Trail**: Full change history tracking
@@ -864,8 +864,8 @@ All signals include configuration metadata for tracking:
 
 ### Configuration Features
 
-- ✅ **5-Level Priority**: Cache → MongoDB Symbol → MySQL Symbol → MongoDB Global → MySQL Global → Defaults
-- ✅ **Dual Persistence**: MongoDB primary, MySQL fallback
+- ✅ **Configuration priority**: Cache → data-manager symbol → data-manager global → Defaults
+- ✅ **Data-manager persistence**: MongoDB-backed configuration storage
 - ✅ **60-Second Cache**: Minimal database load
 - ✅ **Full Audit Trail**: Track all changes with who/what/when/why
 - ✅ **Parameter Validation**: Type checking and range validation
@@ -876,9 +876,6 @@ All signals include configuration metadata for tracking:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
-| `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
-| `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string |
 | `CONFIG_CACHE_TTL_SECONDS` | `60` | Configuration cache TTL |
 | `FASTAPI_PORT` | `8080` | Configuration API port |
 
@@ -893,9 +890,6 @@ For complete documentation, examples, and troubleshooting, see the [TA Bot Confi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL |
-| `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
-| `MONGODB_DATABASE` | `petrosa` | MongoDB database name |
-| `MYSQL_URI` | `mysql://user:pass@host:3306/db` | MySQL connection string (fallback) |
 | `NATS_CONSUMER_TOPIC` | `binance.futures.websocket.data` | Input topic |
 | `NATS_PUBLISHER_TOPIC` | `intent.trading.*` | Output topic (Intercepted by CIO) |
 | `NATS_CONSUMER_GROUP` | `realtime-strategies-group` | Consumer group for load balancing |

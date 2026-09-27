@@ -167,7 +167,7 @@ class ConfigSource(BaseModel):
     Indicates where the configuration was loaded from.
     """
 
-    source: Literal["mongodb", "mysql", "default"] = Field(
+    source: Literal["mongodb", "default"] = Field(
         ..., description="Source of configuration"
     )
     is_override: bool = Field(
