@@ -13,7 +13,7 @@ Manages runtime configuration for trading strategies with:
 import asyncio
 import logging
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 import constants
@@ -63,7 +63,6 @@ class StrategyConfigManager:
         # Background tasks
         self._cache_refresh_task: asyncio.Task | None = None
         self._running = False
-        self.resume_cooldown_seconds = 60
 
     async def start(self) -> None:
         """Start the configuration manager and background tasks."""
@@ -164,15 +163,13 @@ class StrategyConfigManager:
         """
         start_time = time.time()
 
-        lifecycle = await self.get_lifecycle_state(strategy_id)
-
         # Check cache first
         cache_key = self._make_cache_key(strategy_id, symbol)
         cached = self._get_from_cache(cache_key)
         if cached:
             cached["cache_hit"] = True
             cached["load_time_ms"] = (time.time() - start_time) * 1000
-            return self._apply_lifecycle(cached, lifecycle)
+            return cached
 
         # Try MongoDB symbol-specific
         if symbol and self.mongodb_client and self.mongodb_client.is_connected:
@@ -184,7 +181,7 @@ class StrategyConfigManager:
                 self._set_cache(cache_key, result)
                 result["cache_hit"] = False
                 result["load_time_ms"] = (time.time() - start_time) * 1000
-                return self._apply_lifecycle(result, lifecycle)
+                return result
 
         # Try MongoDB global
         if self.mongodb_client and self.mongodb_client.is_connected:
@@ -194,7 +191,7 @@ class StrategyConfigManager:
                 self._set_cache(cache_key, result)
                 result["cache_hit"] = False
                 result["load_time_ms"] = (time.time() - start_time) * 1000
-                return self._apply_lifecycle(result, lifecycle)
+                return result
 
         # Try environment variables (backward compatibility)
         env_params = self._get_from_environment(strategy_id)
@@ -210,7 +207,7 @@ class StrategyConfigManager:
             self._set_cache(cache_key, result)
             result["cache_hit"] = False
             result["load_time_ms"] = (time.time() - start_time) * 1000
-            return self._apply_lifecycle(result, lifecycle)
+            return result
 
         # Use hardcoded defaults
         defaults = get_strategy_defaults(strategy_id)
@@ -225,71 +222,7 @@ class StrategyConfigManager:
         self._set_cache(cache_key, result)
         result["cache_hit"] = False
         result["load_time_ms"] = (time.time() - start_time) * 1000
-        return self._apply_lifecycle(result, lifecycle)
-
-    @staticmethod
-    def _apply_lifecycle(config: dict[str, Any], lifecycle: dict[str, Any] | None):
-        """Expose lifecycle state through the deprecated enabled alias."""
-        if lifecycle and lifecycle.get("state"):
-            config.setdefault("parameters", {})["enabled"] = (
-                lifecycle["state"] == "running"
-            )
-        return config
-
-    async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
-        """Return lifecycle state, failing open when its store is unavailable."""
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
-            return None
-        try:
-            return await self.mongodb_client.get_lifecycle_state(strategy_id)
-        except Exception as e:
-            logger.warning("Lifecycle lookup failed for %s: %s", strategy_id, e)
-            return None
-
-    async def set_lifecycle_state(
-        self,
-        strategy_id: str,
-        state: str,
-        changed_by: str,
-        reason: str | None = None,
-    ) -> tuple[bool, dict[str, Any] | None, int | None]:
-        """Persist an idempotent lifecycle state and enforce resume cooldown."""
-        if state not in {"running", "paused"}:
-            return False, None, None
-        if not get_strategy_defaults(strategy_id):
-            return False, None, None
-        now = datetime.now(UTC)
-        previous = await self.get_lifecycle_state(strategy_id)
-        if state == "running" and previous and previous.get("state") == "running":
-            changed_at = previous.get("changed_at")
-            if isinstance(changed_at, str):
-                changed_at = datetime.fromisoformat(changed_at.replace("Z", "+00:00"))
-            if changed_at and now - changed_at < timedelta(
-                seconds=self.resume_cooldown_seconds
-            ):
-                retry = (
-                    int(
-                        self.resume_cooldown_seconds
-                        - (now - changed_at).total_seconds()
-                    )
-                    + 1
-                )
-                return False, previous, retry
-        if previous and previous.get("state") == state:
-            return True, previous, None
-        document = {
-            "state": state,
-            "reason": reason,
-            "changed_by": changed_by,
-            "changed_at": now,
-            "expires_at": None,
-        }
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
-            return False, None, None
-        if not await self.mongodb_client.upsert_lifecycle_state(strategy_id, document):
-            return False, None, None
-        self._cache.pop(self._make_cache_key(strategy_id, None), None)
-        return True, {"strategy_id": strategy_id, **document}, None
+        return result
 
     def _doc_to_config_result(
         self, doc: dict[str, Any], source: str, is_override: bool
@@ -371,14 +304,6 @@ class StrategyConfigManager:
 
         if validate_only:
             return True, None, []
-
-        if "enabled" in parameters:
-            lifecycle_state = "running" if parameters["enabled"] else "paused"
-            ok, _, _ = await self.set_lifecycle_state(
-                strategy_id, lifecycle_state, changed_by, reason
-            )
-            if not ok:
-                return False, None, ["Lifecycle state could not be saved"]
 
         if not self.mongodb_client or not self.mongodb_client.is_connected:
             return False, None, ["MongoDB not available - cannot save configuration"]

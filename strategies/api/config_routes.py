@@ -21,7 +21,6 @@ from strategies.api.response_models import (
     ConfigUpdateRequest,
     ConfigValidationRequest,
     CrossServiceConflict,
-    LifecycleStateRequest,
     ParameterSchemaItem,
     StrategyListItem,
     ValidationError,
@@ -72,92 +71,6 @@ def get_config_manager() -> StrategyConfigManager:
             detail="Configuration manager not initialized",
         )
     return _config_manager
-
-
-def _lifecycle_payload(strategy_id: str, state: dict[str, Any]) -> dict[str, Any]:
-    """Serialize lifecycle timestamps consistently for API clients."""
-    return {
-        "strategy_id": strategy_id,
-        "state": state.get("state"),
-        "reason": state.get("reason"),
-        "changed_by": state.get("changed_by"),
-        "changed_at": (
-            state["changed_at"].isoformat()
-            if hasattr(state.get("changed_at"), "isoformat")
-            else state.get("changed_at")
-        ),
-        "expires_at": (
-            state["expires_at"].isoformat()
-            if hasattr(state.get("expires_at"), "isoformat")
-            else state.get("expires_at")
-        ),
-    }
-
-
-async def _set_lifecycle_state(strategy_id: str, request: LifecycleStateRequest):
-    manager = get_config_manager()
-    if request.state not in {"running", "paused"}:
-        raise HTTPException(status_code=422, detail="state must be running or paused")
-    success, state, retry_after = await manager.set_lifecycle_state(
-        strategy_id, request.state, request.changed_by, request.reason
-    )
-    if retry_after is not None:
-        raise HTTPException(
-            status_code=429,
-            detail={"retry_after": retry_after},
-            headers={"Retry-After": str(retry_after)},
-        )
-    if not success:
-        if not get_strategy_defaults(strategy_id):
-            raise HTTPException(status_code=404, detail="Strategy not found")
-        raise HTTPException(status_code=503, detail="Lifecycle store unavailable")
-    return APIResponse(success=True, data=_lifecycle_payload(strategy_id, state))
-
-
-@router.get("/strategies/{strategy_id}/state", response_model=APIResponse)
-async def get_lifecycle_state(strategy_id: str = Path(...)):
-    """Return the durable lifecycle state for a strategy."""
-    manager = get_config_manager()
-    if not get_strategy_defaults(strategy_id):
-        raise HTTPException(status_code=404, detail="Strategy not found")
-    state = await manager.get_lifecycle_state(strategy_id)
-    if state is None:
-        state = {
-            "state": "running",
-            "reason": None,
-            "changed_by": "default",
-            "changed_at": None,
-            "expires_at": None,
-        }
-    return APIResponse(success=True, data=_lifecycle_payload(strategy_id, state))
-
-
-@router.put("/strategies/{strategy_id}/state", response_model=APIResponse)
-async def put_lifecycle_state(
-    strategy_id: str = Path(...), request: LifecycleStateRequest = ...
-):
-    """Set a strategy to running or paused."""
-    if request.state is None:
-        raise HTTPException(status_code=422, detail="state is required")
-    return await _set_lifecycle_state(strategy_id, request)
-
-
-@router.post("/strategies/{strategy_id}/pause", response_model=APIResponse)
-async def pause_strategy(
-    strategy_id: str = Path(...), request: LifecycleStateRequest = ...
-):
-    """Pause a strategy through the canonical lifecycle handler."""
-    request.state = "paused"
-    return await _set_lifecycle_state(strategy_id, request)
-
-
-@router.post("/strategies/{strategy_id}/resume", response_model=APIResponse)
-async def resume_strategy(
-    strategy_id: str = Path(...), request: LifecycleStateRequest = ...
-):
-    """Resume a strategy through the canonical lifecycle handler."""
-    request.state = "running"
-    return await _set_lifecycle_state(strategy_id, request)
 
 
 @router.get(
