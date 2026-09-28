@@ -237,6 +237,33 @@ async def test_consumer_message_handler_yields_to_event_loop(consumer):
 
 
 @pytest.mark.asyncio
+async def test_enqueue_message_does_not_block_when_queue_is_full(consumer):
+    consumer._message_queue = asyncio.Queue(maxsize=1)
+    consumer.metrics.record_error = Mock()
+
+    await consumer._enqueue_message(Mock())
+    await consumer._enqueue_message(Mock())
+
+    assert consumer._message_queue.qsize() == 1
+    assert consumer.error_count == 1
+    consumer.metrics.record_error.assert_called_once_with("consumer_queue_full")
+
+
+@pytest.mark.asyncio
+async def test_message_worker_processes_and_marks_message_done(consumer):
+    message = Mock()
+    consumer._message_queue.put_nowait(message)
+    consumer._message_handler = AsyncMock()
+    worker = asyncio.create_task(consumer._message_worker())
+
+    await asyncio.wait_for(consumer._message_queue.join(), timeout=1)
+    worker.cancel()
+    await asyncio.gather(worker, return_exceptions=True)
+
+    consumer._message_handler.assert_awaited_once_with(message)
+
+
+@pytest.mark.asyncio
 async def test_consumer_process_message_invalid_data(consumer):
     """Test _process_message with invalid data."""
     invalid_data = b"not json"
