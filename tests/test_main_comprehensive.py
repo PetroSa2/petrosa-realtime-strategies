@@ -121,6 +121,7 @@ async def test_start_success(service, mock_components):
         patch("strategies.main.TradeOrderPublisher") as mock_publisher,
         patch("strategies.main.NATSConsumer") as mock_consumer,
         patch("strategies.main.HeartbeatManager") as mock_heartbeat,
+        patch("strategies.main.DataManagerConfigRateLimiter") as mock_rate_limiter_cls,
     ):
         # Setup mocks
         mock_mongo_instance = MagicMock()
@@ -144,6 +145,9 @@ async def test_start_success(service, mock_components):
         mock_components["publisher"].start.assert_called_once()
         mock_components["consumer"].start.assert_called_once()
         mock_components["heartbeat_manager"].start.assert_called_once()
+        mock_components["health_server"].set_rate_limiter.assert_called_once_with(
+            mock_rate_limiter_cls.return_value
+        )
 
 
 @pytest.mark.asyncio
@@ -159,9 +163,8 @@ async def test_start_error_handling(service):
 
 @pytest.mark.asyncio
 async def test_start_survives_mongodb_down(service, mock_components):
-    """Per #192 AC5 (defect 6): MongoDB unavailability must not abort startup.
-    The service must start and consume NATS with Mongo down for both the
-    config-manager's general client and the rate limiter's direct client.
+    """Per #192 AC5 (defect 6): data-manager unavailability must not abort startup.
+    The service must start and consume NATS with the data-manager unavailable.
     """
     with (
         patch("strategies.db.mongodb_client.MongoDBClient") as mock_mongo,
@@ -173,9 +176,7 @@ async def test_start_survives_mongodb_down(service, mock_components):
         patch("strategies.main.TradeOrderPublisher") as mock_publisher,
         patch("strategies.main.NATSConsumer") as mock_consumer,
         patch("strategies.main.HeartbeatManager") as mock_heartbeat,
-        patch(
-            "strategies.main.DataManagerConfigRateLimiter"
-        ) as mock_rate_limiter_cls,
+        patch("strategies.main.DataManagerConfigRateLimiter") as mock_rate_limiter_cls,
     ):
         # The data-manager health check fails, but startup remains fail-open.
         mock_mongo_instance = MagicMock()
@@ -200,6 +201,9 @@ async def test_start_survives_mongodb_down(service, mock_components):
         assert (
             mock_rate_limiter_cls.call_args.kwargs["service_name"]
             == "realtime-strategies"
+        )
+        mock_components["health_server"].set_rate_limiter.assert_called_once_with(
+            mock_rate_limiter_cls.return_value
         )
 
 
@@ -803,6 +807,7 @@ async def test_service_startup_sequence(service, mock_components):
         patch("strategies.main.TradeOrderPublisher") as mock_publisher,
         patch("strategies.main.NATSConsumer") as mock_consumer,
         patch("strategies.main.HeartbeatManager") as mock_heartbeat,
+        patch("strategies.main.DataManagerConfigRateLimiter") as mock_rate_limiter_cls,
     ):
         # Setup mocks
         mock_mongo_instance = MagicMock()
@@ -834,6 +839,9 @@ async def test_service_startup_sequence(service, mock_components):
         assert service.publisher == mock_components["publisher"]
         assert service.consumer == mock_components["consumer"]
         assert service.heartbeat_manager == mock_components["heartbeat_manager"]
+        mock_components["health_server"].set_rate_limiter.assert_called_once_with(
+            mock_rate_limiter_cls.return_value
+        )
 
 
 @pytest.mark.skip(

@@ -89,7 +89,9 @@ class MongoDBClient:
     async def get_audit_trail(
         self, strategy_id: str, symbol: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
-        return await self.data_manager_client.get_audit_trail(strategy_id, symbol, limit)
+        return await self.data_manager_client.get_audit_trail(
+            strategy_id, symbol, limit
+        )
 
     async def get_audit_record_by_id(self, audit_id: str) -> dict[str, Any] | None:
         return await self.data_manager_client.get_audit_record_by_id(audit_id)

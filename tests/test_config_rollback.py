@@ -20,8 +20,6 @@ from strategies.services.config_manager import StrategyConfigManager
 def mock_mongodb_client():
     client = AsyncMock()
     client.is_connected = True
-    client.use_data_manager = False
-    client.database = MagicMock()
     return client
 
 
@@ -303,8 +301,10 @@ class TestStrategyConfigRollback:
             assert "parameters" in config
             assert config["source"] == "default"
 
-    async def test_get_audit_trail_direct(self, config_manager, mock_mongodb_client):
-        """Test direct retrieval of audit trail."""
+    async def test_get_audit_trail_from_data_manager(
+        self, config_manager, mock_mongodb_client
+    ):
+        """Test retrieval of the audit trail through the data-manager facade."""
         mock_mongodb_client.get_audit_trail = AsyncMock(
             return_value=[
                 {
@@ -347,8 +347,10 @@ class TestStrategyConfigRollback:
             mock_set.assert_called_once()
             assert mock_set.call_args[1]["parameters"]["rsi"] == 10
 
-    async def test_get_config_by_id_direct(self, config_manager, mock_mongodb_client):
-        """Test direct retrieval of config by audit ID."""
+    async def test_get_config_by_id_from_data_manager(
+        self, config_manager, mock_mongodb_client
+    ):
+        """Test retrieval of a config by audit ID through data-manager."""
         # Use get_audit_record_by_id mock
         mock_mongodb_client.get_audit_record_by_id = AsyncMock(
             return_value={
@@ -452,30 +454,20 @@ class TestStrategyConfigRollback:
             assert success is False
             assert "No previous configuration found" in errors[0]
 
-    async def test_get_config_by_version_fallback(
+    async def test_get_config_by_version_from_data_manager(
         self, config_manager, mock_mongodb_client
     ):
-        """Test fallback when direct MongoDB query fails or is not used."""
-        mock_mongodb_client.use_data_manager = False  # Allow fallback search
-        # Ensure direct lookup returns None so it falls through to get_audit_trail
-        mock_mongodb_client.get_audit_record_by_version = AsyncMock(return_value=None)
+        """Test version lookup through the data-manager facade."""
+        mock_mongodb_client.get_audit_record_by_version = AsyncMock(
+            return_value={"new_parameters": {"p": 1, "version": 5}}
+        )
 
-        with patch.object(
-            config_manager,
-            "get_audit_trail",
-            return_value=[
-                StrategyConfigAudit(
-                    id="1",
-                    strategy_id="s1",
-                    action="CREATE",
-                    new_parameters={"p": 1, "version": 5},
-                    changed_by="u1",
-                    changed_at=datetime.now(UTC),
-                )
-            ],
-        ):
-            config = await config_manager.get_config_by_version("s1", 5)
-            assert config["p"] == 1
+        config = await config_manager.get_config_by_version("s1", 5)
+
+        assert config == {"p": 1}
+        mock_mongodb_client.get_audit_record_by_version.assert_awaited_once_with(
+            "s1", 5, None
+        )
 
 
 def test_rollback_api_integration(client, config_manager):
