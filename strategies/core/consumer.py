@@ -97,6 +97,10 @@ class NATSConsumer:
         self.nats_client: NATSClient | None = None
         self.subscription: Subscription | None = None
         self._nats_recovery_task: asyncio.Task | None = None
+        self._message_queue: asyncio.Queue = asyncio.Queue(
+            maxsize=constants.NATS_CONSUMER_QUEUE_SIZE
+        )
+        self._worker_tasks: list[asyncio.Task] = []
 
         # Processing state
         self.is_running = False
@@ -196,6 +200,10 @@ class NATSConsumer:
             await self._subscribe_to_topic()
 
             self.is_running = True
+            self._worker_tasks = [
+                asyncio.create_task(self._message_worker())
+                for _ in range(constants.NATS_CONSUMER_WORKERS)
+            ]
 
             # Per #191 AC4: start the OrderBookTracker's periodic sweep task
             # (if the iceberg_detector strategy is enabled) now that we have
@@ -229,6 +237,20 @@ class NATSConsumer:
         # Signal shutdown
         self.shutdown_event.set()
         self.is_running = False
+
+        if self._worker_tasks:
+            try:
+                await asyncio.wait_for(self._message_queue.join(), timeout=5.0)
+            except TimeoutError:
+                self.logger.warning(
+                    "Timed out draining NATS message queue",
+                    event_type="consumer_queue_drain_timeout",
+                    pending_messages=self._message_queue.qsize(),
+                )
+            for task in self._worker_tasks:
+                task.cancel()
+            await asyncio.gather(*self._worker_tasks, return_exceptions=True)
+            self._worker_tasks = []
 
         if self._nats_recovery_task is not None:
             self._nats_recovery_task.cancel()
@@ -416,7 +438,9 @@ class NATSConsumer:
             self.subscription = await self.nats_client.subscribe(
                 subject=self.topic,
                 queue=self.consumer_group,
-                cb=self._message_handler,
+                cb=self._enqueue_message,
+                pending_msgs_limit=constants.NATS_PENDING_MSGS_LIMIT,
+                pending_bytes_limit=constants.NATS_PENDING_BYTES_LIMIT,
             )
             self.logger.info(
                 "Subscribed to topic",
@@ -448,6 +472,29 @@ class NATSConsumer:
             self.error_tracker.record_error()
         finally:
             await asyncio.sleep(0)
+
+    async def _enqueue_message(self, msg) -> None:
+        """Accept messages without making the NATS reader await processing."""
+        try:
+            self._message_queue.put_nowait(msg)
+        except asyncio.QueueFull:
+            self.logger.error(
+                "Consumer processing queue is full",
+                event_type="consumer_queue_full",
+                queue_size=self._message_queue.maxsize,
+            )
+            self.error_count += 1
+            self.error_tracker.record_error()
+            self.metrics.record_error("consumer_queue_full")
+
+    async def _message_worker(self) -> None:
+        """Process queued messages independently from the NATS reader loop."""
+        while True:
+            msg = await self._message_queue.get()
+            try:
+                await self._message_handler(msg)
+            finally:
+                self._message_queue.task_done()
 
     async def _process_message(self, msg) -> None:
         """Process a single NATS message with trace context extraction."""

@@ -27,6 +27,10 @@ NATS_TOPIC_INTENTS = os.getenv("NATS_TOPIC_INTENTS", "cio.intent.trading")
 NATS_PUBLISHER_TOPIC = NATS_TOPIC_INTENTS
 NATS_CONSUMER_NAME = os.getenv("NATS_CONSUMER_NAME", "realtime-strategies-consumer")
 NATS_CONSUMER_GROUP = os.getenv("NATS_CONSUMER_GROUP", "realtime-strategies-group")
+NATS_CONSUMER_QUEUE_SIZE = int(os.getenv("NATS_CONSUMER_QUEUE_SIZE", "10000"))
+NATS_CONSUMER_WORKERS = int(os.getenv("NATS_CONSUMER_WORKERS", "4"))
+NATS_PENDING_MSGS_LIMIT = int(os.getenv("NATS_PENDING_MSGS_LIMIT", "10000"))
+NATS_PENDING_BYTES_LIMIT = int(os.getenv("NATS_PENDING_BYTES_LIMIT", "67108864"))
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
