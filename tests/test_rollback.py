@@ -15,7 +15,6 @@ from strategies.services.config_manager import StrategyConfigManager
 def mock_mongodb_client():
     client = MagicMock()
     client.is_connected = True
-    client.use_data_manager = True
     client.data_manager_client = AsyncMock()
     return client
 

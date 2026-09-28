@@ -33,9 +33,6 @@ NATS_PENDING_MSGS_LIMIT = int(os.getenv("NATS_PENDING_MSGS_LIMIT", "10000"))
 NATS_PENDING_BYTES_LIMIT = int(os.getenv("NATS_PENDING_BYTES_LIMIT", "67108864"))
 
 # MongoDB Configuration
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "petrosa")
-MONGODB_TIMEOUT_MS = int(os.getenv("MONGODB_TIMEOUT_MS", "5000"))
 
 # Market Logic Strategies (from QTZD adaptation)
 STRATEGY_ENABLED_BTC_DOMINANCE = (

@@ -34,9 +34,9 @@ from strategies.utils.telemetry import (  # noqa: E402
     shutdown_telemetry,
 )
 
-ConfigRateLimiter = None
+DataManagerConfigRateLimiter = None
 try:
-    from petrosa_otel import ConfigRateLimiter
+    from petrosa_otel import DataManagerConfigRateLimiter
 except ImportError:
     pass
 # Load environment variables
@@ -84,21 +84,12 @@ class StrategiesService:
             from strategies.services.config_manager import StrategyConfigManager
             from strategies.services.depth_analyzer import DepthAnalyzer
 
-            # General MongoDB client for configuration management (follows default behavior)
-            mongodb_client = MongoDBClient(
-                uri=constants.MONGODB_URI,
-                database=constants.MONGODB_DATABASE,
-                timeout_ms=constants.MONGODB_TIMEOUT_MS,
-            )
-            # Per #192 AC5: Mongo unavailability must not abort startup. The hot path
-            # (NATS consumption) does not depend on Mongo; StrategyConfigManager already
-            # falls back to environment/hardcoded defaults when mongodb_client.is_connected
-            # is False, so a failed connect() here is degraded-mode, not fatal.
+            # Per #192 AC5: Data Manager unavailability must not abort startup.
+            mongodb_client = MongoDBClient()
             if not await mongodb_client.connect():
                 self.logger.warning(
-                    "Failed to connect to MongoDB for config manager; "
-                    "continuing in degraded mode (env/default config only)",
-                    uri=constants.MONGODB_URI,
+                    "Failed to connect to Data Manager for config manager; "
+                    "continuing in degraded mode (env/default config only)"
                 )
 
             self.config_manager = StrategyConfigManager(
@@ -112,32 +103,11 @@ class StrategiesService:
                 cache_ttl_seconds=60,
             )
 
-            # Dedicated direct MongoDB client for the Rate Limiter
-            # This ensures ConfigRateLimiter always works while general client follows default paths
-            rate_limit_mongo_client = MongoDBClient(
-                uri=constants.MONGODB_URI,
-                database=constants.MONGODB_DATABASE,
-                timeout_ms=constants.MONGODB_TIMEOUT_MS,
-                use_data_manager=False,
-            )
-            # Per #192 AC5: this is a rate-limiting nicety, not a hot-path dependency.
-            # Mongo being down must not prevent the service from starting and consuming
-            # NATS; degrade by disabling the rate limiter instead of aborting startup.
-            rate_limiter_mongo_connected = await rate_limit_mongo_client.connect()
-            if not rate_limiter_mongo_connected:
-                self.logger.error(
-                    "Failed to connect to direct MongoDB for rate limiter; "
-                    "continuing startup with config rate limiting disabled",
-                    uri=constants.MONGODB_URI,
-                )
-            else:
-                self.logger.info("Rate limiter MongoDB client (direct) initialized")
-
             # Initialize and set configuration rate limiter
             rate_limiter = None
-            if ConfigRateLimiter is not None and rate_limiter_mongo_connected:
-                rate_limiter = ConfigRateLimiter(
-                    mongodb_client=rate_limit_mongo_client,
+            if DataManagerConfigRateLimiter is not None:
+                rate_limiter = DataManagerConfigRateLimiter(
+                    base_url=os.getenv("DATA_MANAGER_URL"),
                     service_name="realtime-strategies",
                     per_agent_limit=int(os.getenv("CONFIG_RATE_LIMIT_PER_AGENT", "10")),
                     cooldown_seconds=int(
@@ -528,7 +498,7 @@ def run(
         setup_telemetry(
             service_name=service_name,
             service_type="async",
-            enable_mongodb=True,
+            enable_mongodb=False,
             auto_attach_logging=False,
         )
     except ImportError:

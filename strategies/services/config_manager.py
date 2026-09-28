@@ -828,7 +828,6 @@ class StrategyConfigManager:
         if not self.mongodb_client or not self.mongodb_client.is_connected:
             return None
 
-        # Direct database lookup by version
         record = await self.mongodb_client.get_audit_record_by_version(
             strategy_id, version, symbol
         )
@@ -836,18 +835,6 @@ class StrategyConfigManager:
             params = record.get("new_parameters")
             if params:
                 return {k: v for k, v in params.items() if k != "version"}
-
-        # Fallback to searching history (only if not using Data Manager)
-        if not self.mongodb_client.use_data_manager:
-            history = await self.get_audit_trail(strategy_id, symbol, limit=1000)
-            for record in history:
-                if (
-                    record.new_parameters
-                    and record.new_parameters.get("version") == version
-                ):
-                    return {
-                        k: v for k, v in record.new_parameters.items() if k != "version"
-                    }
 
         return None
 
