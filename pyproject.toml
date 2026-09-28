@@ -115,7 +115,7 @@ Repository = "https://github.com/petrosa/petrosa-realtime-strategies.git"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["strategies*", "adapters*", "api*", "clients*", "config*", "models*", "services*", "utils*"]
+include = ["strategies*", "data_manager_client*", "adapters*", "api*", "clients*", "config*", "models*", "services*", "utils*"]
 exclude = ["tests*", "docs*", "scripts*", "venv*", ".venv*", "build*", "dist*"]
 
 [tool.setuptools.package-data]
