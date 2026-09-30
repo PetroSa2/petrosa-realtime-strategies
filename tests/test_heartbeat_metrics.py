@@ -125,7 +125,8 @@ async def test_single_idle_heartbeat_is_info_level():
 
     assert not manager.logger.warning.called
     kwargs = next(
-        call.kwargs for call in manager.logger.info.call_args_list
+        call.kwargs
+        for call in manager.logger.info.call_args_list
         if call.args and call.args[0] == "Realtime strategies idle heartbeat"
     )
     assert kwargs["event_type"] == "realtime_strategies_idle_heartbeat"
@@ -158,7 +159,8 @@ async def test_idle_heartbeat_distinguishes_signal_silence_from_message_silence(
 
     assert not manager.logger.warning.called
     kwargs = next(
-        call.kwargs for call in manager.logger.info.call_args_list
+        call.kwargs
+        for call in manager.logger.info.call_args_list
         if call.args and call.args[0] == "Realtime strategies idle heartbeat"
     )
     assert kwargs["idle_reason"] == "no_signals_published_in_interval"
