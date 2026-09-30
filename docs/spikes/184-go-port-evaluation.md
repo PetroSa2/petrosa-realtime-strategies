@@ -109,7 +109,7 @@ no dual-maintenance cost, reviewable in normal-sized PRs.
   with no shared test harness — the single highest-risk item on this list. A signal-logic bug
   introduced in translation would not fail CI; it would misprice risk silently in production.
   This is qualitatively different from the usual "rewrite is slower to ship" cost.
-- A prior MemPalace note (2026-09-11, before this spike) already sketched a candidate Go
+- A prior memory note (2026-09-11, before this spike) already sketched a candidate Go
   architecture (symbol-sharded goroutines, `nats.go`, `gopsutil`, OTel via `otlptracehttp`) —
   useful *if* a port is later authorised, not evidence it should be.
 
