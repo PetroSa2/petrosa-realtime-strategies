@@ -59,7 +59,7 @@ class HeartbeatManager:
         self.shutdown_event = asyncio.Event()
         self.heartbeat_count = 0
         self.start_time = time.time()
-        self.idle_intervals = 0
+        self.signal_idle_intervals = 0
         self.idle_warning_emitted = False
 
         # Previous stats for calculating deltas
@@ -201,20 +201,24 @@ class HeartbeatManager:
         elif signals_delta == 0:
             idle_reason = "no_signals_published_in_interval"
         else:
-            self.idle_intervals = 0
+            self.signal_idle_intervals = 0
             self.idle_warning_emitted = False
             SIGNALS_PUBLISHED_INTERVAL.set(signals_delta)
             IDLE_INTERVAL.set(0)
             return
 
-        self.idle_intervals += 1
+        if messages_delta > 0 and signals_delta == 0:
+            self.signal_idle_intervals += 1
+        else:
+            self.signal_idle_intervals = 0
+            self.idle_warning_emitted = False
         SIGNALS_PUBLISHED_INTERVAL.set(signals_delta)
         IDLE_INTERVAL.set(1)
         log_method = self.logger.info
         if (
             messages_delta > 0
             and signals_delta == 0
-            and self.idle_intervals >= constants.HEARTBEAT_IDLE_WARNING_INTERVALS
+            and self.signal_idle_intervals >= constants.HEARTBEAT_IDLE_WARNING_INTERVALS
             and not self.idle_warning_emitted
         ):
             log_method = self.logger.warning
