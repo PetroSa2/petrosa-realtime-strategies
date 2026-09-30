@@ -124,6 +124,9 @@ HEARTBEAT_INTERVAL_SECONDS = int(
 HEARTBEAT_INCLUDE_DETAILED_STATS = (
     os.getenv("HEARTBEAT_INCLUDE_DETAILED_STATS", "true").lower() == "true"
 )
+HEARTBEAT_IDLE_WARNING_INTERVALS = int(
+    os.getenv("HEARTBEAT_IDLE_WARNING_INTERVALS", "3")
+)
 
 # OpenTelemetry Configuration
 ENABLE_OTEL = os.getenv("ENABLE_OTEL", "true").lower() == "true"

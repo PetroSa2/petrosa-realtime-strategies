@@ -10,8 +10,18 @@ import time
 from typing import Any, Optional
 
 import structlog
+from prometheus_client import Gauge
 
 import constants
+
+SIGNALS_PUBLISHED_INTERVAL = Gauge(
+    "realtime_signals_published_interval",
+    "Signals published during the most recent heartbeat interval.",
+)
+IDLE_INTERVAL = Gauge(
+    "realtime_idle_interval",
+    "Whether the most recent heartbeat interval was idle.",
+)
 
 
 class HeartbeatManager:
@@ -49,6 +59,8 @@ class HeartbeatManager:
         self.shutdown_event = asyncio.Event()
         self.heartbeat_count = 0
         self.start_time = time.time()
+        self.signal_idle_intervals = 0
+        self.idle_warning_emitted = False
 
         # Previous stats for calculating deltas
         self.previous_stats = {
@@ -173,7 +185,7 @@ class HeartbeatManager:
             self.logger.error("Error logging heartbeat", error=str(e))
 
     def _log_idle_diagnostic(self, heartbeat_data: dict[str, Any]) -> None:
-        """Emit a warning when production logs would otherwise hide inactivity."""
+        """Report idle intervals and warn once after sustained message flow silence."""
         nats_connected = heartbeat_data.get("consumer_nats_connected")
         subscription_active = heartbeat_data.get("consumer_subscription_active")
         total_messages = heartbeat_data["total_messages_processed"]
@@ -189,9 +201,30 @@ class HeartbeatManager:
         elif signals_delta == 0:
             idle_reason = "no_signals_published_in_interval"
         else:
+            self.signal_idle_intervals = 0
+            self.idle_warning_emitted = False
+            SIGNALS_PUBLISHED_INTERVAL.set(signals_delta)
+            IDLE_INTERVAL.set(0)
             return
 
-        self.logger.warning(
+        if messages_delta > 0 and signals_delta == 0:
+            self.signal_idle_intervals += 1
+        else:
+            self.signal_idle_intervals = 0
+            self.idle_warning_emitted = False
+        SIGNALS_PUBLISHED_INTERVAL.set(signals_delta)
+        IDLE_INTERVAL.set(1)
+        log_method = self.logger.info
+        if (
+            messages_delta > 0
+            and signals_delta == 0
+            and self.signal_idle_intervals >= constants.HEARTBEAT_IDLE_WARNING_INTERVALS
+            and not self.idle_warning_emitted
+        ):
+            log_method = self.logger.warning
+            self.idle_warning_emitted = True
+
+        log_method(
             "Realtime strategies idle heartbeat",
             event_type="realtime_strategies_idle_heartbeat",
             idle_reason=idle_reason,
