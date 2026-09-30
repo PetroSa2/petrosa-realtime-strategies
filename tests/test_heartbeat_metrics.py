@@ -101,8 +101,8 @@ async def test_log_heartbeat_nonzero_signals_per_second_on_real_activity(
 
 
 @pytest.mark.asyncio
-async def test_idle_heartbeat_is_warning_level_and_explains_no_messages():
-    """Production WARNING logging must still expose a connected idle consumer."""
+async def test_single_idle_heartbeat_is_info_level():
+    """A normal quiet interval must not be emitted as a warning."""
     consumer = MagicMock()
     consumer.get_metrics.return_value = {"message_count": 0, "error_count": 0}
     consumer.get_health_status.return_value = {
@@ -123,7 +123,11 @@ async def test_idle_heartbeat_is_warning_level_and_explains_no_messages():
 
     await manager._log_heartbeat()
 
-    _, kwargs = manager.logger.warning.call_args
+    assert not manager.logger.warning.called
+    kwargs = next(
+        call.kwargs for call in manager.logger.info.call_args_list
+        if call.args and call.args[0] == "Realtime strategies idle heartbeat"
+    )
     assert kwargs["event_type"] == "realtime_strategies_idle_heartbeat"
     assert kwargs["idle_reason"] == "no_messages_received_since_startup"
     assert kwargs["consumer_nats_connected"] is True
@@ -152,6 +156,35 @@ async def test_idle_heartbeat_distinguishes_signal_silence_from_message_silence(
 
     await manager._log_heartbeat()
 
-    _, kwargs = manager.logger.warning.call_args
+    assert not manager.logger.warning.called
+    kwargs = next(
+        call.kwargs for call in manager.logger.info.call_args_list
+        if call.args and call.args[0] == "Realtime strategies idle heartbeat"
+    )
     assert kwargs["idle_reason"] == "no_signals_published_in_interval"
     assert kwargs["messages_processed_delta"] == 10
+
+
+@pytest.mark.asyncio
+async def test_sustained_signal_idle_with_message_flow_warns_once():
+    consumer = MagicMock()
+    consumer.get_metrics.side_effect = [
+        {"message_count": count, "error_count": 0} for count in (10, 20, 30, 40)
+    ]
+    publisher = MagicMock()
+    publisher.get_metrics.return_value = {"signal_count": 0, "error_count": 0}
+    manager = HeartbeatManager(
+        consumer=consumer,
+        publisher=publisher,
+        enabled=True,
+        interval_seconds=60,
+        include_detailed_stats=False,
+    )
+    manager.logger = MagicMock()
+
+    for _ in range(4):
+        await manager._log_heartbeat()
+
+    assert manager.logger.warning.call_count == 1
+    _, kwargs = manager.logger.warning.call_args
+    assert kwargs["idle_reason"] == "no_signals_published_in_interval"
