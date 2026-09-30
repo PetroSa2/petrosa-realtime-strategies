@@ -13,6 +13,7 @@ import structlog
 from prometheus_client import Gauge
 
 import constants
+from strategies.utils.metrics import get_metrics
 
 SIGNALS_PUBLISHED_INTERVAL = Gauge(
     "realtime_signals_published_interval",
@@ -61,6 +62,8 @@ class HeartbeatManager:
         self.start_time = time.time()
         self.signal_idle_intervals = 0
         self.idle_warning_emitted = False
+        self.summary_window_seconds = 300
+        self._last_summary_at = time.monotonic()
 
         # Previous stats for calculating deltas
         self.previous_stats = {
@@ -102,6 +105,7 @@ class HeartbeatManager:
         # Signal shutdown
         self.shutdown_event.set()
         self.is_running = False
+        await self._log_heartbeat()
 
         self.logger.info("Heartbeat manager stopped")
 
@@ -117,10 +121,12 @@ class HeartbeatManager:
                 if not self.is_running:
                     break
 
-                # Log heartbeat statistics
-                await self._log_heartbeat()
-
-                self.heartbeat_count += 1
+                if (
+                    time.monotonic() - self._last_summary_at
+                    >= self.summary_window_seconds
+                ):
+                    await self._log_heartbeat()
+                    self.heartbeat_count += 1
 
             except Exception as e:
                 self.logger.error("Error in heartbeat loop", error=str(e))
@@ -169,14 +175,26 @@ class HeartbeatManager:
                 "total_publisher_errors": current_stats["publisher_errors"],
             }
 
-            # Add detailed stats if enabled
+            metrics = get_metrics()
+            summary = (
+                metrics.summary(self.summary_window_seconds)
+                if metrics
+                else {
+                    "event": "SUMMARY",
+                    "window_seconds": self.summary_window_seconds,
+                    "service": "petrosa-realtime-strategies",
+                    "messages": {},
+                    "outcomes": {},
+                    "latency_seconds_p50": 0.0,
+                    "latency_seconds_p95": 0.0,
+                }
+            )
+            self.logger.info(**{**summary, **heartbeat_data})
+            self._last_summary_at = time.monotonic()
+            diagnostic_data = heartbeat_data.copy()
             if self.include_detailed_stats:
-                detailed_stats = self._collect_detailed_stats()
-                heartbeat_data.update(detailed_stats)
-
-            # Log the heartbeat
-            self.logger.info("💓 HEARTBEAT - System Statistics", **heartbeat_data)
-            self._log_idle_diagnostic(heartbeat_data)
+                diagnostic_data.update(self._collect_detailed_stats())
+            self._log_idle_diagnostic(diagnostic_data)
 
             # Update previous stats for next delta calculation
             self.previous_stats = current_stats.copy()
@@ -216,28 +234,38 @@ class HeartbeatManager:
         IDLE_INTERVAL.set(1)
         log_method = self.logger.info
         if (
-            messages_delta > 0
-            and signals_delta == 0
-            and self.signal_idle_intervals >= constants.HEARTBEAT_IDLE_WARNING_INTERVALS
-            and not self.idle_warning_emitted
+            nats_connected is False
+            or subscription_active is False
+            or (
+                messages_delta > 0
+                and signals_delta == 0
+                and self.signal_idle_intervals
+                >= constants.HEARTBEAT_IDLE_WARNING_INTERVALS
+                and not self.idle_warning_emitted
+            )
         ):
             log_method = self.logger.warning
             self.idle_warning_emitted = True
 
+        idle_fields = {
+            "event_type": "realtime_strategies_idle_heartbeat",
+            "idle_reason": idle_reason,
+            "heartbeat_count": heartbeat_data["heartbeat_count"],
+            "uptime_seconds": heartbeat_data["uptime_seconds"],
+            "messages_processed_delta": messages_delta,
+            "total_messages_processed": total_messages,
+            "signals_published_delta": signals_delta,
+            "total_signals_published": heartbeat_data["total_signals_published"],
+            "consumer_nats_connected": nats_connected,
+            "consumer_subscription_active": subscription_active,
+            "consumer_errors_delta": heartbeat_data["consumer_errors_delta"],
+            "total_consumer_errors": heartbeat_data["total_consumer_errors"],
+        }
+        if log_method is self.logger.info:
+            self.logger.debug("Realtime strategies idle heartbeat", **idle_fields)
         log_method(
             "Realtime strategies idle heartbeat",
-            event_type="realtime_strategies_idle_heartbeat",
-            idle_reason=idle_reason,
-            heartbeat_count=heartbeat_data["heartbeat_count"],
-            uptime_seconds=heartbeat_data["uptime_seconds"],
-            messages_processed_delta=messages_delta,
-            total_messages_processed=total_messages,
-            signals_published_delta=signals_delta,
-            total_signals_published=heartbeat_data["total_signals_published"],
-            consumer_nats_connected=nats_connected,
-            consumer_subscription_active=subscription_active,
-            consumer_errors_delta=heartbeat_data["consumer_errors_delta"],
-            total_consumer_errors=heartbeat_data["total_consumer_errors"],
+            **idle_fields,
         )
 
     def _collect_current_stats(self) -> dict[str, Any]:

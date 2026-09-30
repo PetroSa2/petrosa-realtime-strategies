@@ -350,7 +350,7 @@ class NATSConsumer:
 
     async def _on_nats_disconnected(self) -> None:
         """Handle NATS disconnection (client will keep retrying indefinitely)."""
-        self.logger.warning(
+        self.logger.debug(
             "NATS client disconnected",
             event_type="nats_disconnected",
             nats_url=self.nats_url,
@@ -360,7 +360,7 @@ class NATSConsumer:
 
     async def _on_nats_reconnected(self) -> None:
         """Handle successful NATS reconnection after an outage."""
-        self.logger.warning(
+        self.logger.debug(
             "NATS client reconnected",
             event_type="nats_reconnected",
             nats_url=self.nats_url,
@@ -543,9 +543,7 @@ class NATSConsumer:
                     # Validate and parse market data message
                     market_data = self._parse_market_data(message_data)
                     if not market_data:
-                        self.logger.warning(
-                            "Invalid market data message", data=message_data
-                        )
+                        self.logger.debug("Invalid market data message")
                         self.metrics.record_error("invalid_message")
                         span.set_status(
                             trace.Status(
@@ -761,7 +759,7 @@ class NATSConsumer:
             elif "markPrice" in stream_type:
                 return self._transform_mark_price_data(data)
             else:
-                self.logger.warning("Unknown stream type", stream_type=stream_type)
+                self.logger.debug("Unknown stream type")
                 return None
 
         except Exception as e:

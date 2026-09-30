@@ -172,7 +172,7 @@ class TradeOrderPublisher:
 
     async def _on_nats_disconnected(self) -> None:
         """Handle NATS disconnection (client will keep retrying indefinitely)."""
-        self.logger.warning(
+        self.logger.debug(
             "NATS client disconnected",
             event_type="nats_disconnected",
             nats_url=self.nats_url,
@@ -182,7 +182,7 @@ class TradeOrderPublisher:
 
     async def _on_nats_reconnected(self) -> None:
         """Handle successful NATS reconnection after an outage."""
-        self.logger.warning(
+        self.logger.debug(
             "NATS client reconnected",
             event_type="nats_reconnected",
             nats_url=self.nats_url,
