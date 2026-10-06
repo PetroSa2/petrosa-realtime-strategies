@@ -1,11 +1,16 @@
 """Small async HTTP client for the data-manager generic API."""
 
 import asyncio
+import logging
+import os
 from typing import Any
 
 import httpx
 
 from .exceptions import ConnectionError
+
+logger = logging.getLogger(__name__)
+_missing_token_warning_emitted = False
 
 
 class DataManagerClient:
@@ -20,7 +25,23 @@ class DataManagerClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
-        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
+        headers = {
+            "X-Petrosa-Service": os.getenv("DM_SERVICE_NAME", "realtime-strategies")
+        }
+        token = os.getenv("DM_SERVICE_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        else:
+            global _missing_token_warning_emitted
+            if not _missing_token_warning_emitted:
+                logger.warning(
+                    "DM_SERVICE_TOKEN is unset; data-manager calls use service identity only"
+                )
+                _missing_token_warning_emitted = True
+
+        self._client = httpx.AsyncClient(
+            base_url=self.base_url, timeout=timeout, headers=headers
+        )
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         for attempt in range(self.max_retries + 1):
