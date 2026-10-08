@@ -159,9 +159,8 @@ The following secrets must be configured in GitHub repository settings:
 docker build -t yurisa2/petrosa-realtime-strategies:tag .
 docker push yurisa2/petrosa-realtime-strategies:tag
 
-# Deploy manually
-export KUBECONFIG=k8s/kubeconfig.yaml
-kubectl apply -f k8s/
+# Manual deployment is handled by the repository's manual deployment workflow.
+# See MANUAL_DEPLOYMENT_GUIDE.md.
 ```
 
 ## Monitoring Deployments
@@ -178,12 +177,12 @@ make k8s-logs
 
 ### Check specific deployment
 ```bash
-kubectl --kubeconfig=k8s/kubeconfig.yaml get deployment petrosa-realtime-strategies -n petrosa-apps
+kubectl get deployment petrosa-realtime-strategies -n petrosa-apps
 ```
 
 ### Rollback if needed
 ```bash
-kubectl --kubeconfig=k8s/kubeconfig.yaml rollout undo deployment/petrosa-realtime-strategies -n petrosa-apps
+kubectl rollout undo deployment/petrosa-realtime-strategies -n petrosa-apps
 ```
 
 ## Troubleshooting
@@ -238,8 +237,7 @@ open htmlcov/index.html  # View detailed HTML report
 
 ## Related Documentation
 
-- [Testing Guide](./TESTING.md)
-- [Makefile Reference](./MAKEFILE.md)
-- [Quick Reference](./QUICK_REFERENCE.md)
+- [Makefile](../Makefile)
+- [Manual Deployment Guide](./MANUAL_DEPLOYMENT_GUIDE.md)
+- [Documentation index](./INDEX.md)
 - [VERSION_PLACEHOLDER Guide](./VERSION_PLACEHOLDER_GUIDE.md)
-
