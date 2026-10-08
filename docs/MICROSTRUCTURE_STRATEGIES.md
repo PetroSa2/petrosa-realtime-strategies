@@ -74,11 +74,11 @@ Trade Engine (executes orders)
 
 ### Overview
 
-**Strategy Type:** Liquidity Event Detection  
-**Timeframe:** Real-time (tick-by-tick)  
-**Signal Frequency:** 5-10 per symbol per day  
-**Win Rate Target:** 55-65%  
-**Average Hold Time:** 5-15 minutes  
+**Strategy Type:** Liquidity Event Detection
+**Timeframe:** Real-time (tick-by-tick)
+**Signal Frequency:** 5-10 per symbol per day
+**Win Rate Target:** 55-65%
+**Average Hold Time:** 5-15 minutes
 
 ### Theoretical Foundation
 
@@ -221,11 +221,11 @@ kubectl logs -n petrosa-apps -l app=realtime-strategies --tail=100 | grep "sprea
 
 ### Overview
 
-**Strategy Type:** Hidden Order Detection  
-**Timeframe:** Real-time (tick-by-tick)  
-**Signal Frequency:** 2-5 per symbol per day  
-**Win Rate Target:** 60-70%  
-**Average Hold Time:** 10-30 minutes  
+**Strategy Type:** Hidden Order Detection
+**Timeframe:** Real-time (tick-by-tick)
+**Signal Frequency:** 2-5 per symbol per day
+**Win Rate Target:** 60-70%
+**Average Hold Time:** 10-30 minutes
 
 ### Theoretical Foundation
 
@@ -340,17 +340,17 @@ current_price < iceberg_price * 1.001  # Near resistance
 def is_refill(history, current_qty):
     if len(history) < 3:
         return False
-    
+
     recent = history[-3:]
     vol_0, vol_1, vol_2 = recent[0].quantity, recent[1].quantity, recent[2].quantity
-    
+
     # Volume dropped >50% then restored >80%
     if vol_1 < vol_0 * 0.5 and vol_2 > vol_0 * 0.8:
         # Check speed (fast refill)
         time_elapsed = recent[2].timestamp - recent[0].timestamp
         if time_elapsed < 5.0:  # seconds
             return True
-    
+
     return False
 ```
 
@@ -736,6 +736,6 @@ curl http://realtime-strategies:8080/api/v1/strategies/spread_liquidity/audit?li
 
 ---
 
-**Version:** 1.0  
-**Author:** Petrosa Systems  
+**Version:** 1.0
+**Author:** Petrosa Systems
 **Contact:** See project README for support channels

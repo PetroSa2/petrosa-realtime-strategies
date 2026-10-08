@@ -1,7 +1,7 @@
 # API Usage Guide
 ## Realtime Strategies - Configuration & Market Metrics
 
-**Version**: 1.0  
+**Version**: 1.0
 **Status**: Production Ready ✅
 
 ---
@@ -338,7 +338,7 @@ curl "http://realtime-strategies:8080/api/v1/metrics/pressure/BTCUSDT?timeframe=
 # - "bullish": Sustained buying pressure
 # - "bearish": Sustained selling pressure
 # - "neutral": No clear trend
-# 
+#
 # Check trend_strength (0-1):
 # - > 0.7: Strong trend
 # - 0.4-0.7: Moderate trend
@@ -752,7 +752,7 @@ echo "Average market pressure: $AVG_PRESSURE"
 # Adjust global strategy settings
 if (( $(echo "$AVG_PRESSURE > 25" | bc -l) )); then
   echo "Bullish market detected - adjusting strategies"
-  
+
   curl -X POST $API_BASE/strategies/orderbook_skew/config \
     -H "Content-Type: application/json" \
     -d '{
@@ -762,7 +762,7 @@ if (( $(echo "$AVG_PRESSURE > 25" | bc -l) )); then
     }'
 elif (( $(echo "$AVG_PRESSURE < -25" | bc -l) )); then
   echo "Bearish market detected - adjusting strategies"
-  
+
   curl -X POST $API_BASE/strategies/orderbook_skew/config \
     -H "Content-Type: application/json" \
     -d '{
