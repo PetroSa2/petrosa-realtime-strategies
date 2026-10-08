@@ -2,7 +2,6 @@
 ## Realtime Strategies - Configuration & Market Metrics
 
 **Version**: 1.0  
-**Last Updated**: 2025-10-21  
 **Status**: Production Ready ✅
 
 ---
@@ -209,7 +208,7 @@ curl http://realtime-strategies:8080/api/v1/metrics/all | jq
 ```json
 {
   "symbol": "BTCUSDT",
-  "timestamp": "2025-10-21T10:30:00Z",
+  "timestamp": "<ISO-8601 timestamp>",
   "imbalance": {
     "ratio": 0.15,           // -1 to 1: negative = more asks, positive = more bids
     "percent": 15.0,         // Imbalance as percentage
@@ -264,8 +263,8 @@ curl http://realtime-strategies:8080/api/v1/metrics/all | jq
   "total_data_points": 300,
   "returned_data_points": 100,  // Limited to last 100 for response size
   "pressure_history": [
-    {"timestamp": "2025-10-21T10:25:00Z", "pressure": 15.5},
-    {"timestamp": "2025-10-21T10:26:00Z", "pressure": 18.2},
+    {"timestamp": "<ISO-8601 timestamp>", "pressure": 15.5},
+    {"timestamp": "<ISO-8601 timestamp>", "pressure": 18.2},
     // ... more data points
   ]
 }
@@ -473,7 +472,7 @@ Result:
 
 ```bash
 # Start service locally
-cd /Users/yurisa2/petrosa/petrosa-realtime-strategies
+cd petrosa-realtime-strategies
 python -m strategies.main run
 
 # In another terminal, test APIs
@@ -485,7 +484,7 @@ curl http://localhost:8080/api/v1/metrics/summary
 
 ```bash
 # Deploy updated version
-cd /Users/yurisa2/petrosa/petrosa-realtime-strategies
+cd petrosa-realtime-strategies
 
 # Build and push
 make build
@@ -493,13 +492,11 @@ make push
 
 # Deploy to cluster
 kubectl apply -f k8s/deployment.yaml \
-  --kubeconfig=k8s/kubeconfig.yaml \
   -n petrosa-apps
 
 # Monitor rollout
 kubectl rollout status deployment/petrosa-realtime-strategies \
   -n petrosa-apps \
-  --kubeconfig=k8s/kubeconfig.yaml
 
 # Check logs
 kubectl logs -n petrosa-apps \
@@ -513,7 +510,6 @@ kubectl logs -n petrosa-apps \
 # Forward service port
 kubectl port-forward -n petrosa-apps \
   svc/petrosa-realtime-strategies 8080:8080 \
-  --kubeconfig=k8s/kubeconfig.yaml &
 
 # Test locally
 curl http://localhost:8080/api/v1/strategies
@@ -792,10 +788,7 @@ fi
 ## Support
 
 - **Swagger UI**: http://realtime-strategies:8080/docs
-- **Implementation Plan**: `docs/API_CONFIGURATION_IMPLEMENTATION_PLAN_V2.md`
-- **Quick Reference**: `/Users/yurisa2/petrosa/CONFIGURATION_API_QUICK_REFERENCE.md`
 
 ---
 
 **Happy Trading! 🚀**
-

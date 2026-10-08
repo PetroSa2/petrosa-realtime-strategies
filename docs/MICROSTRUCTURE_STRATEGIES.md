@@ -504,7 +504,7 @@ spec:
 
 **Deploy:**
 ```bash
-cd /Users/yurisa2/petrosa/petrosa-realtime-strategies
+cd petrosa-realtime-strategies
 make deploy
 ```
 
@@ -737,7 +737,5 @@ curl http://realtime-strategies:8080/api/v1/strategies/spread_liquidity/audit?li
 ---
 
 **Version:** 1.0  
-**Last Updated:** October 2025  
 **Author:** Petrosa Systems  
 **Contact:** See project README for support channels
-

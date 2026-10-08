@@ -151,7 +151,7 @@ grep -r "VERSION_PLACEHOLDER" k8s/
 #### 2. Version Mismatch
 ```bash
 # Check deployed version
-kubectl --kubeconfig=k8s/kubeconfig.yaml get deployment petrosa-realtime-strategies -n petrosa-apps -o jsonpath='{.spec.template.spec.containers[0].image}'
+kubectl get deployment petrosa-realtime-strategies -n petrosa-apps -o jsonpath='{.spec.template.spec.containers[0].image}'
 
 # Should show: yurisa2/petrosa-realtime-strategies:v1.0.1 (not VERSION_PLACEHOLDER)
 ```

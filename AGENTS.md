@@ -43,6 +43,5 @@ Python packages at the top level: `data_manager_client/`, `strategies/`. Also `t
 - Text that leaves the repository (PR titles and bodies, commit messages, code comments) uses generic roles such as Agentic Developer and never names the upstream workflow engine or its personas.
 - Do not commit logs, drafts, scratch files or generated working notes. GitHub and the memory server are the record.
 
-## Legacy rules
-
-`docs/agent-rules.md` holds the repository's previous editor rules, moved unchanged and not yet re-verified. Prefer this file and the code.
+`AGENTS.md` is the only repository instruction file. Use the code and maintained
+documentation as the source of truth for service behavior.

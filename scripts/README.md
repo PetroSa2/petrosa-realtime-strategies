@@ -102,7 +102,7 @@ make deploy        # Uses deploy-local.sh
 ### Common Issues
 
 1. **Kubeconfig not found**
-   - Ensure `k8s/kubeconfig.yaml` exists
+   - Ensure the configured Kubernetes access is available
    - Check file permissions
    - Verify cluster connectivity
 

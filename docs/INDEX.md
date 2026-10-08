@@ -1,27 +1,22 @@
-# Petrosa Realtime Strategies Documentation Index
+# Realtime Strategies Documentation
 
-**Last Updated**: February 23, 2026
-**Service Status**: ✅ ACTIVE (Production)
+This index lists the maintained documentation for the service.
 
----
+## Service
 
-## 🚀 Getting Started
-- [**README.md**](../README.md) - Project overview, stateless architecture, and quick start.
-- [**API_USAGE_GUIDE.md**](API_USAGE_GUIDE.md) - Configuration and Market Metrics API documentation.
+- [README](../README.md) — service purpose, data flow, configuration, and quick start.
+- [API usage](API_USAGE_GUIDE.md) — runtime configuration and market metrics APIs.
+- [Microstructure strategies](MICROSTRUCTURE_STRATEGIES.md) — strategy behavior and inputs.
 
-## 🏗️ Architecture & Operations
-- [**DEPLOYMENT_GUIDE.md**](archive/2024-2025/DEPLOYMENT_GUIDE.md) - (Reference) Production deployment.
-- [**MANUAL_DEPLOYMENT_GUIDE.md**](MANUAL_DEPLOYMENT_GUIDE.md) - Procedures for manual overrides.
-- [**HEARTBEAT_FEATURE.md**](HEARTBEAT_FEATURE.md) - Periodic statistics logging details.
+## Operations
 
-## 🔧 CI/CD & Development
-- [**CI_CD_PIPELINE.md**](CI_CD_PIPELINE.md) - GitHub Actions workflow details.
-- [**TESTING.md**](TESTING.md) - Test suite structure and coverage requirements.
-- [**MAKEFILE.md**](MAKEFILE.md) - Standardized command reference.
+- [Manual deployment](MANUAL_DEPLOYMENT_GUIDE.md) — operator-triggered deployment procedure.
+- [CI/CD pipeline](CI_CD_PIPELINE.md) — repository workflow behavior.
+- [OpenTelemetry](OPENTELEMETRY_TRACING.md) — tracing and metrics integration.
+- [Business metrics](BUSINESS_METRICS.md) — metrics and monitoring queries.
+- [Heartbeat](HEARTBEAT_FEATURE.md) — periodic service statistics.
 
-## 📊 Metrics & Analysis
-- [**BUSINESS_METRICS.md**](BUSINESS_METRICS.md) - PromQL queries and business monitoring.
-- [**MICROSTRUCTURE_STRATEGIES.md**](MICROSTRUCTURE_STRATEGIES.md) - Deep dive into tick-by-tick strategies.
+## Development
 
-## 📜 Historical
-- [**Archive Folder**](archive/) - Outdated or issue-specific documentation.
+- [Makefile](../Makefile) — executable development commands.
+- [Version placeholders](VERSION_PLACEHOLDER_GUIDE.md) — deployment version convention.
