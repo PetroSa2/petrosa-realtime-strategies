@@ -44,3 +44,19 @@ async def test_connect_failure_is_degraded(monkeypatch):
 
     assert await client.connect() is False
     assert client.is_connected is False
+
+
+@pytest.mark.asyncio
+async def test_reconnects_after_startup_outage(monkeypatch):
+    from strategies.db.mongodb_client import MongoDBClient
+
+    client = MongoDBClient()
+    client.data_manager_client.connect = AsyncMock(
+        side_effect=[RuntimeError("down"), None]
+    )
+    assert await client.connect() is False
+    assert await client.ensure_connected() is False
+    client._next_connect_at = 0.0
+    assert await client.ensure_connected() is True
+    assert client.is_connected is True
+    assert client.data_manager_client.connect.await_count == 2

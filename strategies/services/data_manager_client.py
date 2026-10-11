@@ -68,7 +68,7 @@ class DataManagerClient:
         try:
             # Test connection with health check
             health = await self._client.health()
-            if health.get("status") != "healthy":
+            if not health.get("ready", False):
                 raise ConnectionError(f"Data Manager health check failed: {health}")
 
             self._logger.info("Connected to Data Manager service")
@@ -639,12 +639,12 @@ class DataManagerClient:
         try:
             health = await self._client.health()
             self._logger.info(
-                f"Data Manager health check: {health.get('status', 'unknown')}"
+                f"Data Manager health check: {'ready' if health.get('ready') else 'not ready'}"
             )
             return health
         except Exception as e:
             self._logger.error(f"Data Manager health check failed: {e}")
-            return {"status": "unhealthy", "error": str(e)}
+            return {"ready": False, "error": str(e)}
 
     async def __aenter__(self):
         """Async context manager entry."""

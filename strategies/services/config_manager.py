@@ -65,12 +65,19 @@ class StrategyConfigManager:
         self._running = False
         self.resume_cooldown_seconds = 60
 
+    async def _ensure_store_connected(self) -> bool:
+        if not self.mongodb_client:
+            return False
+        if self.mongodb_client.is_connected:
+            return True
+        return await self.mongodb_client.ensure_connected()
+
     async def start(self) -> None:
         """Start the configuration manager and background tasks."""
         # Initialize database connections
         if self.mongodb_client:
-            await self.mongodb_client.connect()
-            logger.info("Configuration manager MongoDB connection established")
+            if await self.mongodb_client.ensure_connected():
+                logger.info("Configuration manager data-manager connection established")
         else:
             logger.warning(
                 "Configuration manager running without MongoDB (env vars + defaults only)"
@@ -105,6 +112,7 @@ class StrategyConfigManager:
         while self._running:
             try:
                 await asyncio.sleep(self.cache_ttl_seconds)
+                await self._ensure_store_connected()
                 # Clear expired cache entries
                 current_time = time.time()
                 expired_keys = [
@@ -164,6 +172,7 @@ class StrategyConfigManager:
         """
         start_time = time.time()
 
+        await self._ensure_store_connected()
         lifecycle = await self.get_lifecycle_state(strategy_id)
 
         # Check cache first
@@ -175,7 +184,7 @@ class StrategyConfigManager:
             return self._apply_lifecycle(cached, lifecycle)
 
         # Try MongoDB symbol-specific
-        if symbol and self.mongodb_client and self.mongodb_client.is_connected:
+        if symbol and await self._ensure_store_connected():
             config_doc = await self.mongodb_client.get_symbol_config(
                 strategy_id, symbol
             )
@@ -187,7 +196,7 @@ class StrategyConfigManager:
                 return self._apply_lifecycle(result, lifecycle)
 
         # Try MongoDB global
-        if self.mongodb_client and self.mongodb_client.is_connected:
+        if await self._ensure_store_connected():
             config_doc = await self.mongodb_client.get_global_config(strategy_id)
             if config_doc:
                 result = self._doc_to_config_result(config_doc, "mongodb", False)
@@ -238,7 +247,7 @@ class StrategyConfigManager:
 
     async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
         """Return lifecycle state, failing open when its store is unavailable."""
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
+        if not await self._ensure_store_connected():
             return None
         try:
             return await self.mongodb_client.get_lifecycle_state(strategy_id)
@@ -284,7 +293,7 @@ class StrategyConfigManager:
             "changed_at": now,
             "expires_at": None,
         }
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
+        if not await self._ensure_store_connected():
             return False, None, None
         if not await self.mongodb_client.upsert_lifecycle_state(strategy_id, document):
             return False, None, None
@@ -380,8 +389,8 @@ class StrategyConfigManager:
             if not ok:
                 return False, None, ["Lifecycle state could not be saved"]
 
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
-            return False, None, ["MongoDB not available - cannot save configuration"]
+        if not await self._ensure_store_connected():
+            return False, None, ["config store (data-manager) not connected"]
 
         try:
             # Get existing config for version increment
@@ -598,8 +607,8 @@ class StrategyConfigManager:
         Returns:
             Tuple of (success, errors)
         """
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
-            return False, ["MongoDB not available - cannot delete configuration"]
+        if not await self._ensure_store_connected():
+            return False, ["config store (data-manager) not connected"]
 
         try:
             # Get existing config for audit
@@ -678,13 +687,13 @@ class StrategyConfigManager:
 
             # Check if has global config
             has_global = False
-            if self.mongodb_client and self.mongodb_client.is_connected:
+            if await self._ensure_store_connected():
                 global_config = await self.mongodb_client.get_global_config(strategy_id)
                 has_global = global_config is not None
 
             # Get symbol overrides
             symbol_overrides = []
-            if self.mongodb_client and self.mongodb_client.is_connected:
+            if await self._ensure_store_connected():
                 symbol_overrides = await self.mongodb_client.list_symbol_overrides(
                     strategy_id
                 )
@@ -719,7 +728,7 @@ class StrategyConfigManager:
         Returns:
             List of audit records (most recent first)
         """
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
+        if not await self._ensure_store_connected():
             return []
 
         try:
@@ -825,7 +834,7 @@ class StrategyConfigManager:
         if version < 1:
             return None
 
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
+        if not await self._ensure_store_connected():
             return None
 
         record = await self.mongodb_client.get_audit_record_by_version(
@@ -851,7 +860,7 @@ class StrategyConfigManager:
         Returns:
             Dictionary of configuration values or None if not found
         """
-        if not self.mongodb_client or not self.mongodb_client.is_connected:
+        if not await self._ensure_store_connected():
             return None
 
         # Direct database lookup by ID

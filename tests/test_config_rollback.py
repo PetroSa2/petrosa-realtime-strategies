@@ -380,12 +380,13 @@ class TestStrategyConfigRollback:
     async def test_mongodb_unavailable(self, config_manager, mock_mongodb_client):
         """Test behavior when MongoDB is not connected."""
         mock_mongodb_client.is_connected = False
+        mock_mongodb_client.ensure_connected = AsyncMock(return_value=False)
 
         success, config, errors = await config_manager.set_config(
             "s1", {"p": 1}, "admin"
         )
         assert success is False
-        assert "MongoDB not available" in errors[0]
+        assert "config store (data-manager) not connected" in errors[0]
 
     async def test_constructor_and_stop(self, mock_mongodb_client):
         """Test manager lifecycle."""

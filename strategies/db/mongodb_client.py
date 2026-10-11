@@ -1,6 +1,7 @@
 """Data-manager facade retained for the strategy configuration API."""
 
 import logging
+import time
 from typing import Any
 
 from ..services.data_manager_client import DataManagerClient
@@ -18,15 +19,31 @@ class MongoDBClient:
     def __init__(self) -> None:
         self.data_manager_client = DataManagerClient()
         self._connected = False
+        self._connect_attempt = 0
+        self._next_connect_at = 0.0
+
+    async def ensure_connected(self) -> bool:
+        """Reconnect when the retry backoff permits another health probe."""
+        if self._connected:
+            return True
+        if time.monotonic() < self._next_connect_at:
+            return False
+        return await self.connect()
 
     async def connect(self) -> bool:
         try:
             await self.data_manager_client.connect()
         except Exception as exc:
-            logger.error("Failed to connect to Data Manager: %s", exc)
+            self._connect_attempt += 1
+            delay = min(2 ** (self._connect_attempt - 1), 30)
+            self._next_connect_at = time.monotonic() + delay
+            logger.warning("Config store unavailable; retrying with backoff")
             self._connected = False
             return False
         self._connected = True
+        self._connect_attempt = 0
+        self._next_connect_at = 0.0
+        logger.info("Config store connected to Data Manager service")
         return True
 
     async def disconnect(self) -> None:
@@ -41,7 +58,7 @@ class MongoDBClient:
         if not self._connected:
             return False
         health = await self.data_manager_client.health_check()
-        return health.get("status") == "healthy"
+        return bool(health.get("ready", False))
 
     async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
         return await self.data_manager_client.get_lifecycle_state(strategy_id)
