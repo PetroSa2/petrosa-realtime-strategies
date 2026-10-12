@@ -58,7 +58,7 @@ class DataManagerClient:
         raise ConnectionError("data-manager request exhausted retries")
 
     async def health(self) -> dict[str, Any]:
-        return await self._request("GET", "/health")
+        return await self._request("GET", "/health/readiness")
 
     async def query(
         self,

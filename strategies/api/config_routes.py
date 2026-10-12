@@ -110,7 +110,9 @@ async def _set_lifecycle_state(strategy_id: str, request: LifecycleStateRequest)
     if not success:
         if not get_strategy_defaults(strategy_id):
             raise HTTPException(status_code=404, detail="Strategy not found")
-        raise HTTPException(status_code=503, detail="Lifecycle store unavailable")
+        raise HTTPException(
+            status_code=503, detail="config store (data-manager) not connected"
+        )
     return APIResponse(success=True, data=_lifecycle_payload(strategy_id, state))
 
 

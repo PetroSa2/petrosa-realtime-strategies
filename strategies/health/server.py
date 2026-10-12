@@ -46,6 +46,9 @@ SERVICE_UPTIME = Gauge("service_uptime_seconds", "Service uptime in seconds")
 ENABLED_STRATEGIES_COUNT = Gauge(
     "enabled_strategies_count", "Number of enabled strategies"
 )
+CONFIG_STORE_CONNECTED = Gauge(
+    "config_store_connected", "Whether the data-manager config store is connected"
+)
 
 # Per #225: instrument probe latency so a regression (probe budget too tight
 # for the workload) is visible via Grafana/alerting BEFORE it causes
@@ -361,6 +364,7 @@ class HealthServer:
             "memory_usage": self._cached_memory_mb
             >= 0,  # Just check if memory is valid
             "cpu_usage": self._cached_cpu_percent >= 0,  # Just check if CPU is valid
+            "config_store_connected": self._config_store_connected(),
         }
 
         # Determine overall health - liveness only fails if the server
@@ -375,6 +379,7 @@ class HealthServer:
             "checks": health_checks,
             "version": constants.SERVICE_VERSION,
             "environment": constants.ENVIRONMENT,
+            "config_store_connected": self._config_store_connected(),
         }
 
         # Update health status
@@ -495,6 +500,7 @@ class HealthServer:
             # Update enabled strategies count
             enabled_strategies = constants.get_enabled_strategies()
             ENABLED_STRATEGIES_COUNT.set(len(enabled_strategies))
+            CONFIG_STORE_CONNECTED.set(1 if self._config_store_connected() else 0)
 
             # Generate Prometheus-format metrics
             metrics_output = generate_latest()
@@ -529,6 +535,7 @@ class HealthServer:
                 "health": {
                     "status": self.health_status.get("status", "unknown"),
                     "last_check": self.health_status.get("timestamp"),
+                    "config_store_connected": self._config_store_connected(),
                 },
                 "configuration": {
                     "enabled_strategies": constants.get_enabled_strategies(),
@@ -545,6 +552,11 @@ class HealthServer:
         except Exception as e:
             self.logger.error(f"Failed to get metrics: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to get metrics: {e}")
+
+    def _config_store_connected(self) -> bool:
+        """Return the current data-manager config-store connection state."""
+        client = getattr(self.config_manager, "mongodb_client", None)
+        return bool(client and getattr(client, "is_connected", False) is True)
 
     async def _get_service_info(self) -> dict[str, Any]:
         """Get service information."""

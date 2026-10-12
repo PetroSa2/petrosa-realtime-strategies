@@ -37,6 +37,37 @@ async def test_requests_include_configured_gateway_identity(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_health_uses_readiness_contract(monkeypatch):
+    monkeypatch.setenv("DM_SERVICE_TOKEN", "test-token")
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/health":
+            return httpx.Response(422, json={"detail": "pair required"})
+        return httpx.Response(
+            200,
+            json={"ready": True, "components": {"mongodb": "healthy"}},
+        )
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = DataManagerClient("https://data-manager.test")
+    try:
+        health = await client.health()
+    finally:
+        await client.close()
+
+    assert health["ready"] is True
+    assert [request.url.path for request in requests] == ["/health/readiness"]
+
+
+@pytest.mark.asyncio
 async def test_service_identity_defaults_when_name_is_unset(monkeypatch):
     monkeypatch.delenv("DM_SERVICE_NAME", raising=False)
     monkeypatch.setenv("DM_SERVICE_TOKEN", "test-token")
