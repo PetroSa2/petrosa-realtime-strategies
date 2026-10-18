@@ -68,6 +68,62 @@ async def test_health_uses_readiness_contract(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_client_does_not_retry_http_4xx(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(422, json={"detail": "thin data"})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = DataManagerClient("https://data-manager.test", max_retries=3)
+    try:
+        with pytest.raises(data_manager_module.ConnectionError):
+            await client.query(
+                database="mongodb",
+                collection="strategy_lifecycle_states",
+                filter={"strategy_id": "thin"},
+            )
+    finally:
+        await client.close()
+
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_client_retries_http_5xx(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"ready": True})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = DataManagerClient("https://data-manager.test", max_retries=3)
+    try:
+        result = await client.health()
+    finally:
+        await client.close()
+
+    assert result["ready"] is True
+    assert len(requests) == 2
+
+
+@pytest.mark.asyncio
 async def test_service_identity_defaults_when_name_is_unset(monkeypatch):
     monkeypatch.delenv("DM_SERVICE_NAME", raising=False)
     monkeypatch.setenv("DM_SERVICE_TOKEN", "test-token")

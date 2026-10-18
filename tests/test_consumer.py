@@ -250,6 +250,21 @@ async def test_enqueue_message_does_not_block_when_queue_is_full(consumer):
 
 
 @pytest.mark.asyncio
+async def test_enqueue_message_rate_limits_queue_full_warnings(consumer):
+    consumer._message_queue = asyncio.Queue(maxsize=1)
+    consumer.metrics.record_error = Mock()
+    consumer.logger = Mock()
+
+    await consumer._enqueue_message(Mock())
+    await consumer._enqueue_message(Mock())
+    await consumer._enqueue_message(Mock())
+
+    assert consumer.error_count == 2
+    assert consumer.logger.warning.call_count == 1
+    assert consumer.metrics.record_error.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_message_worker_processes_and_marks_message_done(consumer):
     message = Mock()
     consumer._message_queue.put_nowait(message)

@@ -109,6 +109,7 @@ class NATSConsumer:
         self.error_count = 0
         self.error_tracker = WindowedErrorTracker()
         self.last_message_time = None
+        self._last_queue_full_warning_at = 0.0
 
         # Performance metrics.
         # Per #191 AC1/AC3: fixed-size ring buffer with O(1) running sum and
@@ -478,11 +479,15 @@ class NATSConsumer:
         try:
             self._message_queue.put_nowait(msg)
         except asyncio.QueueFull:
-            self.logger.error(
-                "Consumer processing queue is full",
-                event_type="consumer_queue_full",
-                queue_size=self._message_queue.maxsize,
-            )
+            now = time.monotonic()
+            if now - self._last_queue_full_warning_at >= 30:
+                self.logger.warning(
+                    "Consumer processing queue is full; dropping messages",
+                    event_type="consumer_queue_full",
+                    queue_size=self._message_queue.maxsize,
+                    dropped_messages=self.error_count + 1,
+                )
+                self._last_queue_full_warning_at = now
             self.error_count += 1
             self.error_tracker.record_error()
             self.metrics.record_error("consumer_queue_full")
