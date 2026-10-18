@@ -59,9 +59,7 @@ class StrategyConfigManager:
 
         # Cache: key = f"{strategy_id}:{symbol or 'global'}", value = (config, timestamp)
         self._cache: dict[str, tuple[dict[str, Any], float]] = {}
-        self._lifecycle_cache: dict[
-            str, tuple[dict[str, Any] | None, float]
-        ] = {}
+        self._lifecycle_cache: dict[str, tuple[dict[str, Any] | None, float]] = {}
         self._lifecycle_cache_lock = asyncio.Lock()
 
         # Background tasks
