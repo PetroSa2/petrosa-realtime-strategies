@@ -98,7 +98,7 @@ class DataManagerClient:
             )
             return result["data"][0] if result.get("data") else None
         except Exception as e:
-            self._logger.error(
+            self._logger.warning(
                 "Error fetching lifecycle state for %s: %s", strategy_id, e
             )
             return None

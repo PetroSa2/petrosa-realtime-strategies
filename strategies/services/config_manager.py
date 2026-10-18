@@ -59,6 +59,8 @@ class StrategyConfigManager:
 
         # Cache: key = f"{strategy_id}:{symbol or 'global'}", value = (config, timestamp)
         self._cache: dict[str, tuple[dict[str, Any], float]] = {}
+        self._lifecycle_cache: dict[str, tuple[dict[str, Any] | None, float]] = {}
+        self._lifecycle_cache_lock = asyncio.Lock()
 
         # Background tasks
         self._cache_refresh_task: asyncio.Task | None = None
@@ -122,9 +124,20 @@ class StrategyConfigManager:
                 ]
                 for key in expired_keys:
                     del self._cache[key]
+                expired_lifecycle_keys = [
+                    key
+                    for key, (_, timestamp) in self._lifecycle_cache.items()
+                    if current_time - timestamp > self.cache_ttl_seconds
+                ]
+                for key in expired_lifecycle_keys:
+                    del self._lifecycle_cache[key]
 
-                if expired_keys:
-                    logger.debug(f"Cleared {len(expired_keys)} expired cache entries")
+                if expired_keys or expired_lifecycle_keys:
+                    logger.debug(
+                        "Cleared expired configuration cache entries: %s config, %s lifecycle",
+                        len(expired_keys),
+                        len(expired_lifecycle_keys),
+                    )
             except Exception as e:
                 logger.error(f"Cache refresh loop error: {e}")
                 await asyncio.sleep(10)
@@ -145,6 +158,20 @@ class StrategyConfigManager:
     def _set_cache(self, cache_key: str, config: dict[str, Any]) -> None:
         """Store configuration in cache with current timestamp."""
         self._cache[cache_key] = (config.copy(), time.time())
+
+    def _set_lifecycle_cache(
+        self, strategy_id: str, lifecycle: dict[str, Any] | None
+    ) -> None:
+        if (
+            strategy_id not in self._lifecycle_cache
+            and len(self._lifecycle_cache) >= 1024
+        ):
+            oldest = min(
+                self._lifecycle_cache,
+                key=lambda key: self._lifecycle_cache[key][1],
+            )
+            del self._lifecycle_cache[oldest]
+        self._lifecycle_cache[strategy_id] = (lifecycle, time.time())
 
     async def get_config(
         self, strategy_id: str, symbol: str | None = None
@@ -247,13 +274,27 @@ class StrategyConfigManager:
 
     async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
         """Return lifecycle state, failing open when its store is unavailable."""
-        if not await self._ensure_store_connected():
-            return None
-        try:
-            return await self.mongodb_client.get_lifecycle_state(strategy_id)
-        except Exception as e:
-            logger.warning("Lifecycle lookup failed for %s: %s", strategy_id, e)
-            return None
+        cached = self._lifecycle_cache.get(strategy_id)
+        if cached and time.time() - cached[1] < self.cache_ttl_seconds:
+            return cached[0].copy() if cached[0] else None
+
+        async with self._lifecycle_cache_lock:
+            cached = self._lifecycle_cache.get(strategy_id)
+            if cached and time.time() - cached[1] < self.cache_ttl_seconds:
+                return cached[0].copy() if cached[0] else None
+            if not await self._ensure_store_connected():
+                self._set_lifecycle_cache(strategy_id, None)
+                return None
+            try:
+                lifecycle = await self.mongodb_client.get_lifecycle_state(strategy_id)
+                if not isinstance(lifecycle, dict):
+                    lifecycle = None
+                self._set_lifecycle_cache(strategy_id, lifecycle)
+                return lifecycle.copy() if lifecycle else None
+            except Exception as e:
+                logger.warning("Lifecycle lookup failed for %s: %s", strategy_id, e)
+                self._set_lifecycle_cache(strategy_id, None)
+                return None
 
     async def set_lifecycle_state(
         self,
@@ -298,6 +339,7 @@ class StrategyConfigManager:
         if not await self.mongodb_client.upsert_lifecycle_state(strategy_id, document):
             return False, None, None
         self._cache.pop(self._make_cache_key(strategy_id, None), None)
+        self._lifecycle_cache.pop(strategy_id, None)
         return True, {"strategy_id": strategy_id, **document}, None
 
     def _doc_to_config_result(

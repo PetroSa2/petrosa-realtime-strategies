@@ -50,7 +50,16 @@ class DataManagerClient:
                 response.raise_for_status()
                 payload = response.json()
                 return payload if isinstance(payload, dict) else {"data": payload}
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except httpx.HTTPStatusError as exc:
+                if (
+                    exc.response.status_code not in {408, 429}
+                    and 400 <= exc.response.status_code < 500
+                ):
+                    raise ConnectionError(str(exc)) from exc
+                if attempt >= self.max_retries:
+                    raise ConnectionError(str(exc)) from exc
+                await asyncio.sleep(2**attempt)
+            except httpx.RequestError as exc:
                 if attempt >= self.max_retries:
                     raise ConnectionError(str(exc)) from exc
                 await asyncio.sleep(2**attempt)
