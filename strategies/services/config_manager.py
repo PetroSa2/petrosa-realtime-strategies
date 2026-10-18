@@ -287,6 +287,8 @@ class StrategyConfigManager:
                 return None
             try:
                 lifecycle = await self.mongodb_client.get_lifecycle_state(strategy_id)
+                if not isinstance(lifecycle, dict):
+                    lifecycle = None
                 self._set_lifecycle_cache(strategy_id, lifecycle)
                 return lifecycle.copy() if lifecycle else None
             except Exception as e:

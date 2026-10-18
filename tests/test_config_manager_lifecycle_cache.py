@@ -53,6 +53,17 @@ async def test_lifecycle_lookup_failure_is_cached_for_the_config_ttl():
 
 
 @pytest.mark.asyncio
+async def test_malformed_lifecycle_state_is_treated_as_unavailable():
+    store = LifecycleStore("not-a-document")
+    manager = StrategyConfigManager(store, cache_ttl_seconds=60)
+
+    assert await manager.get_lifecycle_state("btc_dominance") is None
+    assert await manager.get_lifecycle_state("btc_dominance") is None
+
+    store.get_lifecycle_state.assert_awaited_once_with("btc_dominance")
+
+
+@pytest.mark.asyncio
 async def test_lifecycle_state_refreshes_after_the_config_ttl():
     store = LifecycleStore({"strategy_id": "btc_dominance", "state": "running"})
     manager = StrategyConfigManager(store, cache_ttl_seconds=60)
