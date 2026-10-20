@@ -117,7 +117,7 @@ class DataManagerClient:
             )
             return (
                 strategy_id
-                if result.get("modified_count", 0) or result.get("upserted_count", 0)
+                if result.get("updated_count", 0) or result.get("upserted", False)
                 else None
             )
         except Exception as e:
@@ -227,8 +227,8 @@ class DataManagerClient:
             )
 
             if (
-                result.get("modified_count", 0) > 0
-                or result.get("upserted_count", 0) > 0
+                result.get("updated_count", 0) > 0
+                or result.get("upserted", False)
             ):
                 self._logger.info(f"Upserted global config for {strategy_id}")
                 return strategy_id
@@ -292,8 +292,8 @@ class DataManagerClient:
             )
 
             if (
-                result.get("modified_count", 0) > 0
-                or result.get("upserted_count", 0) > 0
+                result.get("updated_count", 0) > 0
+                or result.get("upserted", False)
             ):
                 self._logger.info(f"Upserted symbol config for {strategy_id}/{symbol}")
                 return f"{strategy_id}:{symbol}"
@@ -375,7 +375,7 @@ class DataManagerClient:
             Audit record ID or None on failure
         """
         try:
-            audit_data["changed_at"] = datetime.now(UTC)
+            audit_data = {**audit_data, "changed_at": datetime.now(UTC)}
 
             result = await self._client.insert(
                 database="mongodb",

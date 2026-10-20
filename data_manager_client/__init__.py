@@ -1,8 +1,11 @@
 """Small async HTTP client for the data-manager generic API."""
 
 import asyncio
+import json
 import logging
 import os
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -11,6 +14,17 @@ from .exceptions import ConnectionError
 
 logger = logging.getLogger(__name__)
 _missing_token_warning_emitted = False
+
+
+def _json_safe(value: Any) -> Any:
+    """Return a JSON-safe copy without mutating caller-owned values."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 class DataManagerClient:
@@ -51,13 +65,20 @@ class DataManagerClient:
                 payload = response.json()
                 return payload if isinstance(payload, dict) else {"data": payload}
             except httpx.HTTPStatusError as exc:
+                endpoint = exc.request.url.path
                 if (
                     exc.response.status_code not in {408, 429}
                     and 400 <= exc.response.status_code < 500
                 ):
-                    raise ConnectionError(str(exc)) from exc
+                    raise ConnectionError(
+                        f"data-manager request failed: endpoint={endpoint} "
+                        f"status={exc.response.status_code} detail=<redacted>"
+                    ) from exc
                 if attempt >= self.max_retries:
-                    raise ConnectionError(str(exc)) from exc
+                    raise ConnectionError(
+                        f"data-manager request failed: endpoint={endpoint} "
+                        f"status={exc.response.status_code} detail=<redacted>"
+                    ) from exc
                 await asyncio.sleep(2**attempt)
             except httpx.RequestError as exc:
                 if attempt >= self.max_retries:
@@ -76,18 +97,19 @@ class DataManagerClient:
         collection: str,
         filter: dict[str, Any] | None = None,
         fields: list[str] | None = None,
+        sort: dict[str, int] | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "database": database,
-            "collection": collection,
-            "filter": filter or {},
-        }
+        params: dict[str, Any] = {"filter": json.dumps(_json_safe(filter or {}))}
         if fields is not None:
-            payload["fields"] = fields
+            params["fields"] = ",".join(fields)
+        if sort is not None:
+            params["sort"] = json.dumps(_json_safe(sort))
         if limit is not None:
-            payload["limit"] = limit
-        return await self._request("POST", "/api/v1/mongodb/query", json=payload)
+            params["limit"] = limit
+        return await self._request(
+            "GET", f"/api/v1/{database}/{collection}", params=params
+        )
 
     async def update(
         self,
@@ -99,13 +121,11 @@ class DataManagerClient:
         upsert: bool = False,
     ) -> dict[str, Any]:
         return await self._request(
-            "POST",
-            "/api/v1/mongodb/update",
+            "PUT",
+            f"/api/v1/{database}/{collection}",
             json={
-                "database": database,
-                "collection": collection,
-                "filter": filter,
-                "data": data,
+                "filter": _json_safe(filter),
+                "data": _json_safe(data),
                 "upsert": upsert,
             },
         )
@@ -114,9 +134,9 @@ class DataManagerClient:
         self, *, database: str, collection: str, filter: dict[str, Any]
     ) -> dict[str, Any]:
         return await self._request(
-            "POST",
-            "/api/v1/mongodb/delete",
-            json={"database": database, "collection": collection, "filter": filter},
+            "DELETE",
+            f"/api/v1/{database}/{collection}",
+            json={"filter": _json_safe(filter)},
         )
 
     async def insert(
@@ -124,14 +144,14 @@ class DataManagerClient:
     ) -> dict[str, Any]:
         return await self._request(
             "POST",
-            "/api/v1/mongodb/insert",
-            json={"database": database, "collection": collection, "data": data},
+            f"/api/v1/{database}/{collection}",
+            json={"data": _json_safe(data)},
         )
 
     async def post(
         self, path: str, *, json: dict[str, Any], params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        return await self._request("POST", path, json=json, params=params)
+        return await self._request("POST", path, json=_json_safe(json), params=params)
 
     async def close(self) -> None:
         await self._client.aclose()

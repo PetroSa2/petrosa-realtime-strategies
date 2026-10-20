@@ -1,10 +1,13 @@
 import logging
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
 import data_manager_client as data_manager_module
 from data_manager_client import DataManagerClient
+from strategies.services.data_manager_client import DataManagerClient as StrategyClient
 
 
 @pytest.mark.asyncio
@@ -84,7 +87,7 @@ async def test_client_does_not_retry_http_4xx(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
     client = DataManagerClient("https://data-manager.test", max_retries=3)
     try:
-        with pytest.raises(data_manager_module.ConnectionError):
+        with pytest.raises(data_manager_module.ConnectionError) as error:
             await client.query(
                 database="mongodb",
                 collection="strategy_lifecycle_states",
@@ -94,6 +97,198 @@ async def test_client_does_not_retry_http_4xx(monkeypatch):
         await client.close()
 
     assert len(requests) == 1
+    assert "endpoint=/api/v1/mongodb/strategy_lifecycle_states" in str(error.value)
+    assert "status=422" in str(error.value)
+    assert "detail=<redacted>" in str(error.value)
+    assert "thin data" not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_collection_routes_encode_query_and_nested_datetimes(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": [], "updated_count": 1})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = DataManagerClient("https://data-manager.test")
+    timestamp = datetime(2026, 10, 20, tzinfo=UTC)
+    try:
+        await client.query(
+            database="mongodb",
+            collection="strategy_lifecycle_states",
+            filter={"metadata": {"at": timestamp}},
+            fields=["strategy_id"],
+            limit=1,
+        )
+        await client.update(
+            database="mongodb",
+            collection="strategy_lifecycle_states",
+            filter={"strategy_id": "strategy"},
+            data={"changed_at": timestamp, "metadata": [{"at": timestamp}]},
+            upsert=True,
+        )
+    finally:
+        await client.close()
+
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v1/mongodb/strategy_lifecycle_states"
+    assert requests[0].url.params["filter"] == '{"metadata": {"at": "2026-10-20T00:00:00+00:00"}}'
+    assert requests[0].url.params["fields"] == "strategy_id"
+    assert requests[0].url.params["limit"] == "1"
+    assert requests[1].method == "PUT"
+    assert requests[1].url.path == "/api/v1/mongodb/strategy_lifecycle_states"
+    assert b'"changed_at":"2026-10-20T00:00:00+00:00"' in requests[1].content
+    assert b'"at":"2026-10-20T00:00:00+00:00"' in requests[1].content
+
+
+@pytest.mark.asyncio
+async def test_collection_mutation_routes_preserve_request_shapes(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"inserted_count": 1, "deleted_count": 1})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = DataManagerClient("https://data-manager.test")
+    try:
+        await client.insert(
+            database="mongodb", collection="strategy_config_audit", data={"event": "x"}
+        )
+        await client.delete(
+            database="mongodb",
+            collection="strategy_config_audit",
+            filter={"event": "x"},
+        )
+    finally:
+        await client.close()
+
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/api/v1/mongodb/strategy_config_audit"
+    assert requests[0].content == b'{"data":{"event":"x"}}'
+    assert requests[1].method == "DELETE"
+    assert requests[1].url.path == "/api/v1/mongodb/strategy_config_audit"
+    assert requests[1].content == b'{"filter":{"event":"x"}}'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"updated_count": 1, "upserted": False},
+        {"updated_count": 0, "upserted": True},
+    ],
+)
+async def test_strategy_upserts_accept_current_update_response_fields(result):
+    client = StrategyClient("https://data-manager.test")
+    client._client.update = AsyncMock(return_value=result)
+    client._client.query = AsyncMock(return_value={"data": []})
+    try:
+        lifecycle = await client.upsert_lifecycle_state("strategy", {"state": "running"})
+        global_config = await client.upsert_global_config("strategy", {}, {})
+        symbol_config = await client.upsert_symbol_config("strategy", "BTCUSDT", {}, {})
+    finally:
+        await client.disconnect()
+
+    assert lifecycle == "strategy"
+    assert global_config == "strategy"
+    assert symbol_config == "strategy:BTCUSDT"
+
+
+@pytest.mark.asyncio
+async def test_audit_insert_encodes_datetime_payload_at_collection_route(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"inserted_count": 1, "inserted_ids": ["audit"]})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = StrategyClient("https://data-manager.test")
+    timestamp = datetime(2026, 10, 20, tzinfo=UTC)
+    try:
+        audit_id = await client.create_audit_record(
+            {"strategy_id": "strategy", "metadata": {"reviewed_at": timestamp}}
+        )
+    finally:
+        await client.disconnect()
+
+    assert audit_id == "audit"
+    assert requests[0].url.path == "/api/v1/mongodb/strategy_config_audit"
+    assert b'"reviewed_at":"2026-10-20T00:00:00+00:00"' in requests[0].content
+
+
+@pytest.mark.asyncio
+async def test_audit_trail_encodes_sort_and_preserves_returned_order(monkeypatch):
+    requests = []
+    records = [{"changed_at": "new"}, {"changed_at": "old"}]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": records})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = StrategyClient("https://data-manager.test")
+    try:
+        result = await client.get_audit_trail("strategy", limit=2)
+    finally:
+        await client.disconnect()
+
+    assert result == records
+    assert requests[0].url.params["sort"] == '{"changed_at": -1}'
+
+
+@pytest.mark.asyncio
+async def test_post_encodes_nested_datetimes_without_mutating_input(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True})
+
+    async_client = httpx.AsyncClient
+
+    def mock_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_async_client)
+    client = DataManagerClient("https://data-manager.test")
+    timestamp = datetime(2026, 10, 20, tzinfo=UTC)
+    payload = {"metadata": [{"at": timestamp}]}
+    try:
+        await client.post("/custom", json=payload)
+    finally:
+        await client.close()
+
+    assert payload == {"metadata": [{"at": timestamp}]}
+    assert b'"at":"2026-10-20T00:00:00+00:00"' in requests[0].content
 
 
 @pytest.mark.asyncio
