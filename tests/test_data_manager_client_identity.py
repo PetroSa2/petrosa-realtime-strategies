@@ -140,7 +140,10 @@ async def test_collection_routes_encode_query_and_nested_datetimes(monkeypatch):
 
     assert requests[0].method == "GET"
     assert requests[0].url.path == "/api/v1/mongodb/strategy_lifecycle_states"
-    assert requests[0].url.params["filter"] == '{"metadata": {"at": "2026-10-20T00:00:00+00:00"}}'
+    assert (
+        requests[0].url.params["filter"]
+        == '{"metadata": {"at": "2026-10-20T00:00:00+00:00"}}'
+    )
     assert requests[0].url.params["fields"] == "strategy_id"
     assert requests[0].url.params["limit"] == "1"
     assert requests[1].method == "PUT"
@@ -198,7 +201,9 @@ async def test_strategy_upserts_accept_current_update_response_fields(result):
     client._client.update = AsyncMock(return_value=result)
     client._client.query = AsyncMock(return_value={"data": []})
     try:
-        lifecycle = await client.upsert_lifecycle_state("strategy", {"state": "running"})
+        lifecycle = await client.upsert_lifecycle_state(
+            "strategy", {"state": "running"}
+        )
         global_config = await client.upsert_global_config("strategy", {}, {})
         symbol_config = await client.upsert_symbol_config("strategy", "BTCUSDT", {}, {})
     finally:
@@ -215,7 +220,9 @@ async def test_audit_insert_encodes_datetime_payload_at_collection_route(monkeyp
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        return httpx.Response(200, json={"inserted_count": 1, "inserted_ids": ["audit"]})
+        return httpx.Response(
+            200, json={"inserted_count": 1, "inserted_ids": ["audit"]}
+        )
 
     async_client = httpx.AsyncClient
 

@@ -226,10 +226,7 @@ class DataManagerClient:
                 upsert=True,
             )
 
-            if (
-                result.get("updated_count", 0) > 0
-                or result.get("upserted", False)
-            ):
+            if result.get("updated_count", 0) > 0 or result.get("upserted", False):
                 self._logger.info(f"Upserted global config for {strategy_id}")
                 return strategy_id
             else:
@@ -291,10 +288,7 @@ class DataManagerClient:
                 upsert=True,
             )
 
-            if (
-                result.get("updated_count", 0) > 0
-                or result.get("upserted", False)
-            ):
+            if result.get("updated_count", 0) > 0 or result.get("upserted", False):
                 self._logger.info(f"Upserted symbol config for {strategy_id}/{symbol}")
                 return f"{strategy_id}:{symbol}"
             else:
