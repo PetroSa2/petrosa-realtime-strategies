@@ -346,8 +346,10 @@ class StrategyConfigManager:
         self, doc: dict[str, Any], source: str, is_override: bool
     ) -> dict[str, Any]:
         """Convert MongoDB document to config result format."""
+        parameters = dict(get_strategy_defaults(doc.get("strategy_id", "")))
+        parameters.update(doc.get("parameters") or {})
         return {
-            "parameters": doc.get("parameters", {}),
+            "parameters": parameters,
             "version": doc.get("version", 1),
             "source": source,
             "is_override": is_override,
@@ -358,6 +360,20 @@ class StrategyConfigManager:
                 doc.get("updated_at").isoformat() if doc.get("updated_at") else None
             ),
         }
+
+    async def log_resolved_configs(self) -> None:
+        """Log the resolved configuration source for every runtime strategy."""
+        for strategy_id in list_all_strategies():
+            config = await self.get_config(strategy_id)
+            logger.info(
+                "Strategy configuration resolved",
+                extra={
+                    "event_type": "strategy_config_resolved",
+                    "strategy": strategy_id,
+                    "source": config.get("source", "unknown"),
+                    "enabled": config.get("parameters", {}).get("enabled", True),
+                },
+            )
 
     def _get_from_environment(self, strategy_id: str) -> dict[str, Any]:
         """
