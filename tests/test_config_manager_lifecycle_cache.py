@@ -92,7 +92,10 @@ async def test_config_lookup_reuses_cached_lifecycle_state():
 async def test_partial_stored_config_keeps_safe_defaults():
     store = LifecycleStore(None)
     store.get_global_config = AsyncMock(
-        return_value={"strategy_id": "iceberg_detector", "parameters": {"enabled": True}}
+        return_value={
+            "strategy_id": "iceberg_detector",
+            "parameters": {"enabled": True},
+        }
     )
     manager = StrategyConfigManager(store, cache_ttl_seconds=60)
 
