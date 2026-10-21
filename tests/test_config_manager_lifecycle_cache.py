@@ -88,6 +88,20 @@ async def test_config_lookup_reuses_cached_lifecycle_state():
     store.get_lifecycle_state.assert_awaited_once_with("btc_dominance")
 
 
+@pytest.mark.asyncio
+async def test_partial_stored_config_keeps_safe_defaults():
+    store = LifecycleStore(None)
+    store.get_global_config = AsyncMock(
+        return_value={"strategy_id": "iceberg_detector", "parameters": {"enabled": True}}
+    )
+    manager = StrategyConfigManager(store, cache_ttl_seconds=60)
+
+    config = await manager.get_config("iceberg_detector")
+
+    assert config["parameters"]["enabled"] is True
+    assert config["parameters"]["min_refill_count"] == 3
+
+
 def test_lifecycle_cache_has_a_fixed_capacity():
     manager = StrategyConfigManager(cache_ttl_seconds=60)
 

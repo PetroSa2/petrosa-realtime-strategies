@@ -97,6 +97,7 @@ class StrategiesService:
                 cache_ttl_seconds=60,
             )
             await self.config_manager.start()
+            await self.config_manager.log_resolved_configs()
             self.logger.info(
                 "Configuration manager initialized",
                 event_type="config_manager_initialized",
