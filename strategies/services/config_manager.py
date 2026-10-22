@@ -272,16 +272,113 @@ class StrategyConfigManager:
             )
         return config
 
+    @staticmethod
+    def _as_utc_datetime(value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            try:
+                return datetime.fromtimestamp(value, UTC)
+            except (OverflowError, OSError, ValueError):
+                return None
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            return (
+                parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+            )
+        return None
+
+    @classmethod
+    def _same_pause_version(cls, first: dict[str, Any], second: dict[str, Any]) -> bool:
+        return (
+            first.get("state") == second.get("state") == "paused"
+            and cls._as_utc_datetime(first.get("changed_at"))
+            == cls._as_utc_datetime(second.get("changed_at"))
+            and cls._as_utc_datetime(first.get("expires_at"))
+            == cls._as_utc_datetime(second.get("expires_at"))
+        )
+
+    async def _resume_expired_lifecycle(
+        self, strategy_id: str, lifecycle: dict[str, Any]
+    ) -> dict[str, Any]:
+        expires_at = self._as_utc_datetime(lifecycle.get("expires_at"))
+        if lifecycle.get("state") != "paused" or expires_at is None:
+            return lifecycle
+        if expires_at > datetime.now(UTC):
+            return lifecycle
+
+        logger.error(
+            "LIFECYCLE_PAUSE_EXPIRED strategy_id=%s expires_at=%s",
+            strategy_id,
+            expires_at.isoformat(),
+        )
+        try:
+            latest = await self.mongodb_client.get_lifecycle_state(strategy_id)
+        except Exception as exc:
+            logger.error(
+                "LIFECYCLE_PAUSE_EXPIRY_CHECK_FAILED strategy_id=%s error=%s",
+                strategy_id,
+                exc,
+            )
+            latest = None
+        if isinstance(latest, dict) and not self._same_pause_version(lifecycle, latest):
+            self._set_lifecycle_cache(strategy_id, latest)
+            return latest.copy()
+
+        if not isinstance(latest, dict):
+            resumed = {
+                "strategy_id": strategy_id,
+                "state": "running",
+                "reason": "lifecycle pause expired",
+                "changed_by": "realtime-strategies:expiry",
+                "changed_at": datetime.now(UTC),
+                "expires_at": None,
+            }
+            logger.error(
+                "LIFECYCLE_PAUSE_EXPIRY_NOT_PERSISTED strategy_id=%s", strategy_id
+            )
+            self._set_lifecycle_cache(strategy_id, resumed)
+            return resumed.copy()
+
+        resumed = {
+            "strategy_id": strategy_id,
+            "state": "running",
+            "reason": "lifecycle pause expired",
+            "changed_by": "realtime-strategies:expiry",
+            "changed_at": datetime.now(UTC),
+            "expires_at": None,
+        }
+        if (
+            await self._ensure_store_connected()
+            and await self.mongodb_client.upsert_lifecycle_state(strategy_id, resumed)
+        ):
+            self._set_lifecycle_cache(strategy_id, resumed)
+            return resumed.copy()
+        logger.error("LIFECYCLE_PAUSE_EXPIRY_RESUME_FAILED strategy_id=%s", strategy_id)
+        self._set_lifecycle_cache(strategy_id, resumed)
+        return resumed.copy()
+
     async def get_lifecycle_state(self, strategy_id: str) -> dict[str, Any] | None:
         """Return lifecycle state, failing open when its store is unavailable."""
         cached = self._lifecycle_cache.get(strategy_id)
         if cached and time.time() - cached[1] < self.cache_ttl_seconds:
-            return cached[0].copy() if cached[0] else None
+            if cached[0]:
+                return await self._resume_expired_lifecycle(
+                    strategy_id, cached[0].copy()
+                )
+            return None
 
         async with self._lifecycle_cache_lock:
             cached = self._lifecycle_cache.get(strategy_id)
             if cached and time.time() - cached[1] < self.cache_ttl_seconds:
-                return cached[0].copy() if cached[0] else None
+                if cached[0]:
+                    return await self._resume_expired_lifecycle(
+                        strategy_id, cached[0].copy()
+                    )
+                return None
             if not await self._ensure_store_connected():
                 self._set_lifecycle_cache(strategy_id, None)
                 return None
@@ -290,7 +387,11 @@ class StrategyConfigManager:
                 if not isinstance(lifecycle, dict):
                     lifecycle = None
                 self._set_lifecycle_cache(strategy_id, lifecycle)
-                return lifecycle.copy() if lifecycle else None
+                if lifecycle:
+                    return await self._resume_expired_lifecycle(
+                        strategy_id, lifecycle.copy()
+                    )
+                return None
             except Exception as e:
                 logger.warning("Lifecycle lookup failed for %s: %s", strategy_id, e)
                 self._set_lifecycle_cache(strategy_id, None)
@@ -302,6 +403,7 @@ class StrategyConfigManager:
         state: str,
         changed_by: str,
         reason: str | None = None,
+        expires_at: datetime | None = None,
     ) -> tuple[bool, dict[str, Any] | None, int | None]:
         """Persist an idempotent lifecycle state and enforce resume cooldown."""
         if state not in {"running", "paused"}:
@@ -325,14 +427,25 @@ class StrategyConfigManager:
                     + 1
                 )
                 return False, previous, retry
-        if previous and previous.get("state") == state:
+        if (
+            previous
+            and previous.get("state") == state
+            and (
+                self._as_utc_datetime(previous.get("expires_at"))
+                == self._as_utc_datetime(expires_at)
+            )
+        ):
             return True, previous, None
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        elif expires_at:
+            expires_at = expires_at.astimezone(UTC)
         document = {
             "state": state,
             "reason": reason,
             "changed_by": changed_by,
             "changed_at": now,
-            "expires_at": None,
+            "expires_at": expires_at,
         }
         if not await self._ensure_store_connected():
             return False, None, None

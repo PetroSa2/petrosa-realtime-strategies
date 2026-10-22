@@ -4,6 +4,7 @@ Pydantic response models for API endpoints.
 Provides type-safe request/response models for configuration management.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -56,6 +57,9 @@ class LifecycleStateRequest(BaseModel):
     state: str | None = Field(None, description="running or paused")
     reason: str | None = Field(None, description="Why the state changed")
     changed_by: str = Field(..., description="Who requested the state change")
+    expires_at: datetime | None = Field(
+        None, description="Optional UTC expiry for the lifecycle state"
+    )
 
 
 class ParameterSchemaItem(BaseModel):

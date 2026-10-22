@@ -42,6 +42,71 @@ async def test_pause_is_durable_and_reflected_by_enabled_alias():
 
 
 @pytest.mark.asyncio
+async def test_pause_persists_cio_expiry():
+    manager = StrategyConfigManager(FakeLifecycleMongo())
+    expires_at = datetime(2030, 1, 1, tzinfo=UTC)
+
+    success, state, retry_after = await manager.set_lifecycle_state(
+        "iceberg_detector",
+        "paused",
+        "petrosa-cio:lifecycle:iceberg_detector",
+        "CIO_PAUSE: pause it",
+        expires_at,
+    )
+
+    assert success is True
+    assert retry_after is None
+    assert state["expires_at"] == expires_at
+    assert manager.mongodb_client.states["iceberg_detector"]["expires_at"] == expires_at
+
+
+@pytest.mark.asyncio
+async def test_expired_pause_resumes_and_is_durable(caplog):
+    manager = StrategyConfigManager(FakeLifecycleMongo())
+    manager.mongodb_client.states["iceberg_detector"] = {
+        "state": "paused",
+        "reason": "CIO_PAUSE: pause it",
+        "changed_at": datetime(2020, 1, 1, tzinfo=UTC),
+        "expires_at": datetime(2020, 1, 1, 0, 30, tzinfo=UTC),
+    }
+
+    config = await manager.get_config("iceberg_detector")
+
+    assert config["parameters"]["enabled"] is True
+    assert manager.mongodb_client.states["iceberg_detector"]["state"] == "running"
+    assert "LIFECYCLE_PAUSE_EXPIRED" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_newer_pause_wins_over_expired_pause():
+    class NewerPauseMongo(FakeLifecycleMongo):
+        def __init__(self):
+            super().__init__()
+            self.reads = 0
+
+        async def get_lifecycle_state(self, strategy_id):
+            self.reads += 1
+            if self.reads == 1:
+                return {
+                    "state": "paused",
+                    "changed_at": datetime(2020, 1, 1, tzinfo=UTC),
+                    "expires_at": datetime(2020, 1, 1, 0, 30, tzinfo=UTC),
+                }
+            return {
+                "state": "paused",
+                "changed_at": datetime(2020, 1, 1, 0, 45, tzinfo=UTC),
+                "expires_at": datetime(2020, 1, 1, 1, 15, tzinfo=UTC),
+            }
+
+    manager = StrategyConfigManager(NewerPauseMongo())
+
+    config = await manager.get_config("iceberg_detector")
+
+    assert config["parameters"]["enabled"] is False
+    assert manager.mongodb_client.reads == 2
+
+
+@pytest.mark.asyncio
 async def test_resume_is_throttled_inside_configured_window():
     manager = StrategyConfigManager(FakeLifecycleMongo())
     manager.resume_cooldown_seconds = 60
