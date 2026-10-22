@@ -99,7 +99,11 @@ async def _set_lifecycle_state(strategy_id: str, request: LifecycleStateRequest)
     if request.state not in {"running", "paused"}:
         raise HTTPException(status_code=422, detail="state must be running or paused")
     success, state, retry_after = await manager.set_lifecycle_state(
-        strategy_id, request.state, request.changed_by, request.reason
+        strategy_id,
+        request.state,
+        request.changed_by,
+        request.reason,
+        request.expires_at,
     )
     if retry_after is not None:
         raise HTTPException(

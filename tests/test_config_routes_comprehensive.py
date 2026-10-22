@@ -4,6 +4,7 @@ Comprehensive tests for config_routes.py FastAPI endpoints.
 Covers all endpoints with success/error paths, validation, and edge cases.
 """
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -59,6 +60,34 @@ def test_set_config_manager():
     manager = AsyncMock()
     set_config_manager(manager)
     assert get_config_manager() == manager
+
+
+def test_cio_pause_payload_preserves_expiry(client, setup_config_manager):
+    expires_at = datetime.fromtimestamp(1790000000, UTC)
+    setup_config_manager.set_lifecycle_state.return_value = (
+        True,
+        {
+            "state": "paused",
+            "reason": "CIO_PAUSE: pause it",
+            "changed_by": "petrosa-cio:lifecycle:iceberg_detector",
+            "changed_at": datetime(2026, 10, 22, tzinfo=UTC),
+            "expires_at": expires_at,
+        },
+        None,
+    )
+
+    response = client.post(
+        "/api/v1/strategies/iceberg_detector/pause",
+        json={
+            "reason": "CIO_PAUSE: pause it",
+            "changed_by": "petrosa-cio:lifecycle:iceberg_detector",
+            "expires_at": 1790000000,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["expires_at"] == expires_at.isoformat()
+    assert setup_config_manager.set_lifecycle_state.await_args.args[4] == expires_at
 
 
 @pytest.mark.asyncio
